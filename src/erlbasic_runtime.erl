@@ -20,19 +20,29 @@ run_program(State = #state{prog = Program}) ->
 run_program_lines(Program, Pc, State, _LoopStack, _CallStack, Acc) when Pc > length(Program) ->
     {State, lists:reverse(Acc)};
 run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
+    %% Check for Ctrl-C interrupt
+    case erlang:get(interrupted) of
+        true ->
+            erlang:erase(interrupted),
+            {State, lists:reverse(["\r\n^C\r\nBREAK\r\n" | Acc])};
+        _ ->
+            run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc)
+    end.
+
+run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
     {_LineNumber, Code} = lists:nth(Pc, Program),
     case execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) of
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
             case NextState#state.pending_input of
                 undefined ->
-                    run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, lists:reverse(Output) ++ Acc);
+                    run_program_lines_impl(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, lists:reverse(Output) ++ Acc);
                 _ ->
                     {NextState, lists:reverse(lists:reverse(Output) ++ Acc)}
             end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
             case NextState#state.pending_input of
                 undefined ->
-                    run_program_lines(Program, TargetPc, NextState, NextLoopStack, NextCallStack, lists:reverse(Output) ++ Acc);
+                    run_program_lines_impl(Program, TargetPc, NextState, NextLoopStack, NextCallStack, lists:reverse(Output) ++ Acc);
                 _ ->
                     {NextState, lists:reverse(lists:reverse(Output) ++ Acc)}
             end;

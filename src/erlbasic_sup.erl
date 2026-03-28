@@ -19,13 +19,11 @@ init([]) ->
     {ok, {{one_for_one, 5, 10}, [Listener]}}.
 
 start_cowboy() ->
-    WebPort = application:get_env(erlbasic, web_port, 8080),
-    PrivDir = code:priv_dir(erlbasic),
-    WwwDir  = filename:join(PrivDir, "www"),
+    WebPort = application:get_env(erlbasic, web_port, 8081),
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/ws", erlbasic_ws_handler, []},
-            {"/[...]", cowboy_static, {dir, WwwDir}}
+            {'_', erlbasic_http_handler, []}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(erlbasic_http,

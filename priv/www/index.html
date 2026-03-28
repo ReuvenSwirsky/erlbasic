@@ -116,6 +116,14 @@
     term.onKey(({ key, domEvent }) => {
       const code = domEvent.keyCode;
 
+      // Ctrl-C to interrupt
+      if (domEvent.ctrlKey && code === 67) {
+        term.write('^C');
+        ws.send('\x03');
+        inputBuffer = '';
+        return;
+      }
+
       if (code === 13) {                          // Enter
         term.write('\r\n');
         ws.send(inputBuffer + '\n');

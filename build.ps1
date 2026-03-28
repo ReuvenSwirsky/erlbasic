@@ -12,8 +12,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }
 
-# Copy compiled beams and app file where the smoke test runner expects them
-Copy-Item "$PSScriptRoot\_build\default\lib\erlbasic\ebin\*.beam" "$PSScriptRoot\ebin\" -Force
-Copy-Item "$PSScriptRoot\_build\default\lib\erlbasic\ebin\erlbasic.app" "$PSScriptRoot\ebin\" -Force
-
 Write-Host "Build succeeded."

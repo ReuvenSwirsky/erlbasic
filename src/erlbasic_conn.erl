@@ -46,6 +46,9 @@ send_input(Pid, Line) ->
 
 ws_loop(WsPid, State) ->
     receive
+        interrupt ->
+            erlang:put(interrupted, true),
+            ws_loop(WsPid, State);
         {input, RawLine} ->
             Line = normalize_input_line(list_to_binary(RawLine)),
             case string:to_upper(Line) of

@@ -8,12 +8,16 @@ init(Req, State) ->
     {cowboy_websocket, Req, State, #{idle_timeout => infinity}}.
 
 %% Called once the WebSocket handshake is complete.
-websocket_init(State) ->
+websocket_init(_State) ->
     %% Start a fresh interpreter session, telling it to send output to this process.
     {ok, Pid} = erlbasic_conn:start_ws(self()),
-    {ok, State#{conn => Pid}}.
+    {ok, #{conn => Pid}}.
 
 %% Data arriving from the browser (keyboard input).
+websocket_handle({text, <<3>>}, State = #{conn := Pid}) ->
+    %% Ctrl-C (ASCII 3)
+    Pid ! interrupt,
+    {ok, State};
 websocket_handle({text, Data}, State = #{conn := Pid}) ->
     erlbasic_conn:send_input(Pid, binary_to_list(Data)),
     {ok, State};
