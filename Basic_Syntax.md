@@ -42,7 +42,7 @@ LET NAME = "ALICE"
 ```
 
 Variable rules:
-- Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names
+- Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names or `%` for integer-style names
 - Variable lookup is case-insensitive (`x`, `X`, and `x` all refer to the same variable).
 
 Examples:
@@ -50,6 +50,8 @@ Examples:
 ```text
 LET A$ = "HELLO"
 PRINT A$
+LET I% = 42
+PRINT I%
 ```
 
 ### PRINT
@@ -74,6 +76,7 @@ INPUT A$
 Notes:
 - Numeric variables parse the entered text as an integer expression.
 - Variables ending in `$` store the entered text as a string.
+- Variables ending in `%` behave like integer-style numeric variables.
 - During `RUN`, program execution pauses until a value is entered.
 
 ### END

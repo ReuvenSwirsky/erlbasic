@@ -404,11 +404,11 @@ parse_statement(Command) ->
         {match, [Expr]} ->
             {print, Expr};
         nomatch ->
-            case re:run(Trimmed, "(?i)^INPUT\\s+([A-Za-z][A-Za-z0-9_]*\\$?)$", [{capture, [1], list}]) of
+            case re:run(Trimmed, "(?i)^INPUT\\s+([A-Za-z][A-Za-z0-9_]*[\\$%]?)$", [{capture, [1], list}]) of
                 {match, [Var]} ->
                     {input, string:to_upper(Var)};
                 nomatch ->
-                    case re:run(Trimmed, "(?i)^LET\\s+([A-Za-z][A-Za-z0-9_]*\\$?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+                    case re:run(Trimmed, "(?i)^LET\\s+([A-Za-z][A-Za-z0-9_]*[\\$%]?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
                 {match, [Var, Expr]} ->
                     {'let', string:to_upper(Var), Expr};
                 nomatch ->
@@ -426,13 +426,13 @@ parse_statement(Command) ->
                                         {match, [LineExpr]} ->
                                             {gosub, LineExpr};
                                         nomatch ->
-                                            case re:run(Trimmed, "(?i)^FOR\\s+([A-Za-z][A-Za-z0-9_]*)\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
+                                            case re:run(Trimmed, "(?i)^FOR\\s+([A-Za-z][A-Za-z0-9_]*%?)\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
                                                 {match, [Var, StartExpr, EndExpr]} ->
                                                     {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined};
                                                 {match, [Var, StartExpr, EndExpr, StepExpr]} ->
                                                     {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr};
                                                 nomatch ->
-                                                    case re:run(Trimmed, "(?i)^NEXT(?:\\s+([A-Za-z][A-Za-z0-9_]*\\$?))?$", [{capture, all_but_first, list}]) of
+                                                    case re:run(Trimmed, "(?i)^NEXT(?:\\s+([A-Za-z][A-Za-z0-9_]*[%\\$]?))?$", [{capture, all_but_first, list}]) of
                                                         {match, []} ->
                                                             {next_loop, undefined};
                                                         {match, [Var]} ->
@@ -467,7 +467,7 @@ eval_expr(Expr, Vars) ->
                 {Int, ""} ->
                     {Int, Vars};
                 _ ->
-                    case re:run(Trimmed, "^[A-Za-z][A-Za-z0-9_]*\\$?$", [{capture, none}]) of
+                    case re:run(Trimmed, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$", [{capture, none}]) of
                         match ->
                             {maps:get(string:to_upper(Trimmed), Vars, 0), Vars};
                         nomatch ->
@@ -529,8 +529,8 @@ read_digits(Rest, Acc) ->
 
 read_identifier([Ch | Rest], Acc) when (Ch >= $A andalso Ch =< $Z) orelse (Ch >= $a andalso Ch =< $z) orelse (Ch >= $0 andalso Ch =< $9) orelse Ch =:= $_ ->
     read_identifier(Rest, Acc ++ [Ch]);
-read_identifier([$$ | Rest], Acc) ->
-    {Acc ++ [$$], Rest};
+read_identifier([Suffix | Rest], Acc) when Suffix =:= $$; Suffix =:= $% ->
+    {Acc ++ [Suffix], Rest};
 read_identifier(Rest, Acc) ->
     {Acc, Rest}.
 

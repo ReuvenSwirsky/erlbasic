@@ -66,6 +66,8 @@ Immediate mode:
 ```text
 LET A$ = "HELLO"
 PRINT A$
+LET I% = 42
+PRINT I%
 INPUT NAME$
 PRINT NAME$
 IF A$ = "HELLO" THEN PRINT "OK" ELSE PRINT "NO"
