@@ -1,3 +1,7 @@
 ebin/*.beam
 ebin/*.app
 erl_crash.dump
+
+_build/
+rebar3
+*.ez

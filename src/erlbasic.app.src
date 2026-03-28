@@ -1,9 +1,13 @@
 {application, erlbasic,
- [{description, "Erlang BASIC interpreter over TCP"},
+ [{description, "Erlang BASIC interpreter over TCP and WebSocket"},
   {vsn, "0.1.0"},
-  {modules, [erlbasic_app, erlbasic_sup, erlbasic_listener, erlbasic_conn, erlbasic_interp]},
+  {modules, [erlbasic_app, erlbasic_sup, erlbasic_listener, erlbasic_conn, erlbasic_interp,
+             erlbasic_ws_handler]},
   {registered, []},
-  {applications, [kernel, stdlib]},
+  {applications, [kernel, stdlib, cowboy]},
   {mod, {erlbasic_app, []}},
-  {env, []}
+  {env, [
+    {port, 5555},
+    {web_port, 8080}
+  ]}
  ]}.

@@ -1,14 +1,19 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-New-Item -ItemType Directory -Force -Path "$PSScriptRoot\ebin" | Out-Null
-Copy-Item "$PSScriptRoot\src\erlbasic.app.src" "$PSScriptRoot\ebin\erlbasic.app" -Force
+$rebar3 = "$env:USERPROFILE\rebar3"
+if (-not (Test-Path $rebar3)) {
+    Write-Host "Downloading rebar3..."
+    Invoke-WebRequest -Uri "https://github.com/erlang/rebar3/releases/latest/download/rebar3" -OutFile $rebar3
+}
 
-$compileExpr = 'Files = filelib:wildcard("src/*.erl"), lists:foreach(fun(F) -> case compile:file(F, [report_errors, report_warnings, {outdir,"ebin"}]) of {ok,_} -> ok; error -> halt(1) end end, Files), halt(0).'
-
-& erl -noshell -eval $compileExpr
+& escript $rebar3 compile
 if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }
+
+# Copy compiled beams and app file where the smoke test runner expects them
+Copy-Item "$PSScriptRoot\_build\default\lib\erlbasic\ebin\*.beam" "$PSScriptRoot\ebin\" -Force
+Copy-Item "$PSScriptRoot\_build\default\lib\erlbasic\ebin\erlbasic.app" "$PSScriptRoot\ebin\" -Force
 
 Write-Host "Build succeeded."

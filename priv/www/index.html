@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Erlang BASIC</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      font-family: sans-serif;
+      color: #eee;
+    }
+    header {
+      padding: 1rem 2rem;
+      width: 100%;
+      background: #16213e;
+      border-bottom: 2px solid #0f3460;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.4rem; color: #00d4ff; letter-spacing: 0.05em; }
+    header p  { font-size: 0.85rem; color: #aaa; }
+    #terminal-container {
+      flex: 1;
+      width: 100%;
+      max-width: 960px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+    #terminal {
+      flex: 1;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      overflow: hidden;
+      padding: 4px;
+      background: #000;
+    }
+    #status {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: #888;
+      text-align: right;
+    }
+    #status.connected { color: #4caf50; }
+    #status.disconnected { color: #f44336; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>&#x1F5A5; Erlang BASIC</h1>
+      <p>A time-shared BASIC interpreter — running live in Erlang</p>
+    </div>
+  </header>
+
+  <div id="terminal-container">
+    <div id="terminal"></div>
+    <div id="status" class="disconnected">Connecting…</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script>
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: '"Cascadia Code", "Fira Code", "Courier New", monospace',
+      fontSize: 14,
+      theme: {
+        background: '#000000',
+        foreground: '#00ff41',
+        cursor:     '#00ff41',
+      }
+    });
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+    fitAddon.fit();
+    window.addEventListener('resize', () => fitAddon.fit());
+
+    const statusEl = document.getElementById('status');
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      statusEl.textContent = 'Connected';
+      statusEl.className = 'connected';
+    };
+
+    ws.onclose = () => {
+      statusEl.textContent = 'Disconnected — reload to reconnect';
+      statusEl.className = 'disconnected';
+      term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
+    };
+
+    ws.onerror = () => {
+      statusEl.textContent = 'Connection error';
+      statusEl.className = 'disconnected';
+    };
+
+    // Output from the server → display in terminal
+    ws.onmessage = (evt) => {
+      // Normalise \r\n from BASIC to what xterm expects
+      term.write(evt.data.replace(/\r\n/g, '\r\n'));
+    };
+
+    // Keyboard input → buffer until Enter, then send line
+    let inputBuffer = '';
+    term.onKey(({ key, domEvent }) => {
+      const code = domEvent.keyCode;
+
+      if (code === 13) {                          // Enter
+        term.write('\r\n');
+        ws.send(inputBuffer + '\n');
+        inputBuffer = '';
+      } else if (code === 8) {                    // Backspace
+        if (inputBuffer.length > 0) {
+          inputBuffer = inputBuffer.slice(0, -1);
+          term.write('\b \b');
+        }
+      } else if (key >= ' ' || code === 9) {     // Printable / Tab
+        inputBuffer += key;
+        term.write(key);
+      }
+    });
+  </script>
+</body>
+</html>
