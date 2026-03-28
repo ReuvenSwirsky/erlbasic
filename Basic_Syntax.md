@@ -250,7 +250,4 @@ If no comparison operator is present, truthiness is used:
 - Integer: true if not `0`
 - String: true if not empty/whitespace
 
-## Current Limitations
-
-- Immediate-mode `FOR/NEXT` is supported. Enter a `FOR` statement and continue entering direct-mode statements until matching `NEXT` is entered.
 
