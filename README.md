@@ -1,6 +1,6 @@
 # erlbasic
 
-A minimal Erlang BASIC interpreter exposed over TCP/IP. Each TCP client gets its own isolated interpreter state.
+A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client gets its own isolated interpreter state.
 
 ## Features
 
