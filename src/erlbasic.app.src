@@ -1,0 +1,9 @@
+{application, erlbasic,
+ [{description, "Minimal Erlang BASIC interpreter over TCP"},
+  {vsn, "0.1.0"},
+  {modules, [erlbasic_app, erlbasic_sup, erlbasic_listener, erlbasic_conn, erlbasic_interp]},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {mod, {erlbasic_app, []}},
+  {env, []}
+ ]}.
