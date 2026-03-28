@@ -204,8 +204,8 @@ parse_input_value(Var, Line, Vars) ->
         $$ ->
             parse_string_input(Line);
         _ ->
-            {Value, _} = eval_expr(Line, Vars),
-            normalize_int(Value)
+            {Value, _} = erlbasic_eval:eval_expr(Line, Vars),
+            erlbasic_eval:normalize_int(Value)
     end.
 
 parse_string_input(Line) ->
@@ -231,23 +231,23 @@ execute_statement(Command, State) ->
 execute_statement_single(Command, State) ->
     case erlbasic_parser:parse_statement(Command) of
         {print, Expr} ->
-            case eval_expr_result(Expr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars) of
                 {ok, Value, Vars1} ->
-                    {State#state{vars = Vars1}, [format_value(Value)]};
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_value(Value)]};
                 {error, Reason, Vars1} ->
-                    {State#state{vars = Vars1}, [format_runtime_error(Reason)]}
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {'let', Var, Expr} ->
-            case eval_expr_result(Expr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars) of
                 {ok, Value, Vars1} ->
                     {State#state{vars = maps:put(Var, Value, Vars1)}, ["OK\r\n"]};
                 {error, Reason, Vars1} ->
-                    {State#state{vars = Vars1}, [format_runtime_error(Reason)]}
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {input, Var} ->
             {State#state{pending_input = {Var, {immediate, []}}}, [format_input_prompt(Var)]};
         {if_then_else, CondExpr, ThenStmt, ElseStmt} ->
-            case eval_condition_result(CondExpr, State#state.vars) of
+            case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars) of
                 {ok, true} ->
                     case string:trim(ThenStmt) of
                         "" ->
@@ -268,7 +268,7 @@ execute_statement_single(Command, State) ->
                             end
                     end;
                 {error, Reason} ->
-                    {State, [format_runtime_error(Reason)]}
+                    {State, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {'end'} ->
             stop;
@@ -285,24 +285,6 @@ execute_statement_single(Command, State) ->
         {'return'} ->
             {State, ["?SYNTAX ERROR\r\n"]}
     end.
-
-format_value(Value) ->
-    erlbasic_eval:format_value(Value).
-
-eval_expr(Expr, Vars) ->
-    erlbasic_eval:eval_expr(Expr, Vars).
-
-eval_expr_result(Expr, Vars) ->
-    erlbasic_eval:eval_expr_result(Expr, Vars).
-
-format_runtime_error(Reason) ->
-    erlbasic_eval:format_runtime_error(Reason).
-
-normalize_int(Value) ->
-    erlbasic_eval:normalize_int(Value).
-
-eval_condition_result(CondExpr, Vars) ->
-    erlbasic_eval:eval_condition_result(CondExpr, Vars).
 
 execute_statement_sequence(StatementText, State) ->
     Statements = erlbasic_parser:split_statements(StatementText),
