@@ -6,7 +6,8 @@
     get_array_value/3,
     put_array_value/4,
     normalize_dims/1,
-    auto_array_dims/1
+    auto_array_dims/1,
+    is_string_var/1
 ]).
 
 -define(ARRAYS_KEY, '$ARRAYS$').
