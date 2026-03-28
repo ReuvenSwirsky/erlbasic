@@ -1,0 +1,5 @@
+10 LET I% = 2 + 3 * 4
+20 LET J = (I% - 2) / 3
+30 PRINT I%
+40 PRINT J
+50 END

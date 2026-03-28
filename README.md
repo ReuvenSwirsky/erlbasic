@@ -110,3 +110,13 @@ RUN
 ## Syntax Reference
 
 See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported syntax.
+
+## Smoke Tests
+
+Sample BASIC programs for smoke testing live in [tests/smoke/run_smoke_tests.ps1](tests/smoke/run_smoke_tests.ps1) and [tests/smoke](tests/smoke).
+
+Run them with:
+
+```powershell
+.\tests\smoke\run_smoke_tests.ps1
+```
