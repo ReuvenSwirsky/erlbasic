@@ -18,12 +18,6 @@
 -define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$").
 -define(ARRAYS_KEY, '$ARRAYS$').
 
--define(EXPR_KEYWORDS, [
-    "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-    "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "MOD",
-    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$"
-]).
-
 format_value(Value) when is_integer(Value) ->
     integer_to_list(Value) ++ "\r\n";
 format_value(Value) when is_float(Value) ->
@@ -102,7 +96,7 @@ eval_expr_result(Expr, Vars, Funcs) ->
         end).
 
 eval_arith_expr(Expr, Vars) ->
-    case tokenize_expr(Expr) of
+    case erlbasic_eval_lexer:tokenize_expr(Expr) of
         {ok, Tokens} ->
             case parse_sum(Tokens, Vars) of
                 {ok, Value, []} ->
@@ -131,89 +125,6 @@ current_user_funcs() ->
         Funcs when is_map(Funcs) -> Funcs;
         _ -> #{}
     end.
-
-tokenize_expr(Text) ->
-    tokenize_expr(Text, []).
-
-tokenize_expr([], Acc) ->
-    {ok, lists:reverse(Acc)};
-tokenize_expr([Ch | Rest], Acc) when Ch =:= $\s; Ch =:= $\t ->
-    tokenize_expr(Rest, Acc);
-tokenize_expr([$+ | Rest], Acc) ->
-    tokenize_expr(Rest, [plus | Acc]);
-tokenize_expr([$- | Rest], Acc) ->
-    tokenize_expr(Rest, [minus | Acc]);
-tokenize_expr([$* | Rest], Acc) ->
-    tokenize_expr(Rest, [mul | Acc]);
-tokenize_expr([$/ | Rest], Acc) ->
-    tokenize_expr(Rest, [divi | Acc]);
-tokenize_expr([$\\ | Rest], Acc) ->
-    tokenize_expr(Rest, [intdiv | Acc]);
-tokenize_expr([$^ | Rest], Acc) ->
-    tokenize_expr(Rest, [pow | Acc]);
-tokenize_expr([$, | Rest], Acc) ->
-    tokenize_expr(Rest, [comma | Acc]);
-tokenize_expr([$( | Rest], Acc) ->
-    tokenize_expr(Rest, [lparen | Acc]);
-tokenize_expr([$) | Rest], Acc) ->
-    tokenize_expr(Rest, [rparen | Acc]);
-tokenize_expr([$" | Rest], Acc) ->
-    case read_string(Rest, []) of
-        {ok, StringChars, Tail} ->
-            tokenize_expr(Tail, [{str, StringChars} | Acc]);
-        error ->
-            error
-    end;
-tokenize_expr([Ch | Rest], Acc) when Ch >= $0, Ch =< $9 ->
-    {NumberChars, HasDot, Tail} = read_number([Ch | Rest], [], false),
-    NumberToken =
-        case HasDot of
-            true -> {num, list_to_float(NumberChars)};
-            false -> {num, list_to_integer(NumberChars)}
-        end,
-    tokenize_expr(Tail, [NumberToken | Acc]);
-tokenize_expr([$. | Rest], Acc) ->
-    case Rest of
-        [Next | _] when Next >= $0, Next =< $9 ->
-            {NumberChars, _HasDot, Tail} = read_number([$. | Rest], [], false),
-            tokenize_expr(Tail, [{num, list_to_float(NumberChars)} | Acc]);
-        _ ->
-            error
-    end;
-tokenize_expr([Ch | Rest], Acc) when (Ch >= $A andalso Ch =< $Z) orelse (Ch >= $a andalso Ch =< $z) ->
-    {NameChars, Tail} = read_identifier(Rest, [Ch]),
-    Token = keyword_or_var_token(NameChars),
-    tokenize_expr(Tail, [Token | Acc]);
-tokenize_expr(_, _Acc) ->
-    error.
-
-keyword_or_var_token(NameChars) ->
-    Upper = string:to_upper(NameChars),
-    case lists:member(Upper, ?EXPR_KEYWORDS) of
-        true -> {kw, Upper};
-        false -> {var, NameChars}
-    end.
-
-read_number([Ch | Rest], Acc, HasDot) when Ch >= $0, Ch =< $9 ->
-    read_number(Rest, [Ch | Acc], HasDot);
-read_number([$. | Rest], Acc, false) ->
-    read_number(Rest, [$. | Acc], true);
-read_number(Rest, Acc, HasDot) ->
-    {lists:reverse(Acc), HasDot, Rest}.
-
-read_string([$" | Rest], Acc) ->
-    {ok, lists:reverse(Acc), Rest};
-read_string([Ch | Rest], Acc) ->
-    read_string(Rest, [Ch | Acc]);
-read_string([], _Acc) ->
-    error.
-
-read_identifier([Ch | Rest], Acc) when (Ch >= $A andalso Ch =< $Z) orelse (Ch >= $a andalso Ch =< $z) orelse (Ch >= $0 andalso Ch =< $9) orelse Ch =:= $_ ->
-    read_identifier(Rest, Acc ++ [Ch]);
-read_identifier([Suffix | Rest], Acc) when Suffix =:= $$; Suffix =:= $% ->
-    {Acc ++ [Suffix], Rest};
-read_identifier(Rest, Acc) ->
-    {Acc, Rest}.
 
 parse_sum(Tokens, Vars) ->
     case parse_term(Tokens, Vars) of
@@ -343,11 +254,11 @@ eval_callable(Name, Args, Rest, Vars) ->
         {ok, {ArgVar, FnExpr}} ->
             eval_user_function(ArgVar, FnExpr, Args, Vars, Rest);
         error ->
-            case apply_math_function(UpperName, Args) of
+            case erlbasic_eval_builtins:apply_math_function(UpperName, Args) of
                 {ok, Value} ->
                     {ok, Value, Rest};
                 {error, illegal_function_call} ->
-                    case is_builtin_function(UpperName) of
+                    case erlbasic_eval_builtins:is_builtin_function(UpperName) of
                         true ->
                             {error, illegal_function_call};
                         false ->
@@ -360,13 +271,6 @@ eval_callable(Name, Args, Rest, Vars) ->
                     {error, Reason}
             end
     end.
-
-is_builtin_function(Name) ->
-    lists:member(Name, [
-        "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$"
-    ]).
 
 assign_target({var_target, Var}, Value, Vars, _Funcs) ->
     {ok, maps:put(Var, Value, Vars)};
@@ -410,92 +314,6 @@ eval_user_function(ArgVar, FnExpr, [ArgValue], Vars, Rest) ->
 eval_user_function(_ArgVar, _FnExpr, _Args, _Vars, _Rest) ->
     {error, illegal_function_call}.
 
-apply_math_function("ABS", [X]) ->
-    {ok, abs(X)};
-apply_math_function("ACOS", [X]) ->
-    safe_math(fun() -> math:acos(X) end);
-apply_math_function("ASIN", [X]) ->
-    safe_math(fun() -> math:asin(X) end);
-apply_math_function("ATAN", [X]) ->
-    {ok, math:atan(X)};
-apply_math_function("ATN", [X]) ->
-    {ok, math:atan(X)};
-apply_math_function("ATAN2", [Y, X]) ->
-    {ok, math:atan2(Y, X)};
-apply_math_function("COS", [X]) ->
-    {ok, math:cos(X)};
-apply_math_function("DEG", [X]) ->
-    {ok, X * 180.0 / math:pi()};
-apply_math_function("EXP", [X]) ->
-    {ok, math:exp(X)};
-apply_math_function("FIX", [X]) ->
-    {ok, trunc(X)};
-apply_math_function("INT", [X]) ->
-    {ok, floor_number(X)};
-apply_math_function("FLOOR", [X]) ->
-    apply_floor(X);
-apply_math_function("CEIL", [X]) ->
-    apply_ceil(X);
-apply_math_function("LN", [X]) ->
-    safe_math(fun() -> math:log(X) end);
-apply_math_function("LOG", [X]) ->
-    safe_math(fun() -> math:log(X) end);
-apply_math_function("PI", []) ->
-    {ok, math:pi()};
-apply_math_function("POW", [X, Y]) ->
-    {ok, math:pow(X, Y)};
-apply_math_function("RAD", [X]) ->
-    {ok, X * math:pi() / 180.0};
-apply_math_function("RND", []) ->
-    gw_rnd();
-apply_math_function("RND", [X]) ->
-    gw_rnd(X);
-apply_math_function("DATE$", []) ->
-    {ok, basic_date()};
-apply_math_function("TIME$", []) ->
-    {ok, basic_time()};
-apply_math_function("SGN", [X]) when X < 0 ->
-    {ok, -1};
-apply_math_function("SGN", [0]) ->
-    {ok, 0};
-apply_math_function("SGN", [_X]) ->
-    {ok, 1};
-apply_math_function("SIN", [X]) ->
-    {ok, math:sin(X)};
-apply_math_function("SQR", [X]) ->
-    safe_math(fun() -> math:sqrt(X) end);
-apply_math_function("SQRT", [X]) ->
-    safe_math(fun() -> math:sqrt(X) end);
-apply_math_function("TAN", [X]) ->
-    {ok, math:tan(X)};
-apply_math_function("LEFT$", [Text, Count]) ->
-    apply_left(Text, Count);
-apply_math_function("RIGHT$", [Text, Count]) ->
-    apply_right(Text, Count);
-apply_math_function("MID$", [Text, Start]) ->
-    apply_mid(Text, Start);
-apply_math_function("MID$", [Text, Start, Count]) ->
-    apply_mid(Text, Start, Count);
-apply_math_function("LEN", [Text]) ->
-    apply_len(Text);
-apply_math_function("ASC", [Text]) ->
-    apply_asc(Text);
-apply_math_function("CHR$", [Code]) ->
-    apply_chr(Code);
-apply_math_function("STR$", [Value]) ->
-    apply_str(Value);
-apply_math_function("VAL", [Value]) ->
-    apply_val(Value);
-apply_math_function(_, _Args) ->
-    {error, illegal_function_call}.
-
-safe_math(Fun) ->
-    try
-        {ok, Fun()}
-    catch
-        error:badarith -> {error, illegal_function_call}
-    end.
-
 format_runtime_error(division_by_zero) ->
     "?DIVISION BY ZERO ERROR\r\n";
 format_runtime_error(out_of_data) ->
@@ -507,65 +325,10 @@ format_runtime_error(syntax_error) ->
 format_runtime_error(_) ->
     "?SYNTAX ERROR\r\n".
 
-floor_number(X) when is_integer(X) ->
-    X;
-floor_number(X) when is_float(X) ->
-    T = trunc(X),
-    case X < T of
-        true -> T - 1;
-        false -> T
-    end.
-
-ceil_number(X) when is_integer(X) ->
-    X;
-ceil_number(X) when is_float(X) ->
-    T = trunc(X),
-    case X > T of
-        true -> T + 1;
-        false -> T
-    end.
-
-apply_floor(X) when is_integer(X); is_float(X) ->
-    {ok, floor_number(X)};
-apply_floor(_X) ->
-    {error, illegal_function_call}.
-
-apply_ceil(X) when is_integer(X); is_float(X) ->
-    {ok, ceil_number(X)};
-apply_ceil(_X) ->
-    {error, illegal_function_call}.
-
 int_div(Left, Right) when is_integer(Left), is_integer(Right) ->
     Left div Right;
 int_div(Left, Right) ->
     trunc(Left / Right).
-
-gw_rnd() ->
-    Value = rand:uniform(),
-    put(gw_rnd_last, Value),
-    {ok, Value}.
-
-gw_rnd(X) when X < 0 ->
-    SeedBase = erlang:phash2({gw_seed, X}, 16#7ffffffe) + 1,
-    Seed2 = ((SeedBase * 1103515245) band 16#7fffffff) + 1,
-    Seed3 = ((SeedBase * 12345) band 16#7fffffff) + 1,
-    _ = rand:seed(exsplus, {SeedBase, Seed2, Seed3}),
-    gw_rnd();
-gw_rnd(X) when X =:= 0; X =:= +0.0 ->
-    case get(gw_rnd_last) of
-        undefined -> gw_rnd();
-        Value -> {ok, Value}
-    end;
-gw_rnd(_X) ->
-    gw_rnd().
-
-basic_date() ->
-    {{Year, Month, Day}, _} = calendar:local_time(),
-    lists:flatten(io_lib:format("~2..0B-~2..0B-~4..0B", [Month, Day, Year])).
-
-basic_time() ->
-    {_, {Hour, Minute, Second}} = calendar:local_time(),
-    lists:flatten(io_lib:format("~2..0B:~2..0B:~2..0B", [Hour, Minute, Second])).
 
 eval_indices(IndexExprs, Vars, Funcs) ->
     eval_indices(IndexExprs, Vars, Funcs, []).
@@ -709,112 +472,6 @@ default_scalar_value(Name) ->
 
 is_string_var(Name) when is_list(Name) ->
     Name =/= [] andalso lists:last(Name) =:= $$.
-
-apply_left(Text, Count) ->
-    Str = to_basic_string(Text),
-    case normalize_int_arg(Count) of
-        {ok, N} when N =< 0 ->
-            {ok, ""};
-        {ok, N} ->
-            {ok, lists:sublist(Str, N)};
-        error ->
-            {error, illegal_function_call}
-    end.
-
-apply_right(Text, Count) ->
-    Str = to_basic_string(Text),
-    case normalize_int_arg(Count) of
-        {ok, N} when N =< 0 ->
-            {ok, ""};
-        {ok, N} ->
-            Len = length(Str),
-            case N >= Len of
-                true -> {ok, Str};
-                false -> {ok, lists:nthtail(Len - N, Str)}
-            end;
-        error ->
-            {error, illegal_function_call}
-    end.
-
-apply_mid(Text, Start) ->
-    apply_mid(Text, Start, length(to_basic_string(Text))).
-
-apply_mid(Text, Start, Count) ->
-    Str = to_basic_string(Text),
-    case {normalize_int_arg(Start), normalize_int_arg(Count)} of
-        {{ok, StartPos}, {ok, N}} when StartPos < 1; N < 0 ->
-            {error, illegal_function_call};
-        {{ok, _StartPos}, {ok, 0}} ->
-            {ok, ""};
-        {{ok, StartPos}, {ok, N}} ->
-            Len = length(Str),
-            case StartPos > Len of
-                true ->
-                    {ok, ""};
-                false ->
-                    Tail = lists:nthtail(StartPos - 1, Str),
-                    {ok, lists:sublist(Tail, N)}
-            end;
-        _ ->
-            {error, illegal_function_call}
-    end.
-
-apply_len(Text) ->
-    {ok, length(to_basic_string(Text))}.
-
-apply_asc(Text) ->
-    Str = to_basic_string(Text),
-    case Str of
-        [] ->
-            {error, illegal_function_call};
-        [Ch | _] ->
-            {ok, Ch}
-    end.
-
-apply_chr(Code) ->
-    case normalize_int_arg(Code) of
-        {ok, N} when N >= 0, N =< 255 ->
-            {ok, [N]};
-        _ ->
-            {error, illegal_function_call}
-    end.
-
-apply_str(Value) when is_integer(Value); is_float(Value) ->
-    {ok, format_number(Value)};
-apply_str(_Value) ->
-    {error, illegal_function_call}.
-
-apply_val(Value) ->
-    Text = string:trim(to_basic_string(Value)),
-    case re:run(Text, "^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))", [{capture, [1], list}]) of
-        {match, [NumText]} ->
-            case string:to_integer(NumText) of
-                {Int, ""} -> {ok, Int};
-                _ ->
-                    case string:to_float(NumText) of
-                        {Float, ""} -> {ok, Float};
-                        _ -> {ok, 0}
-                    end
-            end;
-        nomatch ->
-            {ok, 0}
-    end.
-
-normalize_int_arg(Value) when is_integer(Value) ->
-    {ok, Value};
-normalize_int_arg(Value) when is_float(Value) ->
-    {ok, trunc(Value)};
-normalize_int_arg(_) ->
-    error.
-
-to_basic_string(Value) when is_list(Value) ->
-    Value;
-to_basic_string(Value) when is_integer(Value) ->
-    integer_to_list(Value);
-to_basic_string(Value) when is_float(Value) ->
-    format_number(Value);
-to_basic_string(Value) ->
-    lists:flatten(io_lib:format("~p", [Value])).
 
 normalize_int(Value) when is_integer(Value) ->
     Value;
