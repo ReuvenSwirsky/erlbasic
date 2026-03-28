@@ -42,8 +42,15 @@ LET NAME = "ALICE"
 ```
 
 Variable rules:
-- Variable names: `[A-Za-z][A-Za-z0-9_]*`
+- Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names
 - Variable lookup is case-insensitive (`x`, `X`, and `x` all refer to the same variable).
+
+Examples:
+
+```text
+LET A$ = "HELLO"
+PRINT A$
+```
 
 ### PRINT
 
@@ -54,6 +61,20 @@ PRINT X
 PRINT "HELLO"
 PRINT 123
 ```
+
+### INPUT
+
+Reads a value from the user and stores it in a variable.
+
+```text
+INPUT N
+INPUT A$
+```
+
+Notes:
+- Numeric variables parse the entered text as an integer expression.
+- Variables ending in `$` store the entered text as a string.
+- During `RUN`, program execution pauses until a value is entered.
 
 ### END
 
@@ -100,6 +121,26 @@ Notes:
 - If `STEP` is omitted, step defaults to `1`.
 - A step of `0` is normalized to `1`.
 
+### GOTO
+
+Jumps to a target line number during `RUN`.
+
+```text
+GOTO 200
+```
+
+### GOSUB / RETURN
+
+Calls a subroutine line and returns to the line after `GOSUB`.
+
+```text
+10 GOSUB 100
+20 PRINT "BACK"
+30 END
+100 PRINT "SUB"
+110 RETURN
+```
+
 ### NEXT [var]
 
 Advances the active FOR loop.
@@ -135,10 +176,16 @@ Supported expression forms:
 - Integer literal: `123`
 - Quoted string literal: `"HELLO"`
 - Variable reference: `X`
+- Arithmetic with integers and variables: `+`, `-`, `*`, `/`, parentheses, unary `+`/`-`
+
+Examples:
+
+```text
+LET X = 2 + 3 * 4
+PRINT (X - 2) / 3
+```
 
 Undefined variables evaluate to `0`.
-
-Arithmetic expressions are not implemented yet (for example `X + 1`).
 
 ## Conditions
 
@@ -163,6 +210,4 @@ If no comparison operator is present, truthiness is used:
 
 ## Current Limitations
 
-- No GOTO/GOSUB/RETURN.
-- No arithmetic parser (only literal/variable expression forms).
 - FOR/NEXT is designed for `RUN` execution; using these in immediate mode returns `?SYNTAX ERROR`.

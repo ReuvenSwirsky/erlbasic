@@ -19,7 +19,7 @@ loop(Socket, State) ->
                 _ ->
                     {NextState, Output} = erlbasic_interp:handle_input(Line, State),
                     send_output(Socket, Output),
-                    ok = gen_tcp:send(Socket, "> "),
+                    ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(NextState)),
                     loop(Socket, NextState)
             end;
         {error, closed} ->

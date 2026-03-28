@@ -7,8 +7,8 @@ A minimal Erlang BASIC interpreter exposed over TCP/IP. Each TCP client gets its
 - Multiple concurrent TCP clients
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
-- Immediate commands: `PRINT`, `LET`, `LIST`, `RUN`, `NEW`, `QUIT`
-- Program statements: `LET`, `PRINT`, `END`
+- Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `NEW`, `QUIT`
+- Program statements: `LET`, `PRINT`, `INPUT`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
 
 ## Build
 
@@ -59,11 +59,51 @@ nc localhost 5555
 RUN
 ```
 
+## More Examples
+
+Immediate mode:
+
+```text
+LET A$ = "HELLO"
+PRINT A$
+INPUT NAME$
+PRINT NAME$
+IF A$ = "HELLO" THEN PRINT "OK" ELSE PRINT "NO"
+LET X = 5 : PRINT X
+```
+
+Stored program with loop and conditional:
+
+```text
+10 FOR I = 1 TO 5
+20 IF I < 3 THEN PRINT "LOW" ELSE PRINT "HIGH"
+30 PRINT I
+40 NEXT I
+50 END
+RUN
+```
+
+Stored program with INPUT and subroutine flow:
+
+```text
+10 INPUT N
+20 GOSUB 100
+30 PRINT N
+40 END
+100 LET N = N + 1
+110 RETURN
+RUN
+```
+
 ## Notes
 
 - Expressions currently support integer literals, quoted strings, and variable lookup.
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
+
+## Known Limitations
+
+- `FOR/NEXT` is designed for `RUN`; using it in immediate mode returns `?SYNTAX ERROR`.
 
 ## Syntax Reference
 
