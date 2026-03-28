@@ -30,6 +30,19 @@ parse_let_statement(Trimmed) ->
         {match, [Var, Expr]} ->
             {'let', string:to_upper(Var), Expr};
         nomatch ->
+            parse_def_fn_statement(Trimmed)
+    end.
+
+parse_def_fn_statement(Trimmed) ->
+    case re:run(
+        Trimmed,
+        "(?i)^DEF\\s+FN([A-Za-z][A-Za-z0-9_]*)(?:\\s*\\(\\s*" ++ ?VAR_PATTERN ++ "\\s*\\))?\\s*=\\s*(.+)$",
+        [{capture, all_but_first, list}]) of
+        {match, [FnSuffix, Expr]} ->
+            {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, Expr};
+        {match, [FnSuffix, ArgVar, Expr]} ->
+            {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), Expr};
+        nomatch ->
             parse_if_statement(Trimmed)
     end.
 

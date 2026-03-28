@@ -6,6 +6,7 @@
 -record(state, {
     vars = #{},
     prog = [],
+    funcs = #{},
     pending_input = undefined
 }).
 
@@ -174,7 +175,7 @@ run_program(State) ->
     erlbasic_runtime:run_program(State).
 
 handle_pending_input(Line, State = #state{pending_input = {Var, Continuation}}) ->
-    Value = parse_input_value(Var, Line, State#state.vars),
+    Value = parse_input_value(Var, Line, State#state.vars, State#state.funcs),
     NextVars = maps:put(Var, Value, State#state.vars),
     ClearedState = State#state{vars = NextVars, pending_input = undefined},
     case Continuation of
@@ -199,12 +200,12 @@ update_pending_input_rest(State = #state{pending_input = {Var, {program, Pc, _Ol
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 
-parse_input_value(Var, Line, Vars) ->
+parse_input_value(Var, Line, Vars, Funcs) ->
     case lists:last(Var) of
         $$ ->
             parse_string_input(Line);
         _ ->
-            {Value, _} = erlbasic_eval:eval_expr(Line, Vars),
+            {Value, _} = erlbasic_eval:eval_expr(Line, Vars, Funcs),
             erlbasic_eval:normalize_int(Value)
     end.
 
@@ -231,23 +232,26 @@ execute_statement(Command, State) ->
 execute_statement_single(Command, State) ->
     case erlbasic_parser:parse_statement(Command) of
         {print, Expr} ->
-            case erlbasic_eval:eval_expr_result(Expr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_value(Value)]};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {'let', Var, Expr} ->
-            case erlbasic_eval:eval_expr_result(Expr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} ->
                     {State#state{vars = maps:put(Var, Value, Vars1)}, ["OK\r\n"]};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
+        {def_fn, FnName, ArgVar, FnExpr} ->
+            NextFuncs = maps:put(FnName, {ArgVar, FnExpr}, State#state.funcs),
+            {State#state{funcs = NextFuncs}, ["OK\r\n"]};
         {input, Var} ->
             {State#state{pending_input = {Var, {immediate, []}}}, [format_input_prompt(Var)]};
         {if_then_else, CondExpr, ThenStmt, ElseStmt} ->
-            case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars) of
+            case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars, State#state.funcs) of
                 {ok, true} ->
                     case string:trim(ThenStmt) of
                         "" ->

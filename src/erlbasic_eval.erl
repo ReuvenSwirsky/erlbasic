@@ -3,8 +3,11 @@
 -export([
     format_value/1,
     eval_expr/2,
+    eval_expr/3,
     eval_expr_result/2,
+    eval_expr_result/3,
     eval_condition_result/2,
+    eval_condition_result/3,
     normalize_int/1,
     format_runtime_error/1
 ]).
@@ -41,12 +44,18 @@ trim_float_string_rev(Rest) ->
     lists:reverse(Rest).
 
 eval_expr(Expr, Vars) ->
-    case eval_expr_result(Expr, Vars) of
-        {ok, Value, NextVars} ->
-            {Value, NextVars};
-        {error, _Reason, NextVars} ->
-            {0, NextVars}
-    end.
+    eval_expr(Expr, Vars, #{}).
+
+eval_expr(Expr, Vars, Funcs) ->
+    with_user_funcs(Funcs,
+        fun() ->
+            case eval_expr_result(Expr, Vars) of
+                {ok, Value, NextVars} ->
+                    {Value, NextVars};
+                {error, _Reason, NextVars} ->
+                    {0, NextVars}
+            end
+        end).
 
 eval_expr_result(Expr, Vars) ->
     Trimmed = string:trim(Expr),
@@ -72,6 +81,12 @@ eval_expr_result(Expr, Vars) ->
             end
     end.
 
+eval_expr_result(Expr, Vars, Funcs) ->
+    with_user_funcs(Funcs,
+        fun() ->
+            eval_expr_result(Expr, Vars)
+        end).
+
 eval_arith_expr(Expr, Vars) ->
     case tokenize_expr(Expr) of
         {ok, Tokens} ->
@@ -85,6 +100,22 @@ eval_arith_expr(Expr, Vars) ->
             end;
         error ->
             {error, syntax_error}
+    end.
+
+with_user_funcs(Funcs, Fun) ->
+    Prev = get(erlbasic_user_funcs),
+    put(erlbasic_user_funcs, Funcs),
+    try
+        Fun()
+    after
+        put(erlbasic_user_funcs, Prev)
+    end.
+
+current_user_funcs() ->
+    case get(erlbasic_user_funcs) of
+        undefined -> #{};
+        Funcs when is_map(Funcs) -> Funcs;
+        _ -> #{}
     end.
 
 tokenize_expr(Text) ->
@@ -230,7 +261,7 @@ parse_primary([{num, Value} | Rest], _Vars) ->
 parse_primary([{var, Name}, lparen | Rest], Vars) ->
     case parse_call_args(Rest, Vars) of
         {ok, Args, Next} ->
-            eval_builtin_call(Name, Args, Next);
+            eval_builtin_call(Name, Args, Next, Vars);
         Error ->
             Error
     end;
@@ -260,14 +291,35 @@ parse_call_args(Tokens, Vars, Acc) ->
             error
     end.
 
-eval_builtin_call(Name, Args, Rest) ->
+eval_builtin_call(Name, Args, Rest, Vars) ->
     UpperName = string:to_upper(Name),
-    case apply_math_function(UpperName, Args) of
-        {ok, Value} ->
-            {ok, Value, Rest};
-        {error, Reason} ->
-            {error, Reason}
+    case maps:find(UpperName, current_user_funcs()) of
+        {ok, {ArgVar, FnExpr}} ->
+            eval_user_function(ArgVar, FnExpr, Args, Vars, Rest);
+        error ->
+            case apply_math_function(UpperName, Args) of
+                {ok, Value} ->
+                    {ok, Value, Rest};
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end.
+
+eval_user_function(undefined, FnExpr, [], Vars, Rest) ->
+    case eval_expr_result(FnExpr, Vars) of
+        {ok, Value, _} -> {ok, Value, Rest};
+        {error, Reason, _} -> {error, Reason}
+    end;
+eval_user_function(undefined, _FnExpr, _Args, _Vars, _Rest) ->
+    {error, illegal_function_call};
+eval_user_function(ArgVar, FnExpr, [ArgValue], Vars, Rest) ->
+    BoundVars = maps:put(ArgVar, ArgValue, Vars),
+    case eval_expr_result(FnExpr, BoundVars) of
+        {ok, Value, _} -> {ok, Value, Rest};
+        {error, Reason, _} -> {error, Reason}
+    end;
+eval_user_function(_ArgVar, _FnExpr, _Args, _Vars, _Rest) ->
+    {error, illegal_function_call}.
 
 apply_math_function("ABS", [X]) ->
     {ok, abs(X)};
@@ -419,6 +471,12 @@ eval_condition_result(CondExpr, Vars) ->
                     {ok, truthy(Value)}
             end
     end.
+
+eval_condition_result(CondExpr, Vars, Funcs) ->
+    with_user_funcs(Funcs,
+        fun() ->
+            eval_condition_result(CondExpr, Vars)
+        end).
 
 truthy(Value) when is_integer(Value) ->
     Value =/= 0;

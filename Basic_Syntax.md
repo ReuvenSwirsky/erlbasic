@@ -55,6 +55,20 @@ LET I% = 42
 PRINT I%
 ```
 
+### DEF FN
+
+Defines a user function (GW-BASIC style) for use in expressions.
+
+```text
+DEF FNQ(X)=X*X+1
+PRINT FNQ(3)
+```
+
+Notes:
+- Function names use `FN` prefix (for example, `FNQ`, `FNSCORE`).
+- Parameter is optional in this interpreter (`DEF FNPI=3.14159` style), but standard usage is one parameter.
+- Function names and parameter names are case-insensitive.
+
 ### PRINT
 
 Prints an expression value.
@@ -189,6 +203,7 @@ Supported expression forms:
 	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `COS`, `DEG`, `EXP`, `FIX`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`
 	- Two-argument: `ATAN2`, `POW`
 	- Zero-argument: `PI`, `RND`
+- User-defined function calls with `DEF FN...` syntax: `FNQ(3)`
 
 Examples:
 

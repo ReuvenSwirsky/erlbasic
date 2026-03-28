@@ -5,6 +5,7 @@
 -record(state, {
     vars = #{},
     prog = [],
+    funcs = #{},
     pending_input = undefined
 }).
 
@@ -67,11 +68,11 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
 execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack) ->
     case erlbasic_parser:parse_statement(Command) of
         {for_loop, Var, StartExpr, EndExpr, StepExpr} ->
-            case erlbasic_eval:eval_expr_result(StartExpr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(StartExpr, State#state.vars, State#state.funcs) of
                 {error, Reason, _} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason)]};
                 {ok, StartValue, Vars1} ->
-                    case erlbasic_eval:eval_expr_result(EndExpr, Vars1) of
+                    case erlbasic_eval:eval_expr_result(EndExpr, Vars1, State#state.funcs) of
                         {error, Reason, _} ->
                             {stop, [erlbasic_eval:format_runtime_error(Reason)]};
                         {ok, EndValue, Vars2} ->
@@ -79,7 +80,7 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
                                 undefined ->
                                     finalize_for_loop(Var, StartValue, EndValue, 1, Vars2, State, Pc, LoopStack, CallStack);
                                 Expr ->
-                                    case erlbasic_eval:eval_expr_result(Expr, Vars2) of
+                                    case erlbasic_eval:eval_expr_result(Expr, Vars2, State#state.funcs) of
                                         {error, Reason, _} ->
                                             {stop, [erlbasic_eval:format_runtime_error(Reason)]};
                                         {ok, RawStepValue, _} ->
@@ -97,10 +98,13 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
                             end
                     end
             end;
+        {def_fn, FnName, ArgVar, FnExpr} ->
+            NextFuncs = maps:put(FnName, {ArgVar, FnExpr}, State#state.funcs),
+            {continue, State#state{funcs = NextFuncs}, LoopStack, CallStack, []};
         {next_loop, MaybeVar} ->
             handle_next_statement(MaybeVar, State, Pc, LoopStack, CallStack);
         {if_then_else, CondExpr, ThenStmt, ElseStmt} ->
-            case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars) of
+            case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars, State#state.funcs) of
                 {ok, true} ->
                     case string:trim(ThenStmt) of
                         "" ->
@@ -141,14 +145,14 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
 execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
     case erlbasic_parser:parse_statement(Command) of
         {print, Expr} ->
-            case erlbasic_eval:eval_expr_result(Expr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} ->
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, [erlbasic_eval:format_value(Value)]};
                 {error, Reason, _Vars1} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {'let', Var, Expr} ->
-            case erlbasic_eval:eval_expr_result(Expr, State#state.vars) of
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} ->
                     {continue, State#state{vars = maps:put(Var, Value, Vars1)}, LoopStack, CallStack, ["OK\r\n"]};
                 {error, Reason, _Vars1} ->
@@ -180,7 +184,7 @@ execute_program_inline_sequence(StatementText, Program, State, Pc, LoopStack, Ca
     execute_program_line_statements(erlbasic_parser:split_statements(StatementText), Program, State, Pc, LoopStack, CallStack, []).
 
 execute_goto(LineExpr, Program, State, LoopStack, CallStack) ->
-    case resolve_target_pc(LineExpr, Program, State#state.vars) of
+    case resolve_target_pc(LineExpr, Program, State#state.vars, State#state.funcs) of
         {error, Reason} ->
             {stop, [erlbasic_eval:format_runtime_error(Reason)]};
         {ok, TargetPc} ->
@@ -190,7 +194,7 @@ execute_goto(LineExpr, Program, State, LoopStack, CallStack) ->
     end.
 
 execute_gosub(LineExpr, Program, State, Pc, LoopStack, CallStack) ->
-    case resolve_target_pc(LineExpr, Program, State#state.vars) of
+    case resolve_target_pc(LineExpr, Program, State#state.vars, State#state.funcs) of
         {error, Reason} ->
             {stop, [erlbasic_eval:format_runtime_error(Reason)]};
         {ok, TargetPc} ->
@@ -199,8 +203,8 @@ execute_gosub(LineExpr, Program, State, Pc, LoopStack, CallStack) ->
             {continue, State, LoopStack, CallStack, ["?SYNTAX ERROR\r\n"]}
     end.
 
-resolve_target_pc(LineExpr, Program, Vars) ->
-    case erlbasic_eval:eval_expr_result(LineExpr, Vars) of
+resolve_target_pc(LineExpr, Program, Vars, Funcs) ->
+    case erlbasic_eval:eval_expr_result(LineExpr, Vars, Funcs) of
         {error, Reason, _} ->
             {error, Reason};
         {ok, LineValue, _} ->
