@@ -85,7 +85,10 @@ Prints an expression value.
 PRINT X
 PRINT "HELLO"
 PRINT 123
+? X
 ```
+
+`?` is accepted as a shorthand synonym for `PRINT`.
 
 ### INPUT
 
@@ -252,7 +255,7 @@ Supported expression forms:
 	- Integer division: `\\`
 	- Modulus: `MOD`
 - Built-in numeric functions (case-insensitive):
-	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `COS`, `DEG`, `EXP`, `FIX`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`
+	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `CEIL`, `COS`, `DEG`, `EXP`, `FIX`, `FLOOR`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`, `VAL`
 	- Two-argument: `ATAN2`, `POW`
 	- Zero-argument: `PI`, `RND`
 - Built-in string functions (case-insensitive):
@@ -260,6 +263,9 @@ Supported expression forms:
 	- `RIGHT$(text, n)`
 	- `MID$(text, start[, n])` (1-based start index)
 	- `LEN(text)`
+	- `ASC(text)`
+	- `CHR$(code)`
+	- `STR$(number)`
 	- `DATE$()` (local date in `MM-DD-YYYY`)
 	- `TIME$()` (local time in `HH:MM:SS`)
 - User-defined function calls with `DEF FN...` syntax: `FNQ(3)`

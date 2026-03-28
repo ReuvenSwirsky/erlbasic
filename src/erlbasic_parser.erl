@@ -15,7 +15,12 @@ parse_print_statement(Trimmed) ->
         {match, [Expr]} ->
             {print, Expr};
         nomatch ->
-            parse_input_statement(Trimmed)
+            case re:run(Trimmed, "^\\?\\s*(.+)$", [{capture, [1], list}]) of
+                {match, [Expr]} ->
+                    {print, Expr};
+                nomatch ->
+                    parse_input_statement(Trimmed)
+            end
     end.
 
 parse_input_statement(Trimmed) ->

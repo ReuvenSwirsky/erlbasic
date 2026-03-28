@@ -20,8 +20,8 @@
 
 -define(EXPR_KEYWORDS, [
     "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-    "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "MOD",
-    "LEFT$", "RIGHT$", "MID$", "LEN", "DATE$", "TIME$"
+    "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "MOD",
+    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$"
 ]).
 
 format_value(Value) when is_integer(Value) ->
@@ -364,8 +364,8 @@ eval_callable(Name, Args, Rest, Vars) ->
 is_builtin_function(Name) ->
     lists:member(Name, [
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "DATE$", "TIME$"
+        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
+        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$"
     ]).
 
 assign_target({var_target, Var}, Value, Vars, _Funcs) ->
@@ -432,6 +432,10 @@ apply_math_function("FIX", [X]) ->
     {ok, trunc(X)};
 apply_math_function("INT", [X]) ->
     {ok, floor_number(X)};
+apply_math_function("FLOOR", [X]) ->
+    apply_floor(X);
+apply_math_function("CEIL", [X]) ->
+    apply_ceil(X);
 apply_math_function("LN", [X]) ->
     safe_math(fun() -> math:log(X) end);
 apply_math_function("LOG", [X]) ->
@@ -474,6 +478,14 @@ apply_math_function("MID$", [Text, Start, Count]) ->
     apply_mid(Text, Start, Count);
 apply_math_function("LEN", [Text]) ->
     apply_len(Text);
+apply_math_function("ASC", [Text]) ->
+    apply_asc(Text);
+apply_math_function("CHR$", [Code]) ->
+    apply_chr(Code);
+apply_math_function("STR$", [Value]) ->
+    apply_str(Value);
+apply_math_function("VAL", [Value]) ->
+    apply_val(Value);
 apply_math_function(_, _Args) ->
     {error, illegal_function_call}.
 
@@ -503,6 +515,25 @@ floor_number(X) when is_float(X) ->
         true -> T - 1;
         false -> T
     end.
+
+ceil_number(X) when is_integer(X) ->
+    X;
+ceil_number(X) when is_float(X) ->
+    T = trunc(X),
+    case X > T of
+        true -> T + 1;
+        false -> T
+    end.
+
+apply_floor(X) when is_integer(X); is_float(X) ->
+    {ok, floor_number(X)};
+apply_floor(_X) ->
+    {error, illegal_function_call}.
+
+apply_ceil(X) when is_integer(X); is_float(X) ->
+    {ok, ceil_number(X)};
+apply_ceil(_X) ->
+    {error, illegal_function_call}.
 
 int_div(Left, Right) when is_integer(Left), is_integer(Right) ->
     Left div Right;
@@ -730,6 +761,44 @@ apply_mid(Text, Start, Count) ->
 
 apply_len(Text) ->
     {ok, length(to_basic_string(Text))}.
+
+apply_asc(Text) ->
+    Str = to_basic_string(Text),
+    case Str of
+        [] ->
+            {error, illegal_function_call};
+        [Ch | _] ->
+            {ok, Ch}
+    end.
+
+apply_chr(Code) ->
+    case normalize_int_arg(Code) of
+        {ok, N} when N >= 0, N =< 255 ->
+            {ok, [N]};
+        _ ->
+            {error, illegal_function_call}
+    end.
+
+apply_str(Value) when is_integer(Value); is_float(Value) ->
+    {ok, format_number(Value)};
+apply_str(_Value) ->
+    {error, illegal_function_call}.
+
+apply_val(Value) ->
+    Text = string:trim(to_basic_string(Value)),
+    case re:run(Text, "^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))", [{capture, [1], list}]) of
+        {match, [NumText]} ->
+            case string:to_integer(NumText) of
+                {Int, ""} -> {ok, Int};
+                _ ->
+                    case string:to_float(NumText) of
+                        {Float, ""} -> {ok, Float};
+                        _ -> {ok, 0}
+                    end
+            end;
+        nomatch ->
+            {ok, 0}
+    end.
 
 normalize_int_arg(Value) when is_integer(Value) ->
     {ok, Value};

@@ -1,0 +1,6 @@
+LET X = 7
+? X
+10 ? "HELLO"
+20 ? X + 1
+30 END
+RUN

@@ -9,7 +9,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `NEW`, `RENUM`, `QUIT`
 - Program statements: `LET`, `PRINT`, `INPUT`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
-- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `DATE$`, `TIME$`)
+- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `DATE$`, `TIME$`)
 
 ## Build
 
@@ -100,7 +100,7 @@ RUN
 
 ## Notes
 
-- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `DATE$`, `TIME$`).
+- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `DATE$`, `TIME$`).
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
 
