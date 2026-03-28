@@ -14,18 +14,18 @@ run_case_file(BasFile) ->
     Name = filename:basename(Base),
     OutFile = Base ++ ".out",
     InputFile = Base ++ ".input",
+    DirectModeFile = Base ++ ".direct",
     {ok, BasBin} = file:read_file(BasFile),
     ProgramLines = [string:trim(Line) || Line <- string:split(binary_to_list(BasBin), "\n", all), string:trim(Line) =/= ""],
-    State0 = erlbasic_interp:new_state(),
-    State1 = lists:foldl(
-        fun(Line, AccState) ->
-            {NextState, _} = erlbasic_interp:handle_input(Line, AccState),
-            NextState
-        end,
-        State0,
-        ProgramLines),
     InputLines = read_optional_lines(InputFile),
-    {_FinalState, Output} = run_case(State1, InputLines),
+    Mode = run_mode(DirectModeFile),
+    {_FinalState, Output} =
+        case Mode of
+            direct ->
+                run_case_direct(ProgramLines, InputLines);
+            run ->
+                run_case_run(ProgramLines, InputLines)
+        end,
     {ok, ExpectedBin} = file:read_file(OutFile),
     Expected = normalize(binary_to_list(ExpectedBin)),
     Actual = normalize(lists:flatten(Output)),
@@ -45,9 +45,34 @@ read_optional_lines(Path) ->
             []
     end.
 
-run_case(State, Inputs) ->
-    {RunState, Output0} = erlbasic_interp:handle_input("RUN", State),
+run_mode(DirectModeFile) ->
+    case file:read_file_info(DirectModeFile) of
+        {ok, _} -> direct;
+        {error, enoent} -> run
+    end.
+
+run_case_run(ProgramLines, Inputs) ->
+    State0 = erlbasic_interp:new_state(),
+    State1 = lists:foldl(
+        fun(Line, AccState) ->
+            {NextState, _} = erlbasic_interp:handle_input(Line, AccState),
+            NextState
+        end,
+        State0,
+        ProgramLines),
+    {RunState, Output0} = erlbasic_interp:handle_input("RUN", State1),
     resume_inputs(RunState, Inputs, Output0).
+
+run_case_direct(ProgramLines, Inputs) ->
+    State0 = erlbasic_interp:new_state(),
+    {State1, Output0} = lists:foldl(
+        fun(Line, {AccState, OutAcc}) ->
+            {NextState, NextOutput} = erlbasic_interp:handle_input(Line, AccState),
+            {NextState, OutAcc ++ NextOutput}
+        end,
+        {State0, []},
+        ProgramLines),
+    resume_inputs(State1, Inputs, Output0).
 
 resume_inputs(State, [], OutputAcc) ->
     {State, OutputAcc};

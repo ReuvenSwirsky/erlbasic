@@ -106,7 +106,7 @@ RUN
 
 ## Known Limitations
 
-- `FOR/NEXT` is designed for `RUN`; using it in immediate mode returns `?SYNTAX ERROR`.
+- Immediate-mode `FOR/NEXT` is supported by entering a `FOR` block and finishing with matching `NEXT`.
 
 ## Syntax Reference
 
@@ -121,3 +121,4 @@ Run them with:
 ```powershell
 .\tests\smoke\run_smoke_tests.ps1
 ```
+

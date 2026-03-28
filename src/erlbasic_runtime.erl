@@ -6,7 +6,8 @@
     vars = #{},
     prog = [],
     funcs = #{},
-    pending_input = undefined
+    pending_input = undefined,
+    immediate_for_buffer = undefined
 }).
 
 run_program(State = #state{prog = Program}) ->
@@ -298,3 +299,4 @@ line_to_pc([_ | Rest], LineNumber, Index) ->
     line_to_pc(Rest, LineNumber, Index + 1);
 line_to_pc([], _LineNumber, _Index) ->
     error.
+

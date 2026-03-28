@@ -7,7 +7,8 @@
     vars = #{},
     prog = [],
     funcs = #{},
-    pending_input = undefined
+    pending_input = undefined,
+    immediate_for_buffer = undefined
 }).
 
 new_state() ->
@@ -27,7 +28,7 @@ handle_input(Line, State) ->
                     NextProgram = update_program(State#state.prog, Num, Code),
                     {State#state{prog = NextProgram}, ["OK\r\n"]};
                 immediate ->
-                    exec_immediate(Trimmed, State)
+                    handle_immediate_or_buffer_line(Trimmed, State)
             end;
         _ ->
             handle_pending_input(Trimmed, State)
@@ -47,6 +48,66 @@ update_program(Program, LineNumber, "") ->
     lists:keydelete(LineNumber, 1, Program);
 update_program(Program, LineNumber, Code) ->
     lists:keysort(1, [{LineNumber, Code} | lists:keydelete(LineNumber, 1, Program)]).
+
+handle_immediate_or_buffer_line(Command, State = #state{immediate_for_buffer = undefined}) ->
+    case should_start_immediate_for_buffer(Command) of
+        true ->
+            Depth = for_next_delta(Command),
+            {State#state{immediate_for_buffer = {[Command], Depth}}, []};
+        false ->
+            exec_immediate(Command, State)
+    end;
+handle_immediate_or_buffer_line(Command, State = #state{immediate_for_buffer = {Lines, Depth}}) ->
+    NewLines = Lines ++ [Command],
+    NewDepth = Depth + for_next_delta(Command),
+    case NewDepth of
+        N when N > 0 ->
+            {State#state{immediate_for_buffer = {NewLines, N}}, []};
+        0 ->
+            execute_immediate_for_block(NewLines, State#state{immediate_for_buffer = undefined});
+        _ ->
+            {State#state{immediate_for_buffer = undefined}, ["?SYNTAX ERROR\r\n"]}
+    end.
+
+should_start_immediate_for_buffer("") ->
+    false;
+should_start_immediate_for_buffer(Command) ->
+    case erlbasic_parser:split_statements(Command) of
+        [] ->
+            false;
+        [FirstStmt | _] ->
+            case erlbasic_parser:parse_statement(FirstStmt) of
+                {for_loop, _Var, _StartExpr, _EndExpr, _StepExpr} ->
+                    for_next_delta(Command) > 0;
+                _ ->
+                    false
+            end
+    end.
+
+for_next_delta(Command) ->
+    Statements = erlbasic_parser:split_statements(Command),
+    lists:sum([for_next_stmt_delta(Stmt) || Stmt <- Statements]).
+
+for_next_stmt_delta(Stmt) ->
+    case erlbasic_parser:parse_statement(Stmt) of
+        {for_loop, _Var, _StartExpr, _EndExpr, _StepExpr} ->
+            1;
+        {next_loop, _MaybeVar} ->
+            -1;
+        _ ->
+            0
+    end.
+
+execute_immediate_for_block(Lines, State) ->
+    TempProgram = build_temp_program(Lines),
+    TempState = State#state{prog = TempProgram},
+    {RanState, Output} = erlbasic_runtime:run_program(TempState),
+    {RanState#state{prog = State#state.prog}, Output}.
+
+build_temp_program(Lines) ->
+    Numbered = lists:seq(10, 10 * length(Lines), 10),
+    CleanLines = [string:trim(Line) || Line <- Lines],
+    lists:zip(Numbered, CleanLines).
 
 exec_immediate("", State) ->
     {State, []};

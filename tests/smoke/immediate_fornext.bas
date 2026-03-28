@@ -1,0 +1,6 @@
+FOR I = 1 TO 2
+FOR J = 1 TO 2
+PRINT I * 10 + J
+NEXT J
+NEXT I
+PRINT 99

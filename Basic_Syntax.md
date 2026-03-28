@@ -252,4 +252,5 @@ If no comparison operator is present, truthiness is used:
 
 ## Current Limitations
 
-- FOR/NEXT is designed for `RUN` execution; using these in immediate mode returns `?SYNTAX ERROR`.
+- Immediate-mode `FOR/NEXT` is supported. Enter a `FOR` statement and continue entering direct-mode statements until matching `NEXT` is entered.
+
