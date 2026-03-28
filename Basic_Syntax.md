@@ -42,6 +42,14 @@ LET X = 42
 LET NAME = "ALICE"
 ```
 
+Array assignment is also supported:
+
+```text
+LET A(0) = 10
+LET GRID(1,2) = 42
+LET CUBE(1,1,1) = 99
+```
+
 Variable rules:
 - Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names or `%` for integer-style names
 - Variable lookup is case-insensitive (`x`, `X`, and `x` all refer to the same variable).
@@ -86,6 +94,7 @@ Reads a value from the user and stores it in a variable.
 ```text
 INPUT N
 INPUT A$
+INPUT A(3)
 ```
 
 Notes:
@@ -94,6 +103,33 @@ Notes:
 - Variables ending in `%` behave like integer-style numeric variables.
 - During `RUN`, program execution pauses until a value is entered.
 
+### DATA
+
+Declares literal values that can be consumed sequentially by `READ`.
+
+```text
+DATA 10, 20, "HELLO"
+```
+
+Notes:
+- `DATA` is used by `READ` during program execution.
+- Items are consumed in program order.
+
+### READ
+
+Reads one or more values from `DATA` into variables.
+
+```text
+READ A, B, NAME$
+READ A(0), GRID(1,2)
+READ CUBE(0,0,0)
+```
+
+Notes:
+- String variables (ending in `$`) receive text values.
+- Numeric variables receive numeric values.
+- Reading past available `DATA` raises `?OUT OF DATA ERROR`.
+
 ### END
 
 Stops execution of a running stored program.
@@ -101,6 +137,21 @@ Stops execution of a running stored program.
 ```text
 END
 ```
+
+### DIM
+
+Declares 1D, 2D, or 3D arrays and their upper bounds.
+
+```text
+DIM A(10)
+DIM M(5,5), N$(3)
+DIM CUBE(2,2,2)
+```
+
+Notes:
+- Indices are zero-based (`0..upper_bound`).
+- One-, two-, and three-dimensional arrays are supported.
+- Using an index outside the declared bounds raises `?ILLEGAL FUNCTION CALL`.
 
 ### IF ... THEN ... [ELSE ...]
 
@@ -195,6 +246,7 @@ Supported expression forms:
 - Floating-point literal: `3.14`, `.5`
 - Quoted string literal: `"HELLO"`
 - Variable reference: `X`
+- Array reference: `A(I)`, `M(I,J)`, `CUBE(I,J,K)`
 - Arithmetic with numbers and variables: `+`, `-`, `*`, `/`, `^`, parentheses, unary `+`/`-`
 - GW-BASIC-compatible numeric operators:
 	- Integer division: `\\`
@@ -239,6 +291,7 @@ GW-BASIC alignment notes:
 - Runtime math errors use GW-BASIC-style messages and stop `RUN`:
 	- `?DIVISION BY ZERO ERROR`
 	- `?ILLEGAL FUNCTION CALL`
+	- `?OUT OF DATA ERROR`
 
 ## Conditions
 

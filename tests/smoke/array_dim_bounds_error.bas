@@ -1,0 +1,4 @@
+10 DIM A(2)
+20 LET A(3) = 1
+30 PRINT 99
+40 END

@@ -1,0 +1,7 @@
+10 DIM M(2,2), N$(1,1)
+20 LET M(1,2) = 7
+30 LET N$(0,1) = "HI"
+40 PRINT M(1,2)
+50 PRINT M(2,2)
+60 PRINT N$(0,1)
+70 END

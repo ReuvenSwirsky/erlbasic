@@ -8,7 +8,9 @@
     prog = [],
     funcs = #{},
     pending_input = undefined,
-    immediate_for_buffer = undefined
+    immediate_for_buffer = undefined,
+    data_items = [],
+    data_index = 1
 }).
 
 new_state() ->
@@ -26,7 +28,7 @@ handle_input(Line, State) ->
             case parse_program_line(Trimmed) of
                 {program_line, Num, Code} ->
                     NextProgram = update_program(State#state.prog, Num, Code),
-                    {State#state{prog = NextProgram}, ["OK\r\n"]};
+                    {State#state{prog = NextProgram, data_items = [], data_index = 1}, ["OK\r\n"]};
                 immediate ->
                     handle_immediate_or_buffer_line(Trimmed, State)
             end;
@@ -117,7 +119,7 @@ exec_immediate(Command, State) ->
         "LIST" ->
             {State, format_program(State#state.prog)};
         "NEW" ->
-            {State#state{prog = []}, ["Program cleared\r\n"]};
+            {State#state{prog = [], data_items = [], data_index = 1}, ["Program cleared\r\n"]};
         "RUN" ->
             run_program(State);
         _ ->
@@ -235,15 +237,23 @@ format_program(Program) ->
 run_program(State) ->
     erlbasic_runtime:run_program(State).
 
-handle_pending_input(Line, State = #state{pending_input = {Var, Continuation}}) ->
-    Value = parse_input_value(Var, Line, State#state.vars, State#state.funcs),
-    NextVars = maps:put(Var, Value, State#state.vars),
-    ClearedState = State#state{vars = NextVars, pending_input = undefined},
-    case Continuation of
-        {immediate, RemainingStatements} ->
-            resume_immediate_input(ClearedState, RemainingStatements);
-        {program, Pc, RemainingStatements, LoopStack, CallStack} ->
-            resume_program_input(ClearedState, Pc, RemainingStatements, LoopStack, CallStack)
+handle_pending_input(Line, State = #state{pending_input = {Target, Continuation}}) ->
+    case parse_input_value(Target, Line, State#state.vars, State#state.funcs) of
+        {ok, Value} ->
+            case erlbasic_eval:assign_target(Target, Value, State#state.vars, State#state.funcs) of
+                {ok, NextVars} ->
+                    ClearedState = State#state{vars = NextVars, pending_input = undefined},
+                    case Continuation of
+                        {immediate, RemainingStatements} ->
+                            resume_immediate_input(ClearedState, RemainingStatements);
+                        {program, Pc, RemainingStatements, LoopStack, CallStack} ->
+                            resume_program_input(ClearedState, Pc, RemainingStatements, LoopStack, CallStack)
+                    end;
+                {error, Reason} ->
+                    {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {error, Reason} ->
+            {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
     end.
 
 resume_immediate_input(State, []) ->
@@ -261,13 +271,13 @@ update_pending_input_rest(State = #state{pending_input = {Var, {program, Pc, _Ol
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 
-parse_input_value(Var, Line, Vars, Funcs) ->
-    case lists:last(Var) of
-        $$ ->
-            parse_string_input(Line);
-        _ ->
+parse_input_value(Target, Line, Vars, Funcs) ->
+    case erlbasic_eval:target_is_string(Target) of
+        true ->
+            {ok, parse_string_input(Line)};
+        false ->
             {Value, _} = erlbasic_eval:eval_expr(Line, Vars, Funcs),
-            erlbasic_eval:normalize_int(Value)
+            {ok, erlbasic_eval:normalize_int(Value)}
     end.
 
 parse_string_input(Line) ->
@@ -279,8 +289,13 @@ parse_string_input(Line) ->
             Trimmed
     end.
 
-format_input_prompt(Var) ->
-    Var ++ "? ".
+format_input_prompt(Target) ->
+    target_to_text(Target) ++ "? ".
+
+target_to_text({var_target, Var}) ->
+    Var;
+target_to_text({array_target, Var, IndexExprs}) ->
+    Var ++ "(" ++ string:join(IndexExprs, ",") ++ ")".
 
 execute_statement(Command, State) ->
     case erlbasic_parser:should_split_top_level_sequence(Command) of
@@ -299,18 +314,40 @@ execute_statement_single(Command, State) ->
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
-        {'let', Var, Expr} ->
+        {'let', Target, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} ->
-                    {State#state{vars = maps:put(Var, Value, Vars1)}, ["OK\r\n"]};
+                    case erlbasic_eval:assign_target(Target, Value, Vars1, State#state.funcs) of
+                        {ok, Vars2} ->
+                            {State#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason} ->
+                            {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {def_fn, FnName, ArgVar, FnExpr} ->
             NextFuncs = maps:put(FnName, {ArgVar, FnExpr}, State#state.funcs),
             {State#state{funcs = NextFuncs}, ["OK\r\n"]};
-        {input, Var} ->
-            {State#state{pending_input = {Var, {immediate, []}}}, [format_input_prompt(Var)]};
+        {dim, Decls} ->
+            case apply_dim_decls(Decls, State#state.vars, State#state.funcs) of
+                {ok, Vars1} ->
+                    {State#state{vars = Vars1}, ["OK\r\n"]};
+                {error, Reason} ->
+                    {State, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {data, _Items} ->
+            {State, ["OK\r\n"]};
+        {read_data, Targets} ->
+            DataState = ensure_data_loaded(State),
+            case apply_read_vars(Targets, DataState) of
+                {ok, NextState} ->
+                    {NextState, ["OK\r\n"]};
+                {error, Reason} ->
+                    {DataState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {input, Target} ->
+            {State#state{pending_input = {Target, {immediate, []}}}, [format_input_prompt(Target)]};
         {if_then_else, CondExpr, ThenStmt, ElseStmt} ->
             case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars, State#state.funcs) of
                 {ok, true} ->
@@ -349,6 +386,97 @@ execute_statement_single(Command, State) ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {'return'} ->
             {State, ["?SYNTAX ERROR\r\n"]}
+    end.
+
+ensure_data_loaded(State = #state{data_items = []}) ->
+    State#state{data_items = collect_program_data(State#state.prog), data_index = 1};
+ensure_data_loaded(State) ->
+    State.
+
+collect_program_data(Program) ->
+    collect_program_data(Program, []).
+
+collect_program_data([], Acc) ->
+    lists:reverse(Acc);
+collect_program_data([{_LineNumber, Code} | Rest], Acc) ->
+    Statements =
+        case erlbasic_parser:should_split_top_level_sequence(Code) of
+            true -> erlbasic_parser:split_statements(Code);
+            false -> [Code]
+        end,
+    NextAcc = collect_data_from_statements(Statements, Acc),
+    collect_program_data(Rest, NextAcc).
+
+collect_data_from_statements([], Acc) ->
+    Acc;
+collect_data_from_statements([Stmt | Rest], Acc) ->
+    NextAcc =
+        case erlbasic_parser:parse_statement(Stmt) of
+            {data, Items} -> lists:reverse(Items) ++ Acc;
+            _ -> Acc
+        end,
+    collect_data_from_statements(Rest, NextAcc).
+
+apply_read_vars(Targets, State) ->
+    apply_read_vars(Targets, State, State#state.vars).
+
+apply_read_vars([], State, VarsAcc) ->
+    {ok, State#state{vars = VarsAcc}};
+apply_read_vars([Target | Rest], State, VarsAcc) ->
+    case read_next_data_item(State) of
+        {ok, Item, NextState} ->
+            case erlbasic_eval:assign_target(Target, convert_read_item(Target, Item), VarsAcc, State#state.funcs) of
+                {ok, NextVars} ->
+                    apply_read_vars(Rest, NextState, NextVars);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        error ->
+            {error, out_of_data}
+    end.
+
+read_next_data_item(State = #state{data_items = Items, data_index = Index}) ->
+    case Index =< length(Items) of
+        true ->
+            {ok, lists:nth(Index, Items), State#state{data_index = Index + 1}};
+        false ->
+            error
+    end.
+
+convert_read_item(Target, Item) ->
+    case erlbasic_eval:target_is_string(Target) of
+        true ->
+            Item;
+        false ->
+            case erlbasic_eval:eval_expr_result(Item, #{}) of
+                {ok, Value, _} -> erlbasic_eval:normalize_int(Value);
+                {error, _, _} -> 0
+            end
+    end.
+
+apply_dim_decls([], VarsAcc, _Funcs) ->
+    {ok, VarsAcc};
+apply_dim_decls([{Name, DimExprs} | Rest], VarsAcc, Funcs) ->
+    case eval_dim_values(DimExprs, VarsAcc, Funcs, []) of
+        {ok, Dims} ->
+            case erlbasic_eval:declare_array(Name, Dims, VarsAcc) of
+                {ok, Vars1} ->
+                    apply_dim_decls(Rest, Vars1, Funcs);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+eval_dim_values([], _Vars, _Funcs, Acc) ->
+    {ok, lists:reverse(Acc)};
+eval_dim_values([Expr | Rest], Vars, Funcs, Acc) ->
+    case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
+        {ok, Value, _} ->
+            eval_dim_values(Rest, Vars, Funcs, [erlbasic_eval:normalize_int(Value) | Acc]);
+        {error, Reason, _} ->
+            {error, Reason}
     end.
 
 execute_statement_sequence(StatementText, State) ->
