@@ -11,7 +11,7 @@ start(Socket) ->
 loop(Socket, State) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Bin} ->
-            Line = string:trim(binary_to_list(Bin)),
+            Line = normalize_input_line(Bin),
             case string:to_upper(Line) of
                 "QUIT" ->
                     ok = gen_tcp:send(Socket, "Goodbye\r\n"),
@@ -25,6 +25,23 @@ loop(Socket, State) ->
         {error, closed} ->
             ok
     end.
+
+normalize_input_line(Bin) ->
+    EditedChars = apply_line_editing(binary_to_list(Bin), []),
+    string:trim(lists:reverse(EditedChars)).
+
+apply_line_editing([], Acc) ->
+    Acc;
+apply_line_editing([Ch | Rest], [_ | AccRest]) when Ch =:= $\b; Ch =:= 127 ->
+    apply_line_editing(Rest, AccRest);
+apply_line_editing([Ch | Rest], []) when Ch =:= $\b; Ch =:= 127 ->
+    apply_line_editing(Rest, []);
+apply_line_editing([Ch | Rest], Acc) when Ch =:= $\r; Ch =:= $\n ->
+    apply_line_editing(Rest, Acc);
+apply_line_editing([Ch | Rest], Acc) when Ch < 32 ->
+    apply_line_editing(Rest, Acc);
+apply_line_editing([Ch | Rest], Acc) ->
+    apply_line_editing(Rest, [Ch | Acc]).
 
 send_output(_Socket, []) ->
     ok;

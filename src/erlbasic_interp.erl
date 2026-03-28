@@ -2,6 +2,10 @@
 
 -export([new_state/0, handle_input/2, next_prompt/1]).
 
+-define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%]?)").
+-define(LOOP_VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*%?)").
+-define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$").
+
 -record(state, {
     vars = #{},
     prog = [],
@@ -44,8 +48,7 @@ parse_program_line(Line) ->
 update_program(Program, LineNumber, "") ->
     lists:keydelete(LineNumber, 1, Program);
 update_program(Program, LineNumber, Code) ->
-    Sorted = lists:keysort(1, [{LineNumber, Code} | lists:keydelete(LineNumber, 1, Program)]),
-    Sorted.
+    lists:keysort(1, [{LineNumber, Code} | lists:keydelete(LineNumber, 1, Program)]).
 
 exec_immediate("", State) ->
     {State, []};
@@ -94,6 +97,84 @@ run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
             end;
         {stop, Output} ->
             {State, lists:reverse(["Program ended\r\n" | lists:reverse(Output) ++ Acc])}
+    end.
+
+parse_statement(Command) ->
+    Trimmed = string:trim(Command),
+    parse_print_statement(Trimmed).
+
+parse_print_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^PRINT\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [Expr]} ->
+            {print, Expr};
+        nomatch ->
+            parse_input_statement(Trimmed)
+    end.
+
+parse_input_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^INPUT\\s+" ++ ?VAR_PATTERN ++ "$", [{capture, [1], list}]) of
+        {match, [Var]} ->
+            {input, string:to_upper(Var)};
+        nomatch ->
+            parse_let_statement(Trimmed)
+    end.
+
+parse_let_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^LET\\s+" ++ ?VAR_PATTERN ++ "\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [Var, Expr]} ->
+            {'let', string:to_upper(Var), Expr};
+        nomatch ->
+            parse_if_statement(Trimmed)
+    end.
+
+parse_if_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^IF\\s+(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [CondExpr, ThenStmt]} ->
+            {if_then_else, CondExpr, ThenStmt, undefined};
+        {match, [CondExpr, ThenStmt, ElseStmt]} ->
+            {if_then_else, CondExpr, ThenStmt, ElseStmt};
+        nomatch ->
+            parse_jump_statement(Trimmed)
+    end.
+
+parse_jump_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^GOTO\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [LineExpr]} ->
+            {goto, LineExpr};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^GOSUB\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [LineExpr]} ->
+                    {gosub, LineExpr};
+                nomatch ->
+                    parse_loop_statement(Trimmed)
+            end
+    end.
+
+parse_loop_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^FOR\\s+" ++ ?LOOP_VAR_PATTERN ++ "\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [Var, StartExpr, EndExpr]} ->
+            {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined};
+        {match, [Var, StartExpr, EndExpr, StepExpr]} ->
+            {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr};
+        nomatch ->
+            parse_next_statement(Trimmed)
+    end.
+
+parse_next_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^NEXT(?:\\s+" ++ ?VAR_PATTERN ++ ")?$", [{capture, all_but_first, list}]) of
+        {match, []} ->
+            {next_loop, undefined};
+        {match, [Var]} ->
+            {next_loop, string:to_upper(Var)};
+        nomatch ->
+            parse_keyword_statement(Trimmed)
+    end.
+
+parse_keyword_statement(Trimmed) ->
+    case string:to_upper(Trimmed) of
+        "RETURN" -> {'return'};
+        "END" -> {'end'};
+        _ -> unknown
     end.
 
 execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) ->
@@ -398,60 +479,6 @@ should_split_top_level_sequence(Command) ->
             end
     end.
 
-parse_statement(Command) ->
-    Trimmed = string:trim(Command),
-    case re:run(Trimmed, "(?i)^PRINT\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [Expr]} ->
-            {print, Expr};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^INPUT\\s+([A-Za-z][A-Za-z0-9_]*[\\$%]?)$", [{capture, [1], list}]) of
-                {match, [Var]} ->
-                    {input, string:to_upper(Var)};
-                nomatch ->
-                    case re:run(Trimmed, "(?i)^LET\\s+([A-Za-z][A-Za-z0-9_]*[\\$%]?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
-                {match, [Var, Expr]} ->
-                    {'let', string:to_upper(Var), Expr};
-                nomatch ->
-                    case re:run(Trimmed, "(?i)^IF\\s+(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
-                        {match, [CondExpr, ThenStmt]} ->
-                            {if_then_else, CondExpr, ThenStmt, undefined};
-                        {match, [CondExpr, ThenStmt, ElseStmt]} ->
-                            {if_then_else, CondExpr, ThenStmt, ElseStmt};
-                        nomatch ->
-                            case re:run(Trimmed, "(?i)^GOTO\\s+(.+)$", [{capture, [1], list}]) of
-                                {match, [LineExpr]} ->
-                                    {goto, LineExpr};
-                                nomatch ->
-                                    case re:run(Trimmed, "(?i)^GOSUB\\s+(.+)$", [{capture, [1], list}]) of
-                                        {match, [LineExpr]} ->
-                                            {gosub, LineExpr};
-                                        nomatch ->
-                                            case re:run(Trimmed, "(?i)^FOR\\s+([A-Za-z][A-Za-z0-9_]*%?)\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
-                                                {match, [Var, StartExpr, EndExpr]} ->
-                                                    {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined};
-                                                {match, [Var, StartExpr, EndExpr, StepExpr]} ->
-                                                    {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr};
-                                                nomatch ->
-                                                    case re:run(Trimmed, "(?i)^NEXT(?:\\s+([A-Za-z][A-Za-z0-9_]*[%\\$]?))?$", [{capture, all_but_first, list}]) of
-                                                        {match, []} ->
-                                                            {next_loop, undefined};
-                                                        {match, [Var]} ->
-                                                            {next_loop, string:to_upper(Var)};
-                                                        nomatch ->
-                                                            case string:to_upper(Trimmed) of
-                                                                "RETURN" -> {'return'};
-                                                                "END" -> {'end'};
-                                                                _ -> unknown
-                                                            end
-                                                    end
-                                            end
-                                    end
-                            end
-                    end
-                                    end
-            end
-    end.
-
 format_value(Value) when is_integer(Value) ->
     integer_to_list(Value) ++ "\r\n";
 format_value(Value) when is_list(Value) ->
@@ -467,7 +494,7 @@ eval_expr(Expr, Vars) ->
                 {Int, ""} ->
                     {Int, Vars};
                 _ ->
-                    case re:run(Trimmed, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$", [{capture, none}]) of
+                    case re:run(Trimmed, ?VAR_REFERENCE_PATTERN, [{capture, none}]) of
                         match ->
                             {maps:get(string:to_upper(Trimmed), Vars, 0), Vars};
                         nomatch ->
