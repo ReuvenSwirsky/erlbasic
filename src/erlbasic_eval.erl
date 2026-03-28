@@ -143,6 +143,13 @@ tokenize_expr([$( | Rest], Acc) ->
     tokenize_expr(Rest, [lparen | Acc]);
 tokenize_expr([$) | Rest], Acc) ->
     tokenize_expr(Rest, [rparen | Acc]);
+tokenize_expr([$" | Rest], Acc) ->
+    case read_string(Rest, []) of
+        {ok, StringChars, Tail} ->
+            tokenize_expr(Tail, [{str, StringChars} | Acc]);
+        error ->
+            error
+    end;
 tokenize_expr([Ch | Rest], Acc) when Ch >= $0, Ch =< $9 ->
     {NumberChars, HasDot, Tail} = read_number([Ch | Rest], [], false),
     NumberToken =
@@ -176,6 +183,13 @@ read_number([$. | Rest], Acc, false) ->
     read_number(Rest, [$. | Acc], true);
 read_number(Rest, Acc, HasDot) ->
     {lists:reverse(Acc), HasDot, Rest}.
+
+read_string([$" | Rest], Acc) ->
+    {ok, lists:reverse(Acc), Rest};
+read_string([Ch | Rest], Acc) ->
+    read_string(Rest, [Ch | Acc]);
+read_string([], _Acc) ->
+    error.
 
 read_identifier([Ch | Rest], Acc) when (Ch >= $A andalso Ch =< $Z) orelse (Ch >= $a andalso Ch =< $z) orelse (Ch >= $0 andalso Ch =< $9) orelse Ch =:= $_ ->
     read_identifier(Rest, Acc ++ [Ch]);
@@ -258,6 +272,8 @@ parse_power(Tokens, Vars) ->
 
 parse_primary([{num, Value} | Rest], _Vars) ->
     {ok, Value, Rest};
+parse_primary([{str, Value} | Rest], _Vars) ->
+    {ok, Value, Rest};
 parse_primary([{var, Name}, lparen | Rest], Vars) ->
     case parse_call_args(Rest, Vars) of
         {ok, Args, Next} ->
@@ -266,8 +282,14 @@ parse_primary([{var, Name}, lparen | Rest], Vars) ->
             Error
     end;
 parse_primary([{var, Name} | Rest], Vars) ->
-    Raw = maps:get(string:to_upper(Name), Vars, 0),
-    {ok, normalize_number(Raw), Rest};
+    Upper = string:to_upper(Name),
+    case is_string_var(Upper) of
+        true ->
+            {ok, maps:get(Upper, Vars, ""), Rest};
+        false ->
+            Raw = maps:get(Upper, Vars, 0),
+            {ok, normalize_number(Raw), Rest}
+    end;
 parse_primary([lparen | Rest], Vars) ->
     case parse_sum(Rest, Vars) of
         {ok, Value, [rparen | Next]} -> {ok, Value, Next};
@@ -357,6 +379,10 @@ apply_math_function("RND", []) ->
     gw_rnd();
 apply_math_function("RND", [X]) ->
     gw_rnd(X);
+apply_math_function("DATE$", []) ->
+    {ok, basic_date()};
+apply_math_function("TIME$", []) ->
+    {ok, basic_time()};
 apply_math_function("SGN", [X]) when X < 0 ->
     {ok, -1};
 apply_math_function("SGN", [0]) ->
@@ -371,6 +397,16 @@ apply_math_function("SQRT", [X]) ->
     safe_math(fun() -> math:sqrt(X) end);
 apply_math_function("TAN", [X]) ->
     {ok, math:tan(X)};
+apply_math_function("LEFT$", [Text, Count]) ->
+    apply_left(Text, Count);
+apply_math_function("RIGHT$", [Text, Count]) ->
+    apply_right(Text, Count);
+apply_math_function("MID$", [Text, Start]) ->
+    apply_mid(Text, Start);
+apply_math_function("MID$", [Text, Start, Count]) ->
+    apply_mid(Text, Start, Count);
+apply_math_function("LEN", [Text]) ->
+    apply_len(Text);
 apply_math_function(_, _Args) ->
     {error, illegal_function_call}.
 
@@ -422,6 +458,85 @@ gw_rnd(X) when X =:= 0; X =:= +0.0 ->
     end;
 gw_rnd(_X) ->
     gw_rnd().
+
+basic_date() ->
+    {{Year, Month, Day}, _} = calendar:local_time(),
+    lists:flatten(io_lib:format("~2..0B-~2..0B-~4..0B", [Month, Day, Year])).
+
+basic_time() ->
+    {_, {Hour, Minute, Second}} = calendar:local_time(),
+    lists:flatten(io_lib:format("~2..0B:~2..0B:~2..0B", [Hour, Minute, Second])).
+
+is_string_var(Name) when is_list(Name) ->
+    Name =/= [] andalso lists:last(Name) =:= $$.
+
+apply_left(Text, Count) ->
+    Str = to_basic_string(Text),
+    case normalize_int_arg(Count) of
+        {ok, N} when N =< 0 ->
+            {ok, ""};
+        {ok, N} ->
+            {ok, lists:sublist(Str, N)};
+        error ->
+            {error, illegal_function_call}
+    end.
+
+apply_right(Text, Count) ->
+    Str = to_basic_string(Text),
+    case normalize_int_arg(Count) of
+        {ok, N} when N =< 0 ->
+            {ok, ""};
+        {ok, N} ->
+            Len = length(Str),
+            case N >= Len of
+                true -> {ok, Str};
+                false -> {ok, lists:nthtail(Len - N, Str)}
+            end;
+        error ->
+            {error, illegal_function_call}
+    end.
+
+apply_mid(Text, Start) ->
+    apply_mid(Text, Start, length(to_basic_string(Text))).
+
+apply_mid(Text, Start, Count) ->
+    Str = to_basic_string(Text),
+    case {normalize_int_arg(Start), normalize_int_arg(Count)} of
+        {{ok, StartPos}, {ok, N}} when StartPos < 1; N < 0 ->
+            {error, illegal_function_call};
+        {{ok, _StartPos}, {ok, 0}} ->
+            {ok, ""};
+        {{ok, StartPos}, {ok, N}} ->
+            Len = length(Str),
+            case StartPos > Len of
+                true ->
+                    {ok, ""};
+                false ->
+                    Tail = lists:nthtail(StartPos - 1, Str),
+                    {ok, lists:sublist(Tail, N)}
+            end;
+        _ ->
+            {error, illegal_function_call}
+    end.
+
+apply_len(Text) ->
+    {ok, length(to_basic_string(Text))}.
+
+normalize_int_arg(Value) when is_integer(Value) ->
+    {ok, Value};
+normalize_int_arg(Value) when is_float(Value) ->
+    {ok, trunc(Value)};
+normalize_int_arg(_) ->
+    error.
+
+to_basic_string(Value) when is_list(Value) ->
+    Value;
+to_basic_string(Value) when is_integer(Value) ->
+    integer_to_list(Value);
+to_basic_string(Value) when is_float(Value) ->
+    format_number(Value);
+to_basic_string(Value) ->
+    lists:flatten(io_lib:format("~p", [Value])).
 
 normalize_int(Value) when is_integer(Value) ->
     Value;

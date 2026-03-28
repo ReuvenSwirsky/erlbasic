@@ -9,7 +9,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `NEW`, `RENUM`, `QUIT`
 - Program statements: `LET`, `PRINT`, `INPUT`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
-- Expression engine with numeric operators, exponentiation, and BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, etc.)
+- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `DATE$`, `TIME$`)
 
 ## Build
 
@@ -100,7 +100,7 @@ RUN
 
 ## Notes
 
-- Expressions support integer/float literals, quoted strings, variable lookup, arithmetic operators, and common BASIC math functions.
+- Expressions support integer/float literals, quoted strings, variable lookup, arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `DATE$`, `TIME$`).
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
 

@@ -203,6 +203,13 @@ Supported expression forms:
 	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `COS`, `DEG`, `EXP`, `FIX`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`
 	- Two-argument: `ATAN2`, `POW`
 	- Zero-argument: `PI`, `RND`
+- Built-in string functions (case-insensitive):
+	- `LEFT$(text, n)`
+	- `RIGHT$(text, n)`
+	- `MID$(text, start[, n])` (1-based start index)
+	- `LEN(text)`
+	- `DATE$()` (local date in `MM-DD-YYYY`)
+	- `TIME$()` (local time in `HH:MM:SS`)
 - User-defined function calls with `DEF FN...` syntax: `FNQ(3)`
 
 Examples:
@@ -212,6 +219,10 @@ LET X = 2 + 3 * 4
 PRINT (X - 2) / 3
 PRINT SIN(PI() / 2)
 PRINT SQRT(16)
+PRINT LEFT$("HELLO", 2)
+PRINT MID$("HELLO", 2, 3)
+PRINT DATE$()
+PRINT TIME$()
 ```
 
 Undefined variables evaluate to `0`.
