@@ -104,10 +104,6 @@ RUN
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
 
-## Known Limitations
-
-- Immediate-mode `FOR/NEXT` is supported by entering a `FOR` block and finishing with matching `NEXT`.
-
 ## Syntax Reference
 
 See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported syntax.
