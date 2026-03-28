@@ -26,6 +26,7 @@ These commands can be entered without a line number:
 - `LIST` - prints all stored program lines in numeric order.
 - `RUN` - executes the stored program.
 - `NEW` - clears the stored program.
+- `RENUM [start[,increment]]` - renumbers stored program lines in order (defaults: `10,10`) and updates direct `GOTO`/`GOSUB` line-number references.
 - `QUIT` - disconnects from the TCP session.
 
 ## Statements
@@ -177,18 +178,41 @@ PRINT "A:B"
 
 Supported expression forms:
 - Integer literal: `123`
+- Floating-point literal: `3.14`, `.5`
 - Quoted string literal: `"HELLO"`
 - Variable reference: `X`
-- Arithmetic with integers and variables: `+`, `-`, `*`, `/`, parentheses, unary `+`/`-`
+- Arithmetic with numbers and variables: `+`, `-`, `*`, `/`, `^`, parentheses, unary `+`/`-`
+- GW-BASIC-compatible numeric operators:
+	- Integer division: `\\`
+	- Modulus: `MOD`
+- Built-in numeric functions (case-insensitive):
+	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `COS`, `DEG`, `EXP`, `FIX`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`
+	- Two-argument: `ATAN2`, `POW`
+	- Zero-argument: `PI`, `RND`
 
 Examples:
 
 ```text
 LET X = 2 + 3 * 4
 PRINT (X - 2) / 3
+PRINT SIN(PI() / 2)
+PRINT SQRT(16)
 ```
 
 Undefined variables evaluate to `0`.
+
+GW-BASIC alignment notes:
+- `^` binds tighter than unary `-`, so `-2^2` evaluates as `-(2^2)` and yields `-4`.
+- `/` performs floating-point division.
+- `\\` performs integer division.
+- `MOD` returns remainder.
+- `RND` behavior follows GW-BASIC style:
+	- `RND` or `RND(x)` with `x > 0`: next pseudo-random value.
+	- `RND(0)`: repeat the previous random value.
+	- `RND(x)` with `x < 0`: reseed deterministically from `x` and return the first value from that seed.
+- Runtime math errors use GW-BASIC-style messages and stop `RUN`:
+	- `?DIVISION BY ZERO ERROR`
+	- `?ILLEGAL FUNCTION CALL`
 
 ## Conditions
 
