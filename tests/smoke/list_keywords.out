@@ -1,0 +1,6 @@
+OK
+OK
+OK
+10 LET x = 1
+20 PRINT "print let then"
+30 IF x = 1 THEN PRINT "ok" ELSE PRINT "no"

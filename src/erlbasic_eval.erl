@@ -18,6 +18,12 @@
 -define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$").
 -define(ARRAYS_KEY, '$ARRAYS$').
 
+-define(EXPR_KEYWORDS, [
+    "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
+    "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "MOD",
+    "LEFT$", "RIGHT$", "MID$", "LEN", "DATE$", "TIME$"
+]).
+
 format_value(Value) when is_integer(Value) ->
     integer_to_list(Value) ++ "\r\n";
 format_value(Value) when is_float(Value) ->
@@ -176,14 +182,17 @@ tokenize_expr([$. | Rest], Acc) ->
     end;
 tokenize_expr([Ch | Rest], Acc) when (Ch >= $A andalso Ch =< $Z) orelse (Ch >= $a andalso Ch =< $z) ->
     {NameChars, Tail} = read_identifier(Rest, [Ch]),
-    Token =
-        case string:to_upper(NameChars) of
-            "MOD" -> mod;
-            _ -> {var, NameChars}
-        end,
+    Token = keyword_or_var_token(NameChars),
     tokenize_expr(Tail, [Token | Acc]);
 tokenize_expr(_, _Acc) ->
     error.
+
+keyword_or_var_token(NameChars) ->
+    Upper = string:to_upper(NameChars),
+    case lists:member(Upper, ?EXPR_KEYWORDS) of
+        true -> {kw, Upper};
+        false -> {var, NameChars}
+    end.
 
 read_number([Ch | Rest], Acc, HasDot) when Ch >= $0, Ch =< $9 ->
     read_number(Rest, [Ch | Acc], HasDot);
@@ -248,7 +257,7 @@ parse_term_rest(Value, [intdiv | Rest], Vars) ->
         {ok, Right, Next} -> parse_term_rest(int_div(Value, Right), Next, Vars);
         Error -> Error
     end;
-parse_term_rest(Value, [mod | Rest], Vars) ->
+parse_term_rest(Value, [{kw, "MOD"} | Rest], Vars) ->
     case parse_unary(Rest, Vars) of
         {ok, 0, _Next} -> {error, division_by_zero};
         {ok, Right, Next} -> parse_term_rest(Value rem Right, Next, Vars);
@@ -282,6 +291,13 @@ parse_primary([{num, Value} | Rest], _Vars) ->
     {ok, Value, Rest};
 parse_primary([{str, Value} | Rest], _Vars) ->
     {ok, Value, Rest};
+parse_primary([{kw, Name}, lparen | Rest], Vars) ->
+    case parse_call_args(Rest, Vars) of
+        {ok, Args, Next} ->
+            eval_callable(Name, Args, Next, Vars);
+        Error ->
+            Error
+    end;
 parse_primary([{var, Name}, lparen | Rest], Vars) ->
     case parse_call_args(Rest, Vars) of
         {ok, Args, Next} ->

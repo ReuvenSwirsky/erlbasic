@@ -232,7 +232,46 @@ normalize_immediate_result(stop, State) ->
     {State, ["Program ended\r\n"]}.
 
 format_program(Program) ->
-    [integer_to_list(LineNumber) ++ " " ++ Code ++ "\r\n" || {LineNumber, Code} <- Program].
+    [integer_to_list(LineNumber) ++ " " ++ normalize_keywords_for_list(Code) ++ "\r\n" || {LineNumber, Code} <- Program].
+
+normalize_keywords_for_list(Code) ->
+    lists:flatten(normalize_keywords_for_list(Code, [], false, [])).
+
+normalize_keywords_for_list([], CurrentRev, _InString, AccRev) ->
+    lists:reverse([flush_word(CurrentRev) | AccRev]);
+normalize_keywords_for_list([$" | Rest], CurrentRev, false, AccRev) ->
+    NextAccRev = [$" | [flush_word(CurrentRev) | AccRev]],
+    normalize_keywords_for_list(Rest, [], true, NextAccRev);
+normalize_keywords_for_list([$" | Rest], CurrentRev, true, AccRev) ->
+    NextAccRev = [$" | [lists:reverse(CurrentRev) | AccRev]],
+    normalize_keywords_for_list(Rest, [], false, NextAccRev);
+normalize_keywords_for_list([Ch | Rest], CurrentRev, true, AccRev) ->
+    normalize_keywords_for_list(Rest, [Ch | CurrentRev], true, AccRev);
+normalize_keywords_for_list([Ch | Rest], CurrentRev, false, AccRev) when
+    (Ch >= $A andalso Ch =< $Z) orelse
+    (Ch >= $a andalso Ch =< $z) orelse
+    (Ch >= $0 andalso Ch =< $9) orelse
+    Ch =:= $_ orelse Ch =:= $$ orelse Ch =:= $% ->
+    normalize_keywords_for_list(Rest, [Ch | CurrentRev], false, AccRev);
+normalize_keywords_for_list([Ch | Rest], CurrentRev, false, AccRev) ->
+    NextAccRev = [Ch | [flush_word(CurrentRev) | AccRev]],
+    normalize_keywords_for_list(Rest, [], false, NextAccRev).
+
+flush_word([]) ->
+    [];
+flush_word(CurrentRev) ->
+    Word = lists:reverse(CurrentRev),
+    case is_basic_keyword(Word) of
+        true -> string:to_upper(Word);
+        false -> Word
+    end.
+
+is_basic_keyword(Word) ->
+    Upper = string:to_upper(Word),
+    lists:member(Upper, [
+        "PRINT", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT",
+        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD"
+    ]).
 
 run_program(State) ->
     erlbasic_runtime:run_program(State).
