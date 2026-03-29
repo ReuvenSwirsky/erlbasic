@@ -1,0 +1,6 @@
+10 X = 41
+20 X = X + 1
+30 PRINT X
+40 A$ = "HI"
+50 PRINT A$
+60 END

@@ -333,7 +333,18 @@ parse_keyword_statement(Trimmed) ->
     case string:to_upper(Trimmed) of
         "RETURN" -> {'return'};
         "END" -> {'end'};
-        _ -> unknown
+        _ -> parse_implicit_let_statement(Trimmed)
+    end.
+
+parse_implicit_let_statement(Trimmed) ->
+    case re:run(Trimmed, "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [TargetText, Expr]} ->
+            case parse_assignment_target(TargetText) of
+                {ok, Target} -> {'let', Target, Expr};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
     end.
 
 should_split_top_level_sequence(Command) ->
