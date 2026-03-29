@@ -174,16 +174,21 @@ parse_file_command(Command) ->
 
 handle_dir_command(State) ->
     case ensure_user_program_dir() of
-        {ok, Dir} ->
-            case file:list_dir(Dir) of
-                {ok, Names} ->
-                    Files = lists:sort([N || N <- Names, is_regular_file(Dir, N)]),
-                    Output =
-                        case Files of
-                            [] -> ["No files\r\n"];
-                            _ -> [Name ++ "\r\n" || Name <- Files]
-                        end,
-                    {State, Output};
+        {ok, UserDir} ->
+            case list_regular_files(UserDir) of
+                {ok, UserFiles} ->
+                    case list_example_files() of
+                        {ok, ExampleFiles} ->
+                            Files = lists:usort(UserFiles ++ ExampleFiles),
+                            Output =
+                                case Files of
+                                    [] -> ["No files\r\n"];
+                                    _ -> [Name ++ "\r\n" || Name <- Files]
+                                end,
+                            {State, Output};
+                        {error, _} ->
+                            {State, ["?FILE ERROR\r\n"]}
+                    end;
                 {error, _} ->
                     {State, ["?FILE ERROR\r\n"]}
             end;
@@ -212,25 +217,41 @@ handle_save_command(State, RawName) ->
 handle_load_command(State, RawName) ->
     case normalize_program_filename(RawName) of
         {ok, FileName} ->
-            case ensure_user_program_dir() of
-                {ok, Dir} ->
-                    Path = filename:join(Dir, FileName),
-                    case file:read_file(Path) of
-                        {ok, Bin} ->
-                            case parse_program_text(binary_to_list(Bin)) of
-                                {ok, Program} ->
-                                    {State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
-                                error ->
-                                    {State, ["?SYNTAX ERROR\r\n"]}
-                            end;
-                        {error, _} ->
-                            {State, ["?FILE ERROR\r\n"]}
-                    end;
+            case load_program_file(FileName) of
+                {ok, Program} ->
+                    {State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+                syntax_error ->
+                    {State, ["?SYNTAX ERROR\r\n"]};
                 {error, _} ->
                     {State, ["?FILE ERROR\r\n"]}
             end;
         error ->
             {State, ["?FILE ERROR\r\n"]}
+    end.
+
+load_program_file(FileName) ->
+    UserPath = filename:join(user_program_dir(), FileName),
+    case read_program_file(UserPath) of
+        {ok, Program} ->
+            {ok, Program};
+        syntax_error ->
+            syntax_error;
+        {error, _} ->
+            ExamplePath = filename:join(examples_program_dir(), FileName),
+            read_program_file(ExamplePath)
+    end.
+
+read_program_file(Path) ->
+    case file:read_file(Path) of
+        {ok, Bin} ->
+            case parse_program_text(binary_to_list(Bin)) of
+                {ok, Program} ->
+                    {ok, Program};
+                error ->
+                    syntax_error
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 serialize_program(Program) ->
@@ -259,9 +280,21 @@ parse_program_lines([Line | Rest], Acc) ->
     end.
 
 ensure_user_program_dir() ->
-    Dir = user_program_dir(),
-    case filelib:ensure_dir(filename:join(Dir, "dummy.txt")) of
-        ok -> {ok, Dir};
+    case ensure_basic_root_dir() of
+        {ok, _BasicRoot} ->
+            Dir = user_program_dir(),
+            case filelib:ensure_dir(filename:join(Dir, "dummy.txt")) of
+                ok -> {ok, Dir};
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+ensure_basic_root_dir() ->
+    Root = basic_root_dir(),
+    case filelib:ensure_dir(filename:join(Root, "dummy.txt")) of
+        ok -> {ok, Root};
         {error, Reason} -> {error, Reason}
     end.
 
@@ -269,6 +302,9 @@ user_program_dir() ->
     Home = user_home_dir(),
     UserId = sanitized_user_id(),
     filename:join([Home, "BASIC", UserId]).
+
+basic_root_dir() ->
+    filename:join(user_home_dir(), "BASIC").
 
 user_home_dir() ->
     case os:getenv("HOME") of
@@ -318,6 +354,51 @@ is_regular_file(Dir, Name) ->
     case file:read_file_info(Path) of
         {ok, #file_info{type = regular}} -> true;
         _ -> false
+    end.
+
+list_regular_files(Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            {ok, lists:sort([N || N <- Names, is_regular_file(Dir, N)])};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+list_example_files() ->
+    Dir = examples_program_dir(),
+    case file:list_dir(Dir) of
+        {ok, _} ->
+            list_regular_files(Dir);
+        {error, enoent} ->
+            {ok, []};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+examples_program_dir() ->
+    filename:join(repo_root_dir(), "examples").
+
+repo_root_dir() ->
+    BeamPath = code:which(?MODULE),
+    case BeamPath of
+        non_existing ->
+            filename:absname(".");
+        _ ->
+            BeamDir = filename:dirname(BeamPath),
+            find_repo_root(BeamDir)
+    end.
+
+find_repo_root(Dir) ->
+    ConfigPath = filename:join(Dir, "rebar.config"),
+    case filelib:is_regular(ConfigPath) of
+        true ->
+            Dir;
+        false ->
+            Parent = filename:dirname(Dir),
+            case Parent =:= Dir of
+                true -> filename:absname(".");
+                false -> find_repo_root(Parent)
+            end
     end.
 
 parse_renum_command(Command) ->
