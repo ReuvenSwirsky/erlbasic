@@ -8,7 +8,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `RENUM`, `QUIT`
-- Program statements: `LET`, `PRINT`, `PRINT USING`, `INPUT`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
+- Program statements: `LET`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
 - Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `DATE$`, `TIME$`, `TERM$`)
 
 ## Build
@@ -111,6 +111,7 @@ RUN
 - Sending an empty stored line like `20` deletes that line from the program.
 - Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point when continuation context exists.
 - Runtime errors include `?TYPE MISMATCH ERROR`, `?CAN'T CONTINUE ERROR`, and `?RETURN WITHOUT GOSUB ERROR`.
+- `LOCATE row, col` moves the cursor for WebSocket/xterm clients. Telnet/TCP sessions report `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
 
 ## Syntax Reference
 

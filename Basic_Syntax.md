@@ -142,6 +142,20 @@ Notes:
 - Variables ending in `%` behave like integer-style numeric variables.
 - During `RUN`, program execution pauses until a value is entered.
 
+### LOCATE
+
+Moves the cursor to a row and column.
+
+```text
+LOCATE 5, 10
+```
+
+Notes:
+- Row and column expressions are evaluated and normalized to integers.
+- Minimum position is row `1`, column `1`.
+- Cursor movement is supported for WebSocket/xterm sessions.
+- On telnet/TCP sessions, `LOCATE` raises `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
+
 ### DATA
 
 Declares literal values that can be consumed sequentially by `READ`.
