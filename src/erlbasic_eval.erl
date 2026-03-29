@@ -163,6 +163,8 @@ format_runtime_error(return_without_gosub) ->
     "?RETURN WITHOUT GOSUB ERROR\r\n";
 format_runtime_error(next_without_for) ->
     "?NEXT WITHOUT FOR ERROR\r\n";
+format_runtime_error(tty_no_cursor_movement) ->
+    "?TTY DOESN'T SUPPORT CURSOR MOVEMENT\r\n";
 format_runtime_error(syntax_error) ->
     "?SYNTAX ERROR\r\n";
 format_runtime_error(_) ->
@@ -178,6 +180,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         cant_continue -> "CAN'T CONTINUE ERROR";
         return_without_gosub -> "RETURN WITHOUT GOSUB ERROR";
         next_without_for -> "NEXT WITHOUT FOR ERROR";
+        tty_no_cursor_movement -> "TTY DOESN'T SUPPORT CURSOR MOVEMENT";
         syntax_error -> "SYNTAX ERROR";
         _ -> "SYNTAX ERROR"
     end,

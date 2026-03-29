@@ -299,6 +299,13 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                 {error, Reason, _Vars1} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
             end;
+        {locate, RowExpr, ColExpr} ->
+            case eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                {error, Reason, _Vars1} ->
+                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+            end;
         {input, Target} ->
             PromptState = State#state{pending_input = {Target, {program, Pc, [], LoopStack, CallStack}}},
             {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
@@ -469,6 +476,26 @@ convert_read_item(Target, Item) ->
             case erlbasic_eval:eval_expr_result(Item, #{}) of
                 {ok, Value, _} -> erlbasic_eval:normalize_int(Value);
                 {error, _, _} -> 0
+            end
+    end.
+
+eval_locate(RowExpr, ColExpr, Vars, Funcs) ->
+    case erlbasic_eval:eval_expr_result(RowExpr, Vars, Funcs) of
+        {error, Reason, Vars1} ->
+            {error, Reason, Vars1};
+        {ok, RowValue, Vars1} ->
+            case erlbasic_eval:eval_expr_result(ColExpr, Vars1, Funcs) of
+                {error, Reason, Vars2} ->
+                    {error, Reason, Vars2};
+                {ok, ColValue, Vars2} ->
+                    Row = max(1, erlbasic_eval:normalize_int(RowValue)),
+                    Col = max(1, erlbasic_eval:normalize_int(ColValue)),
+                    case erlang:get(erlbasic_conn_type) of
+                        websocket ->
+                            {ok, Vars2, [io_lib:format("\e[~B;~BH", [Row, Col])]};
+                        _ ->
+                            {error, tty_no_cursor_movement, Vars2}
+                    end
             end
     end.
 

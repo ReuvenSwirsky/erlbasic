@@ -212,6 +212,14 @@ parse_next_statement(Trimmed) ->
         {match, [Var]} ->
             {next_loop, string:to_upper(Var)};
         nomatch ->
+            parse_locate_statement(Trimmed)
+    end.
+
+parse_locate_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^LOCATE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [RowExpr, ColExpr]} ->
+            {locate, RowExpr, ColExpr};
+        nomatch ->
             parse_data_or_read_statement(Trimmed)
     end.
 
@@ -441,6 +449,8 @@ validate_statement(Stmt) ->
             end;
         {next_loop, _MaybeVar} ->
             ok;
+        {locate, RowExpr, ColExpr} ->
+            validate_expr_pair(RowExpr, ColExpr);
         {data, _Items} ->
             ok;
         {read_data, Targets} ->
