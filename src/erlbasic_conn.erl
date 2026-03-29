@@ -9,6 +9,7 @@ start(Socket) ->
     ok = gen_tcp:send(Socket, "Type QUIT to disconnect.\r\n> "),
     %% Spawn worker process for interpreter
     WorkerPid = spawn_link(fun() ->
+        erlang:put(erlbasic_conn_type, tcp),
         State = erlbasic_interp:new_state(),
         tcp_worker_loop(Socket, State)
     end),
@@ -86,6 +87,7 @@ tcp_worker_loop(Socket, State) ->
 %% WsPid is the ws_handler process; output is sent as {output, Text}.
 start_ws(WsPid) ->
     Pid = spawn_link(fun() ->
+        erlang:put(erlbasic_conn_type, websocket),
         State = erlbasic_interp:new_state(),
         WsPid ! {output, "Welcome to Erlang BASIC\r\nType QUIT to disconnect.\r\n> "},
         ws_loop(WsPid, State)

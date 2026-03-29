@@ -136,6 +136,8 @@ format_runtime_error(out_of_data) ->
     "?OUT OF DATA ERROR\r\n";
 format_runtime_error(illegal_function_call) ->
     "?ILLEGAL FUNCTION CALL\r\n";
+format_runtime_error(tty_no_cursor_movement) ->
+    "?TTY DOESN'T SUPPORT CURSOR MOVEMENT\r\n";
 format_runtime_error(syntax_error) ->
     "?SYNTAX ERROR\r\n";
 format_runtime_error(_) ->
@@ -147,6 +149,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         division_by_zero -> "DIVISION BY ZERO ERROR";
         out_of_data -> "OUT OF DATA ERROR";
         illegal_function_call -> "ILLEGAL FUNCTION CALL";
+        tty_no_cursor_movement -> "TTY DOESN'T SUPPORT CURSOR MOVEMENT";
         syntax_error -> "SYNTAX ERROR";
         _ -> "SYNTAX ERROR"
     end,

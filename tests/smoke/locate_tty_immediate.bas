@@ -1,0 +1,2 @@
+LOCATE 5, 10
+PRINT "X"

@@ -280,7 +280,7 @@ flush_word(CurrentRev) ->
 is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
-        "PRINT", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT",
+        "PRINT", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "LOCATE",
         "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD"
     ]).
 
@@ -398,6 +398,13 @@ execute_statement_single(Command, State) ->
             end;
         {input, Target} ->
             {State#state{pending_input = {Target, {immediate, []}}}, [format_input_prompt(Target)]};
+        {locate, RowExpr, ColExpr} ->
+            case eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {if_then_else, CondExpr, ThenStmt, ElseStmt} ->
             case erlbasic_eval:eval_condition_result(CondExpr, State#state.vars, State#state.funcs) of
                 {ok, true} ->
@@ -436,6 +443,26 @@ execute_statement_single(Command, State) ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {'return'} ->
             {State, ["?SYNTAX ERROR\r\n"]}
+    end.
+
+eval_locate(RowExpr, ColExpr, Vars, Funcs) ->
+    case erlbasic_eval:eval_expr_result(RowExpr, Vars, Funcs) of
+        {error, Reason, Vars1} ->
+            {error, Reason, Vars1};
+        {ok, RowValue, Vars1} ->
+            case erlbasic_eval:eval_expr_result(ColExpr, Vars1, Funcs) of
+                {error, Reason, Vars2} ->
+                    {error, Reason, Vars2};
+                {ok, ColValue, Vars2} ->
+                    Row = max(1, erlbasic_eval:normalize_int(RowValue)),
+                    Col = max(1, erlbasic_eval:normalize_int(ColValue)),
+                    case erlang:get(erlbasic_conn_type) of
+                        websocket ->
+                            {ok, Vars2, [io_lib:format("\e[~B;~BH", [Row, Col])]};
+                        _ ->
+                            {error, tty_no_cursor_movement, Vars2}
+                    end
+            end
     end.
 
 ensure_data_loaded(State = #state{data_items = []}) ->
