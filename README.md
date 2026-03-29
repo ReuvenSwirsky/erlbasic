@@ -4,7 +4,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 
 ## Features
 
-- Multiple concurrent TCP clients
+- Multiple concurrent TCP and/or WebSocket clients
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `NEW`, `RENUM`, `QUIT`
@@ -48,6 +48,12 @@ or
 
 ```powershell
 nc localhost 5555
+```
+
+or navigate to URL
+
+```
+http://localhost:8081/
 ```
 
 ## Example session
