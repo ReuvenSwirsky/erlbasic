@@ -2,6 +2,7 @@
 
 -export([
     format_value/1,
+    format_print_value/1,
     eval_expr/2,
     eval_expr/3,
     eval_expr_result/2,
@@ -24,6 +25,13 @@ format_value(Value) when is_float(Value) ->
     format_number(Value) ++ "\r\n";
 format_value(Value) when is_list(Value) ->
     Value ++ "\r\n".
+
+format_print_value(Value) when is_integer(Value) ->
+    integer_to_list(Value);
+format_print_value(Value) when is_float(Value) ->
+    format_number(Value);
+format_print_value(Value) when is_list(Value) ->
+    Value.
 
 format_number(Value) when is_integer(Value) ->
     integer_to_list(Value);
@@ -63,7 +71,7 @@ eval_expr(Expr, Vars, Funcs) ->
 
 eval_expr_result(Expr, Vars) ->
     Trimmed = string:trim(Expr),
-    case re:run(Trimmed, "^\"(.*)\"$", [{capture, [1], list}]) of
+    case re:run(Trimmed, "^\"([^\"]*)\"$", [{capture, [1], list}]) of
         {match, [StringValue]} ->
             {ok, StringValue, Vars};
         nomatch ->
@@ -136,6 +144,8 @@ format_runtime_error(out_of_data) ->
     "?OUT OF DATA ERROR\r\n";
 format_runtime_error(illegal_function_call) ->
     "?ILLEGAL FUNCTION CALL\r\n";
+format_runtime_error(type_mismatch) ->
+    "?TYPE MISMATCH ERROR\r\n";
 format_runtime_error(syntax_error) ->
     "?SYNTAX ERROR\r\n";
 format_runtime_error(_) ->
@@ -147,6 +157,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         division_by_zero -> "DIVISION BY ZERO ERROR";
         out_of_data -> "OUT OF DATA ERROR";
         illegal_function_call -> "ILLEGAL FUNCTION CALL";
+        type_mismatch -> "TYPE MISMATCH ERROR";
         syntax_error -> "SYNTAX ERROR";
         _ -> "SYNTAX ERROR"
     end,

@@ -32,7 +32,11 @@ parse_sum(Tokens, Vars) ->
 
 parse_sum_rest(Value, [plus | Rest], Vars) ->
     case parse_term(Rest, Vars) of
-        {ok, Right, Next} -> parse_sum_rest(Value + Right, Next, Vars);
+        {ok, Right, Next} ->
+            case add_values(Value, Right) of
+                {ok, Sum} -> parse_sum_rest(Sum, Next, Vars);
+                {error, Reason} -> {error, Reason}
+            end;
         Error -> Error
     end;
 parse_sum_rest(Value, [minus | Rest], Vars) ->
@@ -51,7 +55,11 @@ parse_term(Tokens, Vars) ->
 
 parse_term_rest(Value, [mul | Rest], Vars) ->
     case parse_unary(Rest, Vars) of
-        {ok, Right, Next} -> parse_term_rest(Value * Right, Next, Vars);
+        {ok, Right, Next} ->
+            case mul_values(Value, Right) of
+                {ok, Product} -> parse_term_rest(Product, Next, Vars);
+                {error, Reason} -> {error, Reason}
+            end;
         Error -> Error
     end;
 parse_term_rest(Value, [divi | Rest], Vars) ->
@@ -205,3 +213,15 @@ normalize_number(Value) when is_list(Value) ->
     end;
 normalize_number(_) ->
     0.
+
+add_values(Left, Right) when (is_integer(Left) orelse is_float(Left)) andalso
+                           (is_integer(Right) orelse is_float(Right)) ->
+    {ok, Left + Right};
+add_values(_Left, _Right) ->
+    {error, type_mismatch}.
+
+mul_values(Left, Right) when (is_integer(Left) orelse is_float(Left)) andalso
+                           (is_integer(Right) orelse is_float(Right)) ->
+    {ok, Left * Right};
+mul_values(_Left, _Right) ->
+    {error, type_mismatch}.

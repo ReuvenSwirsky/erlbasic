@@ -10,7 +10,8 @@
     pending_input = undefined,
     immediate_for_buffer = undefined,
     data_items = [],
-    data_index = 1
+    data_index = 1,
+    print_col = 0
 }).
 
 new_state() ->
@@ -357,10 +358,20 @@ execute_statement(Command, State) ->
 
 execute_statement_single(Command, State) ->
     case erlbasic_parser:parse_statement(Command) of
-        {print, Expr} ->
-            case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
-                {ok, Value, Vars1} ->
-                    {State#state{vars = Vars1}, [erlbasic_eval:format_value(Value)]};
+        {print, Items, EndWithNewline} ->
+            case render_print_items(Items, State#state.vars, State#state.funcs, State#state.print_col) of
+                {ok, Vars1, Text, NextCol} ->
+                    FinalText =
+                        case EndWithNewline of
+                            true -> Text ++ "\r\n";
+                            false -> Text
+                        end,
+                    FinalCol =
+                        case EndWithNewline of
+                            true -> 0;
+                            false -> NextCol
+                        end,
+                    {State#state{vars = Vars1, print_col = FinalCol}, [FinalText]};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
@@ -553,3 +564,30 @@ execute_statement_list([Stmt | Rest], State, OutputAcc) ->
         stop ->
             {stop, State, OutputAcc}
     end.
+
+render_print_items(Items, Vars, Funcs, StartCol) ->
+    render_print_items(Items, Vars, Funcs, StartCol, [], StartCol).
+
+render_print_items([], Vars, _Funcs, _StartCol, Acc, Col) ->
+    {ok, Vars, lists:flatten(lists:reverse(Acc)), Col};
+render_print_items([{Expr, Sep} | Rest], Vars, Funcs, StartCol, Acc, Col) ->
+    case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
+        {ok, Value, Vars1} ->
+            Text = erlbasic_eval:format_print_value(Value),
+            ColAfterText = Col + length(Text),
+            {SepText, ColAfterSep} = print_sep_text(Sep, ColAfterText, StartCol),
+            render_print_items(Rest, Vars1, Funcs, StartCol, [SepText, Text | Acc], ColAfterSep);
+        {error, Reason, Vars1} ->
+            {error, Reason, Vars1}
+    end.
+
+print_sep_text(none, Col, _StartCol) ->
+    {"", Col};
+print_sep_text(semicolon, Col, _StartCol) ->
+    {"", Col};
+print_sep_text(comma, Col, StartCol) ->
+    ZoneWidth = 14,
+    RelativeCol = Col - StartCol,
+    Pad = ZoneWidth - (RelativeCol rem ZoneWidth),
+    Spaces = lists:duplicate(Pad, $\s),
+    {Spaces, Col + Pad}.

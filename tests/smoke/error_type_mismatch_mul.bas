@@ -1,0 +1,2 @@
+10 PRINT "A" * 2
+20 PRINT 99

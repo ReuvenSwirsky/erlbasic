@@ -20,16 +20,61 @@ validate_program_line(Command) ->
     end.
 
 parse_print_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PRINT\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [Expr]} ->
-            {print, Expr};
+    case re:run(Trimmed, "(?i)^PRINT(?:\\s+(.*))?$", [{capture, all_but_first, list}]) of
+        {match, []} ->
+            {print, [], true};
+        {match, [ItemsText]} ->
+            case parse_print_items(ItemsText) of
+                {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+                error -> unknown
+            end;
         nomatch ->
-            case re:run(Trimmed, "^\\?\\s*(.+)$", [{capture, [1], list}]) of
-                {match, [Expr]} ->
-                    {print, Expr};
+            case re:run(Trimmed, "^\\?\\s*(.*)$", [{capture, [1], list}]) of
+                {match, [ItemsText]} ->
+                    case parse_print_items(ItemsText) of
+                        {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+                        error -> unknown
+                    end;
                 nomatch ->
                     parse_input_statement(Trimmed)
             end
+    end.
+
+parse_print_items(Text) ->
+    parse_print_items(Text, [], [], false, 0).
+
+parse_print_items([], CurrentRev, PartsRev, _InString, _Depth) ->
+    FinalExpr = string:trim(lists:reverse(CurrentRev)),
+    case {FinalExpr, PartsRev} of
+        {"", []} ->
+            {ok, [], true};
+        {"", [{_Expr, semicolon} | _]} ->
+            {ok, lists:reverse(PartsRev), false};
+        {"", _} ->
+            error;
+        {_Expr, _} ->
+            {ok, lists:reverse([{FinalExpr, none} | PartsRev]), true}
+    end;
+parse_print_items([$" | Rest], CurrentRev, PartsRev, InString, Depth) ->
+    parse_print_items(Rest, [$" | CurrentRev], PartsRev, not InString, Depth);
+parse_print_items([$( | Rest], CurrentRev, PartsRev, false, Depth) ->
+    parse_print_items(Rest, [$( | CurrentRev], PartsRev, false, Depth + 1);
+parse_print_items([$) | Rest], CurrentRev, PartsRev, false, Depth) when Depth > 0 ->
+    parse_print_items(Rest, [$) | CurrentRev], PartsRev, false, Depth - 1);
+parse_print_items([$, | Rest], CurrentRev, PartsRev, false, 0) ->
+    push_print_part(Rest, CurrentRev, PartsRev, comma);
+parse_print_items([$; | Rest], CurrentRev, PartsRev, false, 0) ->
+    push_print_part(Rest, CurrentRev, PartsRev, semicolon);
+parse_print_items([Ch | Rest], CurrentRev, PartsRev, InString, Depth) ->
+    parse_print_items(Rest, [Ch | CurrentRev], PartsRev, InString, Depth).
+
+push_print_part(Rest, CurrentRev, PartsRev, Sep) ->
+    Expr = string:trim(lists:reverse(CurrentRev)),
+    case Expr of
+        "" ->
+            error;
+        _ ->
+            parse_print_items(Rest, [], [{Expr, Sep} | PartsRev], false, 0)
     end.
 
 parse_input_statement(Trimmed) ->
@@ -322,8 +367,8 @@ validate_statements([Stmt | Rest]) ->
 
 validate_statement(Stmt) ->
     case parse_statement(Stmt) of
-        {print, Expr} ->
-            validate_expr_syntax(Expr);
+        {print, Items, _EndWithNewline} ->
+            validate_print_items(Items);
         {input, Target} ->
             validate_target_syntax(Target);
         {'let', Target, Expr} ->
@@ -414,6 +459,14 @@ validate_expr_syntax(Expr) ->
     case erlbasic_eval:eval_expr_result(Expr, #{}, #{}) of
         {error, syntax_error, _} -> error;
         _ -> ok
+    end.
+
+validate_print_items([]) ->
+    ok;
+validate_print_items([{Expr, _Sep} | Rest]) ->
+    case validate_expr_syntax(Expr) of
+        ok -> validate_print_items(Rest);
+        error -> error
     end.
 
 validate_condition_syntax(CondExpr) ->
