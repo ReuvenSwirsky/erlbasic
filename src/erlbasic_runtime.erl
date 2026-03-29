@@ -1,6 +1,6 @@
 -module(erlbasic_runtime).
 
--export([run_program/1, resume_program_input/5]).
+-export([run_program/1, continue_program/4, resume_program_input/5]).
 
 -define(FLUSH_OUTPUT_EVERY, 50).
 
@@ -12,14 +12,21 @@
     immediate_for_buffer = undefined,
     data_items = [],
     data_index = 1,
-    print_col = 0
+    print_col = 0,
+    continue_ctx = undefined
 }).
 
 run_program(State = #state{prog = Program}) ->
     DataItems = collect_program_data(Program),
-    RunState = State#state{data_items = DataItems, data_index = 1},
+    RunState = State#state{data_items = DataItems, data_index = 1, continue_ctx = undefined},
     erlang:put(line_exec_count, 0),
     Result = run_program_lines(Program, 1, RunState, [], [], []),
+    erlang:erase(line_exec_count),
+    Result.
+
+continue_program(State = #state{prog = Program}, Pc, LoopStack, CallStack) ->
+    erlang:put(line_exec_count, 0),
+    Result = run_program_lines(Program, Pc, State, LoopStack, CallStack, []),
     erlang:erase(line_exec_count),
     Result.
 
@@ -50,7 +57,8 @@ run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
         true ->
             erlang:erase(interrupted),
             flush_output(NewAcc),
-            {State, ["\r\n^C\r\nBREAK\r\n"]};
+            BreakState = State#state{continue_ctx = {Pc, LoopStack, CallStack}},
+            {BreakState, ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
             run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, NewAcc)
     end.
@@ -352,7 +360,7 @@ resolve_target_pc(LineExpr, Program, Vars, Funcs) ->
 
 execute_return(Program, _State, Pc, _LoopStack, []) ->
     LineNumber = get_line_number(Program, Pc),
-    {stop, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]};
+    {stop, [erlbasic_eval:format_runtime_error(return_without_gosub, LineNumber)]};
 execute_return(_Program, State, _Pc, LoopStack, [ReturnPc | Rest]) ->
     {jump, ReturnPc, State, LoopStack, Rest, []}.
 

@@ -146,6 +146,10 @@ format_runtime_error(illegal_function_call) ->
     "?ILLEGAL FUNCTION CALL\r\n";
 format_runtime_error(type_mismatch) ->
     "?TYPE MISMATCH ERROR\r\n";
+format_runtime_error(cant_continue) ->
+    "?CAN'T CONTINUE ERROR\r\n";
+format_runtime_error(return_without_gosub) ->
+    "?RETURN WITHOUT GOSUB ERROR\r\n";
 format_runtime_error(syntax_error) ->
     "?SYNTAX ERROR\r\n";
 format_runtime_error(_) ->
@@ -158,6 +162,8 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         out_of_data -> "OUT OF DATA ERROR";
         illegal_function_call -> "ILLEGAL FUNCTION CALL";
         type_mismatch -> "TYPE MISMATCH ERROR";
+        cant_continue -> "CAN'T CONTINUE ERROR";
+        return_without_gosub -> "RETURN WITHOUT GOSUB ERROR";
         syntax_error -> "SYNTAX ERROR";
         _ -> "SYNTAX ERROR"
     end,
