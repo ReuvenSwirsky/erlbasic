@@ -42,7 +42,7 @@ apply_math_function("LOG", [X]) ->
 apply_math_function("PI", []) ->
     {ok, math:pi()};
 apply_math_function("POW", [X, Y]) ->
-    {ok, math:pow(X, Y)};
+    apply_pow(X, Y);
 apply_math_function("RAD", [X]) ->
     {ok, X * math:pi() / 180.0};
 apply_math_function("RND", []) ->
@@ -127,6 +127,26 @@ apply_ceil(X) when is_integer(X); is_float(X) ->
     {ok, ceil_number(X)};
 apply_ceil(_X) ->
     {error, illegal_function_call}.
+
+apply_pow(X, Y) when is_integer(X), is_integer(Y), Y >= 0 ->
+    {ok, int_pow(X, Y)};
+apply_pow(X, Y) when (is_integer(X) orelse is_float(X)) andalso
+                    (is_integer(Y) orelse is_float(Y)) ->
+    {ok, math:pow(X, Y)};
+apply_pow(_X, _Y) ->
+    {error, illegal_function_call}.
+
+int_pow(_Base, 0) ->
+    1;
+int_pow(Base, Exp) when Exp > 0 ->
+    int_pow(Base, Exp, 1).
+
+int_pow(_Base, 0, Acc) ->
+    Acc;
+int_pow(Base, Exp, Acc) when (Exp band 1) =:= 1 ->
+    int_pow(Base * Base, Exp bsr 1, Acc * Base);
+int_pow(Base, Exp, Acc) ->
+    int_pow(Base * Base, Exp bsr 1, Acc).
 
 gw_rnd() ->
     Value = rand:uniform(),
@@ -264,17 +284,22 @@ to_basic_string(Value) ->
 format_number(Value) when is_integer(Value) ->
     integer_to_list(Value);
 format_number(Value) when is_float(Value) ->
-    Rounded = round(Value),
-    case abs(Value - Rounded) < 1.0e-10 of
-        true ->
-            integer_to_list(Rounded);
-        false ->
-            Raw = lists:flatten(io_lib:format("~.10f", [Value])),
-            trim_float_string(Raw)
-    end.
+    Raw = lists:flatten(io_lib:format("~.10f", [Value])),
+    ensure_float_text(trim_float_string(Raw)).
 
 trim_float_string(Text) ->
     trim_float_string_rev(lists:reverse(Text)).
+
+ensure_float_text(Text) ->
+    case lists:member($., Text) of
+        true ->
+            case lists:last(Text) of
+                $. -> Text ++ "0";
+                _ -> Text
+            end;
+        false ->
+            Text ++ ".0"
+    end.
 
 trim_float_string_rev([$0 | Rest]) ->
     trim_float_string_rev(Rest);

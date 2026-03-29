@@ -302,6 +302,8 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
         {input, Target} ->
             PromptState = State#state{pending_input = {Target, {program, Pc, [], LoopStack, CallStack}}},
             {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
+        {cls} ->
+            {continue, State, LoopStack, CallStack, cls_output()};
         {'end'} ->
             {'end', []};
         _ ->
@@ -603,6 +605,12 @@ print_sep_text(comma, Col, StartCol) ->
     Pad = ZoneWidth - (RelativeCol rem ZoneWidth),
     Spaces = lists:duplicate(Pad, $\s),
     {Spaces, Col + Pad}.
+
+cls_output() ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> ["\e[2J\e[H"];
+        _ -> []
+    end.
 
 render_print_using_items(Items, FormatText, Vars, Funcs, StartCol) ->
     render_print_using_items(Items, FormatText, Vars, Funcs, StartCol, [], StartCol).

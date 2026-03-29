@@ -36,17 +36,28 @@ format_print_value(Value) when is_list(Value) ->
 format_number(Value) when is_integer(Value) ->
     integer_to_list(Value);
 format_number(Value) when is_float(Value) ->
-    Rounded = round(Value),
-    case abs(Value - Rounded) < 1.0e-10 of
+    Abs = abs(Value),
+    case (Abs >= 1.0e12) orelse (Abs =/= +0.0 andalso Abs < 1.0e-4) of
         true ->
-            integer_to_list(Rounded);
+            lists:flatten(io_lib:format("~.16e", [Value]));
         false ->
             Raw = lists:flatten(io_lib:format("~.10f", [Value])),
-            trim_float_string(Raw)
+            ensure_float_text(trim_float_string(Raw))
     end.
 
 trim_float_string(Text) ->
     trim_float_string_rev(lists:reverse(Text)).
+
+ensure_float_text(Text) ->
+    case lists:member($., Text) of
+        true ->
+            case lists:last(Text) of
+                $. -> Text ++ "0";
+                _ -> Text
+            end;
+        false ->
+            Text ++ ".0"
+    end.
 
 trim_float_string_rev([$0 | Rest]) ->
     trim_float_string_rev(Rest);

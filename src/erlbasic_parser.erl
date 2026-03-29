@@ -331,6 +331,7 @@ unquote_data_item(_Other) ->
 
 parse_keyword_statement(Trimmed) ->
     case string:to_upper(Trimmed) of
+        "CLS" -> {cls};
         "RETURN" -> {'return'};
         "END" -> {'end'};
         _ -> parse_implicit_let_statement(Trimmed)
@@ -445,6 +446,8 @@ validate_statement(Stmt) ->
         {read_data, Targets} ->
             validate_targets(Targets);
         {'return'} ->
+            ok;
+        {cls} ->
             ok;
         {'end'} ->
             ok;

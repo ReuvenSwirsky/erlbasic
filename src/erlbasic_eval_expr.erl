@@ -97,12 +97,36 @@ parse_power(Tokens, Vars) ->
     case parse_primary(Tokens, Vars) of
         {ok, Left, [pow | Rest]} ->
             case parse_power(Rest, Vars) of
-                {ok, Right, Next} -> {ok, math:pow(Left, Right), Next};
+                {ok, Right, Next} ->
+                    case pow_values(Left, Right) of
+                        {ok, PowValue} -> {ok, PowValue, Next};
+                        {error, Reason} -> {error, Reason}
+                    end;
                 Error -> Error
             end;
         Result ->
             Result
     end.
+
+pow_values(Left, Right) when is_integer(Left), is_integer(Right), Right >= 0 ->
+    {ok, int_pow(Left, Right)};
+pow_values(Left, Right) when (is_integer(Left) orelse is_float(Left)) andalso
+                            (is_integer(Right) orelse is_float(Right)) ->
+    {ok, math:pow(Left, Right)};
+pow_values(_Left, _Right) ->
+    {error, type_mismatch}.
+
+int_pow(_Base, 0) ->
+    1;
+int_pow(Base, Exp) when Exp > 0 ->
+    int_pow(Base, Exp, 1).
+
+int_pow(_Base, 0, Acc) ->
+    Acc;
+int_pow(Base, Exp, Acc) when (Exp band 1) =:= 1 ->
+    int_pow(Base * Base, Exp bsr 1, Acc * Base);
+int_pow(Base, Exp, Acc) ->
+    int_pow(Base * Base, Exp bsr 1, Acc).
 
 parse_primary([{num, Value} | Rest], _Vars) ->
     {ok, Value, Rest};

@@ -284,7 +284,7 @@ flush_word(CurrentRev) ->
 is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
-        "PRINT", "USING", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT",
+        "PRINT", "USING", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS",
         "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD"
     ]).
 
@@ -473,6 +473,8 @@ execute_statement_single(Command, State) ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {next_loop, _MaybeVar} ->
             {State, [erlbasic_eval:format_runtime_error(next_without_for)]};
+        {cls} ->
+            {State, cls_output()};
         {goto, _LineExpr} ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {gosub, _LineExpr} ->
@@ -623,6 +625,12 @@ print_sep_text(comma, Col, StartCol) ->
     Pad = ZoneWidth - (RelativeCol rem ZoneWidth),
     Spaces = lists:duplicate(Pad, $\s),
     {Spaces, Col + Pad}.
+
+cls_output() ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> ["\e[2J\e[H"];
+        _ -> []
+    end.
 
 render_print_using_items(Items, FormatText, Vars, Funcs, StartCol) ->
     render_print_using_items(Items, FormatText, Vars, Funcs, StartCol, [], StartCol).
