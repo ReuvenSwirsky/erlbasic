@@ -25,9 +25,13 @@ These commands can be entered without a line number:
 
 - `LIST` - prints all stored program lines in numeric order.
 - `RUN` - executes the stored program.
+- `CONT` - continues execution after a `BREAK` caused by Ctrl-C during `RUN`.
 - `NEW` - clears the stored program.
 - `RENUM [start[,increment]]` - renumbers stored program lines in order (defaults: `10,10`) and updates direct `GOTO`/`GOSUB` line-number references.
 - `QUIT` - disconnects from the TCP session.
+
+Notes:
+- `CONT` without a prior break context raises `?CAN'T CONTINUE ERROR`.
 
 ## Statements
 
@@ -245,6 +249,9 @@ Calls a subroutine line and returns to the line after `GOSUB`.
 110 RETURN
 ```
 
+Notes:
+- Executing `RETURN` without an active `GOSUB` stack raises `?RETURN WITHOUT GOSUB ERROR`.
+
 ### NEXT [var]
 
 Advances the active FOR loop.
@@ -300,6 +307,7 @@ Supported expression forms:
 	- `STR$(number)`
 	- `DATE$()` (local date in `MM-DD-YYYY`)
 	- `TIME$()` (local time in `HH:MM:SS`)
+	- `TERM$()` (`"XTERM"` for WebSocket terminal sessions, `"TELNET"` for TCP/telnet sessions)
 - User-defined function calls with `DEF FN...` syntax: `FNQ(3)`
 
 Examples:
@@ -313,6 +321,7 @@ PRINT LEFT$("HELLO", 2)
 PRINT MID$("HELLO", 2, 3)
 PRINT DATE$()
 PRINT TIME$()
+PRINT TERM$()
 ```
 
 Undefined variables evaluate to `0`.
@@ -330,6 +339,9 @@ GW-BASIC alignment notes:
 	- `?DIVISION BY ZERO ERROR`
 	- `?ILLEGAL FUNCTION CALL`
 	- `?OUT OF DATA ERROR`
+	- `?TYPE MISMATCH ERROR`
+	- `?CAN'T CONTINUE ERROR`
+	- `?RETURN WITHOUT GOSUB ERROR`
 
 ## Conditions
 
