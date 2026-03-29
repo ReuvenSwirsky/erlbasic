@@ -230,15 +230,15 @@ handle_load_command(State, RawName) ->
     end.
 
 load_program_file(FileName) ->
-    UserPath = filename:join(user_program_dir(), FileName),
-    case read_program_file(UserPath) of
+    ExamplePath = filename:join(examples_program_dir(), FileName),
+    case read_program_file(ExamplePath) of
         {ok, Program} ->
             {ok, Program};
         syntax_error ->
             syntax_error;
         {error, _} ->
-            ExamplePath = filename:join(examples_program_dir(), FileName),
-            read_program_file(ExamplePath)
+            UserPath = filename:join(user_program_dir(), FileName),
+            read_program_file(UserPath)
     end.
 
 read_program_file(Path) ->

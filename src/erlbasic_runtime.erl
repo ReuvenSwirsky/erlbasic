@@ -235,14 +235,14 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
         {read_data, Targets} ->
             case apply_read_vars(Targets, State) of
                 {ok, NextState} ->
-                    {continue, NextState, LoopStack, CallStack, ["OK\r\n"]};
+                    {continue, NextState, LoopStack, CallStack, []};
                 {error, Reason} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
             end;
         {dim, Decls} ->
             case apply_dim_decls(Decls, State) of
                 {ok, NextState} ->
-                    {continue, NextState, LoopStack, CallStack, ["OK\r\n"]};
+                    {continue, NextState, LoopStack, CallStack, []};
                 {error, Reason} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
             end;
