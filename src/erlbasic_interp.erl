@@ -412,7 +412,7 @@ execute_statement_single(Command, State) ->
                 {ok, Value, Vars1} ->
                     case erlbasic_eval:assign_target(Target, Value, Vars1, State#state.funcs) of
                         {ok, Vars2} ->
-                            {State#state{vars = Vars2}, ["OK\r\n"]};
+                            {State#state{vars = Vars2}, []};
                         {error, Reason} ->
                             {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
                     end;

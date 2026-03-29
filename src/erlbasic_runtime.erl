@@ -292,7 +292,7 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                 {ok, Value, Vars1} ->
                     case erlbasic_eval:assign_target(Target, Value, Vars1, State#state.funcs) of
                         {ok, Vars2} ->
-                            {continue, State#state{vars = Vars2}, LoopStack, CallStack, ["OK\r\n"]};
+                            {continue, State#state{vars = Vars2}, LoopStack, CallStack, []};
                         {error, Reason} ->
                             {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
                     end;
