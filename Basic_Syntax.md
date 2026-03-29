@@ -90,6 +90,38 @@ PRINT 123
 
 `?` is accepted as a shorthand synonym for `PRINT`.
 
+`PRINT` also supports separator control between items:
+
+```text
+PRINT "A", "B"
+PRINT "A"; "B"
+PRINT "A";
+PRINT "B"
+```
+
+Notes:
+- `,` advances to the next print zone (14 columns).
+- `;` concatenates adjacent output with no extra spacing.
+- A trailing `;` suppresses newline so the next `PRINT` continues on the same line.
+
+### PRINT USING
+
+Formats values with a format expression.
+
+```text
+PRINT USING "###.##"; 12.3
+PRINT USING "&"; "HELLO"; "!"
+```
+
+Supported format forms:
+- Numeric mask: `#` with optional decimal point (for example `###`, `###.##`).
+- String slot: `&` (replaces the first `&` with the value text).
+
+Notes:
+- The format expression must evaluate to a string.
+- Non-numeric values used with numeric masks raise `?TYPE MISMATCH ERROR`.
+- Separators `,` and `;` after formatted items follow the same spacing/newline rules as `PRINT`.
+
 ### INPUT
 
 Reads a value from the user and stores it in a variable.

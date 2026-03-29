@@ -255,6 +255,30 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                 {error, Reason, _Vars1} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
             end;
+        {print_using, FormatExpr, Items, EndWithNewline} ->
+            case erlbasic_eval:eval_expr_result(FormatExpr, State#state.vars, State#state.funcs) of
+                {ok, FormatValue, Vars1} when is_list(FormatValue) ->
+                    case render_print_using_items(Items, FormatValue, Vars1, State#state.funcs, State#state.print_col) of
+                        {ok, Vars2, Text, NextCol} ->
+                            FinalText =
+                                case EndWithNewline of
+                                    true -> Text ++ "\r\n";
+                                    false -> Text
+                                end,
+                            FinalCol =
+                                case EndWithNewline of
+                                    true -> 0;
+                                    false -> NextCol
+                                end,
+                            {continue, State#state{vars = Vars2, print_col = FinalCol}, LoopStack, CallStack, [FinalText]};
+                        {error, Reason, _Vars2} ->
+                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    end;
+                {ok, _Other, _Vars1} ->
+                    {stop, [erlbasic_eval:format_runtime_error(type_mismatch, LineNumber)]};
+                {error, Reason, _Vars1} ->
+                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+            end;
         {'let', Target, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} ->
@@ -571,4 +595,24 @@ print_sep_text(comma, Col, StartCol) ->
     Pad = ZoneWidth - (RelativeCol rem ZoneWidth),
     Spaces = lists:duplicate(Pad, $\s),
     {Spaces, Col + Pad}.
+
+render_print_using_items(Items, FormatText, Vars, Funcs, StartCol) ->
+    render_print_using_items(Items, FormatText, Vars, Funcs, StartCol, [], StartCol).
+
+render_print_using_items([], _FormatText, Vars, _Funcs, _StartCol, Acc, Col) ->
+    {ok, Vars, lists:flatten(lists:reverse(Acc)), Col};
+render_print_using_items([{Expr, Sep} | Rest], FormatText, Vars, Funcs, StartCol, Acc, Col) ->
+    case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
+        {ok, Value, Vars1} ->
+            case erlbasic_print_using:format_item(FormatText, Value) of
+                {ok, Text} ->
+                    ColAfterText = Col + length(Text),
+                    {SepText, ColAfterSep} = print_sep_text(Sep, ColAfterText, StartCol),
+                    render_print_using_items(Rest, FormatText, Vars1, Funcs, StartCol, [SepText, Text | Acc], ColAfterSep);
+                {error, Reason} ->
+                    {error, Reason, Vars1}
+            end;
+        {error, Reason, Vars1} ->
+            {error, Reason, Vars1}
+    end.
 

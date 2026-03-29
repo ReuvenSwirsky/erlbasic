@@ -1,0 +1,4 @@
+10 PRINT USING "###.##"; 12.3
+20 PRINT USING "&"; "HI"; "!"
+30 PRINT USING "##"; 7; 8
+40 END

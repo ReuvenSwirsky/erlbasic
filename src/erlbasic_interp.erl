@@ -281,7 +281,7 @@ flush_word(CurrentRev) ->
 is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
-        "PRINT", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT",
+        "PRINT", "USING", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT",
         "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD"
     ]).
 
@@ -372,6 +372,30 @@ execute_statement_single(Command, State) ->
                             false -> NextCol
                         end,
                     {State#state{vars = Vars1, print_col = FinalCol}, [FinalText]};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {print_using, FormatExpr, Items, EndWithNewline} ->
+            case erlbasic_eval:eval_expr_result(FormatExpr, State#state.vars, State#state.funcs) of
+                {ok, FormatValue, Vars1} when is_list(FormatValue) ->
+                    case render_print_using_items(Items, FormatValue, Vars1, State#state.funcs, State#state.print_col) of
+                        {ok, Vars2, Text, NextCol} ->
+                            FinalText =
+                                case EndWithNewline of
+                                    true -> Text ++ "\r\n";
+                                    false -> Text
+                                end,
+                            FinalCol =
+                                case EndWithNewline of
+                                    true -> 0;
+                                    false -> NextCol
+                                end,
+                            {State#state{vars = Vars2, print_col = FinalCol}, [FinalText]};
+                        {error, Reason, Vars2} ->
+                            {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {ok, _Other, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(type_mismatch)]};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
@@ -591,3 +615,23 @@ print_sep_text(comma, Col, StartCol) ->
     Pad = ZoneWidth - (RelativeCol rem ZoneWidth),
     Spaces = lists:duplicate(Pad, $\s),
     {Spaces, Col + Pad}.
+
+render_print_using_items(Items, FormatText, Vars, Funcs, StartCol) ->
+    render_print_using_items(Items, FormatText, Vars, Funcs, StartCol, [], StartCol).
+
+render_print_using_items([], _FormatText, Vars, _Funcs, _StartCol, Acc, Col) ->
+    {ok, Vars, lists:flatten(lists:reverse(Acc)), Col};
+render_print_using_items([{Expr, Sep} | Rest], FormatText, Vars, Funcs, StartCol, Acc, Col) ->
+    case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
+        {ok, Value, Vars1} ->
+            case erlbasic_print_using:format_item(FormatText, Value) of
+                {ok, Text} ->
+                    ColAfterText = Col + length(Text),
+                    {SepText, ColAfterSep} = print_sep_text(Sep, ColAfterText, StartCol),
+                    render_print_using_items(Rest, FormatText, Vars1, Funcs, StartCol, [SepText, Text | Acc], ColAfterSep);
+                {error, Reason} ->
+                    {error, Reason, Vars1}
+            end;
+        {error, Reason, Vars1} ->
+            {error, Reason, Vars1}
+    end.

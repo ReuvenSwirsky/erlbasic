@@ -1,0 +1,2 @@
+10 PRINT USING "###"; "A"
+20 PRINT 99

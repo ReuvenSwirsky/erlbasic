@@ -20,6 +20,17 @@ validate_program_line(Command) ->
     end.
 
 parse_print_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^PRINT\\s+USING\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [UsingText]} ->
+            case parse_print_using_items(UsingText) of
+                {ok, FormatExpr, Items, EndWithNewline} -> {print_using, FormatExpr, Items, EndWithNewline};
+                error -> unknown
+            end;
+        nomatch ->
+            parse_print_or_qmark_statement(Trimmed)
+    end.
+
+parse_print_or_qmark_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^PRINT(?:\\s+(.*))?$", [{capture, all_but_first, list}]) of
         {match, []} ->
             {print, [], true};
@@ -38,6 +49,16 @@ parse_print_statement(Trimmed) ->
                 nomatch ->
                     parse_input_statement(Trimmed)
             end
+    end.
+
+parse_print_using_items(Text) ->
+    case parse_print_items(Text) of
+        {ok, [], _EndWithNewline} ->
+            error;
+        {ok, [{FormatExpr, _FmtSep} | Rest], EndWithNewline} ->
+            {ok, FormatExpr, Rest, EndWithNewline};
+        error ->
+            error
     end.
 
 parse_print_items(Text) ->
@@ -369,6 +390,11 @@ validate_statement(Stmt) ->
     case parse_statement(Stmt) of
         {print, Items, _EndWithNewline} ->
             validate_print_items(Items);
+        {print_using, FormatExpr, Items, _EndWithNewline} ->
+            case validate_expr_syntax(FormatExpr) of
+                ok -> validate_print_items(Items);
+                error -> error
+            end;
         {input, Target} ->
             validate_target_syntax(Target);
         {'let', Target, Expr} ->
