@@ -2,6 +2,8 @@
 
 -export([run_program/1, resume_program_input/5]).
 
+-define(FLUSH_OUTPUT_EVERY, 50).
+
 -record(state, {
     vars = #{},
     prog = [],
@@ -15,41 +17,98 @@
 run_program(State = #state{prog = Program}) ->
     DataItems = collect_program_data(Program),
     RunState = State#state{data_items = DataItems, data_index = 1},
-    run_program_lines(Program, 1, RunState, [], [], []).
+    erlang:put(line_exec_count, 0),
+    Result = run_program_lines(Program, 1, RunState, [], [], []),
+    erlang:erase(line_exec_count),
+    Result.
 
+run_program_lines([], _Pc, State, _LoopStack, _CallStack, Acc) ->
+    {State, lists:reverse(Acc)};
 run_program_lines(Program, Pc, State, _LoopStack, _CallStack, Acc) when Pc > length(Program) ->
     {State, lists:reverse(Acc)};
 run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
+    Count = case erlang:get(line_exec_count) of undefined -> 0; N -> N end,
+    erlang:put(line_exec_count, Count + 1),
+    %% Check for interrupt message in mailbox (non-blocking)
+    receive
+        interrupt ->
+            erlang:put(interrupted, true)
+    after 0 ->
+        ok
+    end,
+    %% Periodic flush for output during loops
+    NewAcc = case should_flush_output() andalso (Count rem ?FLUSH_OUTPUT_EVERY =:= 0) andalso (Acc =/= []) of
+        true ->
+            flush_output(Acc),
+            [];
+        false ->
+            Acc
+    end,
     %% Check for Ctrl-C interrupt
     case erlang:get(interrupted) of
         true ->
             erlang:erase(interrupted),
-            {State, lists:reverse(["\r\n^C\r\nBREAK\r\n" | Acc])};
+            flush_output(NewAcc),
+            {State, ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
-            run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc)
+            run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, NewAcc)
     end.
 
 run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
     {_LineNumber, Code} = lists:nth(Pc, Program),
     case execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) of
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
+            %% Accumulate output
+            CombinedOutput = lists:reverse(Output) ++ Acc,
+            %% Flush if we have an output target
+            NewAcc = case should_flush_output() of
+                true ->
+                    flush_output(CombinedOutput),
+                    [];
+                false ->
+                    CombinedOutput
+            end,
             case NextState#state.pending_input of
                 undefined ->
-                    run_program_lines_impl(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, lists:reverse(Output) ++ Acc);
+                    run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc);
                 _ ->
-                    {NextState, lists:reverse(lists:reverse(Output) ++ Acc)}
+                    {NextState, lists:reverse(NewAcc)}
             end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
+            %% Accumulate output
+            CombinedOutput = lists:reverse(Output) ++ Acc,
+            %% Flush if we have an output target
+            NewAcc = case should_flush_output() of
+                true ->
+                    flush_output(CombinedOutput),
+                    [];
+                false ->
+                    CombinedOutput
+            end,
             case NextState#state.pending_input of
                 undefined ->
-                    run_program_lines_impl(Program, TargetPc, NextState, NextLoopStack, NextCallStack, lists:reverse(Output) ++ Acc);
+                    run_program_lines(Program, TargetPc, NextState, NextLoopStack, NextCallStack, NewAcc);
                 _ ->
-                    {NextState, lists:reverse(lists:reverse(Output) ++ Acc)}
+                    {NextState, lists:reverse(NewAcc)}
             end;
         {'end', Output} ->
-            {State, lists:reverse(["Program ended\r\n" | lists:reverse(Output) ++ Acc])};
+            %% Flush final output
+            flush_output(lists:reverse(Output) ++ Acc),
+            case should_flush_output() of
+                true ->
+                    {State, ["Program ended\r\n"]};
+                false ->
+                    {State, lists:reverse(["Program ended\r\n" | lists:reverse(Output) ++ Acc])}
+            end;
         {stop, Output} ->
-            {State, lists:reverse(lists:reverse(Output) ++ Acc)}
+            CombinedOutput = lists:reverse(Output) ++ Acc,
+            flush_output(CombinedOutput),
+            case should_flush_output() of
+                true ->
+                    {State, []};
+                false ->
+                    {State, lists:reverse(CombinedOutput)}
+            end
     end.
 
 execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) ->
@@ -433,4 +492,31 @@ line_to_pc([_ | Rest], LineNumber, Index) ->
     line_to_pc(Rest, LineNumber, Index + 1);
 line_to_pc([], _LineNumber, _Index) ->
     error.
+
+should_flush_output() ->
+    case erlang:get(output_socket) of
+        undefined ->
+            erlang:get(output_pid) =/= undefined;
+        _ ->
+            true
+    end.
+
+flush_output([]) ->
+    ok;
+flush_output(Acc) ->
+    Output = lists:reverse(Acc),
+    %% Check if output should go to WebSocket or TCP socket
+    case erlang:get(output_socket) of
+        undefined ->
+            %% WebSocket mode - send to output_pid
+            case erlang:get(output_pid) of
+                undefined ->
+                    ok;
+                Pid ->
+                    lists:foreach(fun(Text) -> Pid ! {output, Text} end, Output)
+            end;
+        Socket ->
+            %% TCP mode - send directly to socket
+            lists:foreach(fun(Text) -> gen_tcp:send(Socket, Text) end, Output)
+    end.
 

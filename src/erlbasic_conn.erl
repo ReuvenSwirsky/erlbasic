@@ -7,25 +7,77 @@
 start(Socket) ->
     ok = gen_tcp:send(Socket, "Welcome to Erlang BASIC\r\n"),
     ok = gen_tcp:send(Socket, "Type QUIT to disconnect.\r\n> "),
-    State = erlbasic_interp:new_state(),
-    loop(Socket, State).
+    %% Spawn worker process for interpreter
+    WorkerPid = spawn_link(fun() ->
+        State = erlbasic_interp:new_state(),
+        tcp_worker_loop(Socket, State)
+    end),
+    tcp_recv_loop(Socket, WorkerPid).
 
-loop(Socket, State) ->
-    case gen_tcp:recv(Socket, 0) of
+%% main TCP loop - receives data and forwards to worker
+tcp_recv_loop(Socket, WorkerPid) ->
+    case gen_tcp:recv(Socket, 0, 5000) of
         {ok, Bin} ->
-            Line = normalize_input_line(Bin),
-            case string:to_upper(Line) of
-                "QUIT" ->
-                    ok = gen_tcp:send(Socket, "Goodbye\r\n"),
-                    gen_tcp:close(Socket);
-                _ ->
-                    {NextState, Output} = erlbasic_interp:handle_input(Line, State),
-                    send_output(Socket, Output),
-                    ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(NextState)),
-                    loop(Socket, NextState)
+            %% Check for Ctrl-C (ASCII 3) or telnet interrupt (IAC IP: 255 244)
+            case binary:match(Bin, <<3>>) of
+                {_, _} ->
+                    WorkerPid ! interrupt,
+                    tcp_recv_loop(Socket, WorkerPid);
+                nomatch ->
+                    case binary:match(Bin, <<255, 244>>) of
+                        {_, _} ->
+                            %% Telnet interrupt protocol (IAC IP)
+                            WorkerPid ! interrupt,
+                            tcp_recv_loop(Socket, WorkerPid);
+                        nomatch ->
+                            Line = normalize_input_line(Bin),
+                            case string:to_upper(Line) of
+                                "QUIT" ->
+                                    ok = gen_tcp:send(Socket, "Goodbye\r\n"),
+                                    gen_tcp:close(Socket);
+                                _ ->
+                                    WorkerPid ! {input, Line},
+                                    tcp_recv_loop(Socket, WorkerPid)
+                            end
+                    end
+            end;
+        {error, timeout} ->
+            %% Check if worker is still alive
+            case erlang:is_process_alive(WorkerPid) of
+                true -> tcp_recv_loop(Socket, WorkerPid);
+                false -> gen_tcp:close(Socket)
             end;
         {error, closed} ->
             ok
+    end.
+
+%% Worker process for TCP - runs interpreter
+tcp_worker_loop(Socket, State) ->
+    receive
+        interrupt ->
+            erlang:put(interrupted, true),
+            tcp_worker_loop(Socket, State);
+        {input, Line} ->
+            %% Set up for incremental output during RUN
+            erlang:put(output_pid, self()),
+            erlang:put(output_socket, Socket),
+            try erlbasic_interp:handle_input(Line, State) of
+                {NextState, Output} ->
+                    send_output(Socket, Output),
+                    ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(NextState)),
+                    erlang:erase(output_pid),
+                    erlang:erase(output_socket),
+                    tcp_worker_loop(Socket, NextState)
+            catch
+                Class:Reason:Stacktrace ->
+                    io:format("ERROR in handle_input: ~p:~p~nStack: ~p~n", [Class, Reason, Stacktrace]),
+                    ErrorMsg = io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason]),
+                    ok = gen_tcp:send(Socket, ErrorMsg),
+                    ok = gen_tcp:send(Socket, "> "),
+                    erlang:erase(output_pid),
+                    erlang:erase(output_socket),
+                    tcp_worker_loop(Socket, State)
+            end
     end.
 
 %% ---- WebSocket mode ----
@@ -55,10 +107,22 @@ ws_loop(WsPid, State) ->
                 "QUIT" ->
                     WsPid ! {output, "Goodbye\r\n"};
                 _ ->
-                    {NextState, Output} = erlbasic_interp:handle_input(Line, State),
-                    lists:foreach(fun(T) -> WsPid ! {output, T} end, Output),
-                    WsPid ! {output, erlbasic_interp:next_prompt(NextState)},
-                    ws_loop(WsPid, NextState)
+                    %% Set up for incremental output during RUN
+                    erlang:put(output_pid, WsPid),
+                    try erlbasic_interp:handle_input(Line, State) of
+                        {NextState, Output} ->
+                            lists:foreach(fun(T) -> WsPid ! {output, T} end, Output),
+                            WsPid ! {output, erlbasic_interp:next_prompt(NextState)},
+                            erlang:erase(output_pid),
+                            ws_loop(WsPid, NextState)
+                    catch
+                        Class:Reason:_ ->
+                            ErrorMsg = io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason]),
+                            WsPid ! {output, ErrorMsg},
+                            WsPid ! {output, "> "},
+                            erlang:erase(output_pid),
+                            ws_loop(WsPid, State)
+                    end
             end
     end.
 
