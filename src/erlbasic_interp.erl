@@ -472,7 +472,7 @@ execute_statement_single(Command, State) ->
         {for_loop, _Var, _StartExpr, _EndExpr, _StepExpr} ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {next_loop, _MaybeVar} ->
-            {State, ["?SYNTAX ERROR\r\n"]};
+            {State, [erlbasic_eval:format_runtime_error(next_without_for)]};
         {goto, _LineExpr} ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {gosub, _LineExpr} ->

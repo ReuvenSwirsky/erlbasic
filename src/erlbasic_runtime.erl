@@ -505,7 +505,7 @@ eval_dim_values([Expr | Rest], Vars, Funcs, Acc) ->
 
 handle_next_statement(_MaybeVar, Program, _State, Pc, [], _CallStack) ->
     LineNumber = get_line_number(Program, Pc),
-    {stop, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]};
+    {stop, [erlbasic_eval:format_runtime_error(next_without_for, LineNumber)]};
 handle_next_statement(MaybeVar, Program, State, Pc, [{Var, EndInt, Step, ForPc} | Rest], CallStack) ->
     LineNumber = get_line_number(Program, Pc),
     case MaybeVar of
@@ -514,7 +514,7 @@ handle_next_statement(MaybeVar, Program, State, Pc, [{Var, EndInt, Step, ForPc} 
         Var ->
             continue_next(Var, EndInt, Step, ForPc, State, Pc, Rest, CallStack);
         _ ->
-            {stop, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]}
+            {stop, [erlbasic_eval:format_runtime_error(next_without_for, LineNumber)]}
     end.
 
 continue_next(Var, EndInt, Step, ForPc, State, _Pc, Rest, CallStack) ->
