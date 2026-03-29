@@ -27,11 +27,16 @@ These commands can be entered without a line number:
 - `RUN` - executes the stored program.
 - `CONT` - continues execution after a `BREAK` caused by Ctrl-C during `RUN`.
 - `NEW` - clears the stored program.
+- `DIR` - lists saved program files for the current user.
+- `SAVE <name>` - saves the current stored program to a file.
+- `LOAD <name>` - loads a saved program file into memory.
 - `RENUM [start[,increment]]` - renumbers stored program lines in order (defaults: `10,10`) and updates direct `GOTO`/`GOSUB` line-number references.
 - `QUIT` - disconnects from the TCP session.
 
 Notes:
 - `CONT` without a prior break context raises `?CAN'T CONTINUE ERROR`.
+- Saved programs are stored under the user's home directory in `BASIC/<user-id>`.
+- If no user id is set for the session, `default` is used.
 
 ## Statements
 
@@ -155,6 +160,45 @@ Notes:
 - Minimum position is row `1`, column `1`.
 - Cursor movement is supported for WebSocket/xterm sessions.
 - On telnet/TCP sessions, `LOCATE` raises `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
+
+### SAVE
+
+Saves the current stored program to disk.
+
+```text
+SAVE DEMO
+SAVE myprog.bas
+```
+
+Notes:
+- The file is saved to `~/BASIC/<user-id>/`.
+- Filenames are normalized for safety.
+- File write failures raise `?FILE ERROR`.
+
+### LOAD
+
+Loads a saved program from disk, replacing the current stored program.
+
+```text
+LOAD DEMO
+LOAD myprog.bas
+```
+
+Notes:
+- Files are loaded from `~/BASIC/<user-id>/`.
+- Missing or unreadable files raise `?FILE ERROR`.
+
+### DIR
+
+Lists saved program files for the current user.
+
+```text
+DIR
+```
+
+Notes:
+- Lists files from `~/BASIC/<user-id>/`.
+- If no files exist, no filenames are printed.
 
 ### DATA
 

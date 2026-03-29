@@ -1,5 +1,7 @@
 -module(erlbasic_interp).
 
+-include_lib("kernel/include/file.hrl").
+
 -export([new_state/0, handle_input/2, next_prompt/1]).
 
 
@@ -131,6 +133,8 @@ exec_immediate(Command, State) ->
     case Upper of
         "LIST" ->
             {State, format_program(State#state.prog)};
+        "DIR" ->
+            handle_dir_command(State);
         "NEW" ->
             {State#state{prog = [], data_items = [], data_index = 1, continue_ctx = undefined}, ["Program cleared\r\n"]};
         "RUN" ->
@@ -138,13 +142,182 @@ exec_immediate(Command, State) ->
         "CONT" ->
             continue_program(State);
         _ ->
-            case parse_renum_command(Command) of
-                {ok, StartLine, Increment} ->
-                    Renumbered = renumber_program(State#state.prog, StartLine, Increment),
-                    {State#state{prog = Renumbered, continue_ctx = undefined}, ["OK\r\n"]};
-                error ->
-                    normalize_immediate_result(execute_statement(Command, State), State)
+            case parse_file_command(Command) of
+                {save, FileName} ->
+                    handle_save_command(State, FileName);
+                {load, FileName} ->
+                    handle_load_command(State, FileName);
+                nomatch ->
+                    case parse_renum_command(Command) of
+                        {ok, StartLine, Increment} ->
+                            Renumbered = renumber_program(State#state.prog, StartLine, Increment),
+                            {State#state{prog = Renumbered, continue_ctx = undefined}, ["OK\r\n"]};
+                        error ->
+                            normalize_immediate_result(execute_statement(Command, State), State)
+                    end
             end
+    end.
+
+parse_file_command(Command) ->
+    Trimmed = string:trim(Command),
+    case re:run(Trimmed, "(?i)^SAVE\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [Name]} ->
+            {save, string:trim(Name)};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^LOAD\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [Name]} ->
+                    {load, string:trim(Name)};
+                nomatch ->
+                    nomatch
+            end
+    end.
+
+handle_dir_command(State) ->
+    case ensure_user_program_dir() of
+        {ok, Dir} ->
+            case file:list_dir(Dir) of
+                {ok, Names} ->
+                    Files = lists:sort([N || N <- Names, is_regular_file(Dir, N)]),
+                    Output =
+                        case Files of
+                            [] -> ["No files\r\n"];
+                            _ -> [Name ++ "\r\n" || Name <- Files]
+                        end,
+                    {State, Output};
+                {error, _} ->
+                    {State, ["?FILE ERROR\r\n"]}
+            end;
+        {error, _} ->
+            {State, ["?FILE ERROR\r\n"]}
+    end.
+
+handle_save_command(State, RawName) ->
+    case normalize_program_filename(RawName) of
+        {ok, FileName} ->
+            case ensure_user_program_dir() of
+                {ok, Dir} ->
+                    Path = filename:join(Dir, FileName),
+                    Content = serialize_program(State#state.prog),
+                    case file:write_file(Path, Content) of
+                        ok -> {State, ["Saved " ++ FileName ++ "\r\n"]};
+                        {error, _} -> {State, ["?FILE ERROR\r\n"]}
+                    end;
+                {error, _} ->
+                    {State, ["?FILE ERROR\r\n"]}
+            end;
+        error ->
+            {State, ["?FILE ERROR\r\n"]}
+    end.
+
+handle_load_command(State, RawName) ->
+    case normalize_program_filename(RawName) of
+        {ok, FileName} ->
+            case ensure_user_program_dir() of
+                {ok, Dir} ->
+                    Path = filename:join(Dir, FileName),
+                    case file:read_file(Path) of
+                        {ok, Bin} ->
+                            case parse_program_text(binary_to_list(Bin)) of
+                                {ok, Program} ->
+                                    {State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+                                error ->
+                                    {State, ["?SYNTAX ERROR\r\n"]}
+                            end;
+                        {error, _} ->
+                            {State, ["?FILE ERROR\r\n"]}
+                    end;
+                {error, _} ->
+                    {State, ["?FILE ERROR\r\n"]}
+            end;
+        error ->
+            {State, ["?FILE ERROR\r\n"]}
+    end.
+
+serialize_program(Program) ->
+    Lines = [integer_to_list(LineNumber) ++ " " ++ Code || {LineNumber, Code} <- Program],
+    string:join(Lines, "\n") ++ "\n".
+
+parse_program_text(Text) ->
+    Lines = [string:trim(Line) || Line <- string:split(Text, "\n", all)],
+    parse_program_lines(Lines, []).
+
+parse_program_lines([], Acc) ->
+    {ok, lists:keysort(1, Acc)};
+parse_program_lines(["" | Rest], Acc) ->
+    parse_program_lines(Rest, Acc);
+parse_program_lines([Line | Rest], Acc) ->
+    case parse_program_line(Line) of
+        {program_line, Num, Code} ->
+            case erlbasic_parser:validate_program_line(Code) of
+                ok ->
+                    parse_program_lines(Rest, [{Num, Code} | lists:keydelete(Num, 1, Acc)]);
+                error ->
+                    error
+            end;
+        immediate ->
+            error
+    end.
+
+ensure_user_program_dir() ->
+    Dir = user_program_dir(),
+    case filelib:ensure_dir(filename:join(Dir, "dummy.txt")) of
+        ok -> {ok, Dir};
+        {error, Reason} -> {error, Reason}
+    end.
+
+user_program_dir() ->
+    Home = user_home_dir(),
+    UserId = sanitized_user_id(),
+    filename:join([Home, "BASIC", UserId]).
+
+user_home_dir() ->
+    case os:getenv("HOME") of
+        false ->
+            case os:getenv("USERPROFILE") of
+                false -> ".";
+                Path -> Path
+            end;
+        Path -> Path
+    end.
+
+sanitized_user_id() ->
+    Raw =
+        case erlang:get(erlbasic_user_id) of
+            undefined -> "default";
+            Value when is_list(Value) -> Value;
+            Value -> lists:flatten(io_lib:format("~p", [Value]))
+        end,
+    keep_safe_chars(Raw).
+
+normalize_program_filename(RawName) ->
+    Name0 = string:trim(RawName),
+    Name = keep_safe_chars(Name0),
+    case Name of
+        "" ->
+            error;
+        _ ->
+            case filename:extension(Name) of
+                "" -> {ok, Name ++ ".bas"};
+                _ -> {ok, Name}
+            end
+    end.
+
+keep_safe_chars(Text) ->
+    Safe = [Ch || Ch <- Text,
+        (Ch >= $A andalso Ch =< $Z) orelse
+        (Ch >= $a andalso Ch =< $z) orelse
+        (Ch >= $0 andalso Ch =< $9) orelse
+        Ch =:= $_ orelse Ch =:= $- orelse Ch =:= $.],
+    case Safe of
+        [] -> "";
+        _ -> Safe
+    end.
+
+is_regular_file(Dir, Name) ->
+    Path = filename:join(Dir, Name),
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = regular}} -> true;
+        _ -> false
     end.
 
 parse_renum_command(Command) ->

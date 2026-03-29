@@ -7,7 +7,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - Multiple concurrent TCP and/or WebSocket clients
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
-- Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `RENUM`, `QUIT`
+- Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `RENUM`, `QUIT`
 - Program statements: `LET`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
 - Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `DATE$`, `TIME$`, `TERM$`)
 
@@ -112,6 +112,7 @@ RUN
 - Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point when continuation context exists.
 - Runtime errors include `?TYPE MISMATCH ERROR`, `?CAN'T CONTINUE ERROR`, and `?RETURN WITHOUT GOSUB ERROR`.
 - `LOCATE row, col` moves the cursor for WebSocket/xterm clients. Telnet/TCP sessions report `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
+- `SAVE <name>`, `LOAD <name>`, and `DIR` manage stored programs in a per-user directory under `~/BASIC/<user-id>` (falls back to `default`).
 
 ## Syntax Reference
 
