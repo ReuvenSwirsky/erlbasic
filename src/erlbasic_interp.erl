@@ -11,7 +11,8 @@
     immediate_for_buffer = undefined,
     data_items = [],
     data_index = 1,
-    print_col = 0
+    print_col = 0,
+    continue_ctx = undefined
 }).
 
 new_state() ->
@@ -38,12 +39,12 @@ handle_input(Line, State) ->
 
 handle_program_line(LineNumber, "", State) ->
     NextProgram = update_program(State#state.prog, LineNumber, ""),
-    {State#state{prog = NextProgram, data_items = [], data_index = 1}, ["OK\r\n"]};
+    {State#state{prog = NextProgram, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
 handle_program_line(LineNumber, Code, State) ->
     case erlbasic_parser:validate_program_line(Code) of
         ok ->
             NextProgram = update_program(State#state.prog, LineNumber, Code),
-            {State#state{prog = NextProgram, data_items = [], data_index = 1}, ["OK\r\n"]};
+            {State#state{prog = NextProgram, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
         error ->
             {State, ["?SYNTAX ERROR\r\n"]}
     end.
@@ -131,14 +132,16 @@ exec_immediate(Command, State) ->
         "LIST" ->
             {State, format_program(State#state.prog)};
         "NEW" ->
-            {State#state{prog = [], data_items = [], data_index = 1}, ["Program cleared\r\n"]};
+            {State#state{prog = [], data_items = [], data_index = 1, continue_ctx = undefined}, ["Program cleared\r\n"]};
         "RUN" ->
             run_program(State);
+        "CONT" ->
+            continue_program(State);
         _ ->
             case parse_renum_command(Command) of
                 {ok, StartLine, Increment} ->
                     Renumbered = renumber_program(State#state.prog, StartLine, Increment),
-                    {State#state{prog = Renumbered}, ["OK\r\n"]};
+                    {State#state{prog = Renumbered, continue_ctx = undefined}, ["OK\r\n"]};
                 error ->
                     normalize_immediate_result(execute_statement(Command, State), State)
             end
@@ -286,7 +289,12 @@ is_basic_keyword(Word) ->
     ]).
 
 run_program(State) ->
-    erlbasic_runtime:run_program(State).
+    erlbasic_runtime:run_program(State#state{continue_ctx = undefined}).
+
+continue_program(State = #state{continue_ctx = undefined}) ->
+    {State, [erlbasic_eval:format_runtime_error(cant_continue)]};
+continue_program(State = #state{continue_ctx = {Pc, LoopStack, CallStack}}) ->
+    erlbasic_runtime:continue_program(State#state{continue_ctx = undefined}, Pc, LoopStack, CallStack).
 
 handle_pending_input(Line, State = #state{pending_input = {Target, Continuation}}) ->
     case parse_input_value(Target, Line, State#state.vars, State#state.funcs) of
