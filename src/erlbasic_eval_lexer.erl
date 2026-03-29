@@ -5,7 +5,7 @@
 -define(EXPR_KEYWORDS, [
     "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
     "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "MOD",
-    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$"
+    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$", "TERM$"
 ]).
 
 tokenize_expr(Text) ->

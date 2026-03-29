@@ -6,7 +6,7 @@ is_builtin_function(Name) ->
     lists:member(Name, [
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
         "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$"
+        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$", "TERM$"
     ]).
 
 apply_math_function("ABS", [X]) ->
@@ -53,6 +53,11 @@ apply_math_function("DATE$", []) ->
     {ok, basic_date()};
 apply_math_function("TIME$", []) ->
     {ok, basic_time()};
+apply_math_function("TERM$", []) ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> {ok, "XTERM"};
+        _         -> {ok, "TELNET"}
+    end;
 apply_math_function("SGN", [X]) when X < 0 ->
     {ok, -1};
 apply_math_function("SGN", [0]) ->

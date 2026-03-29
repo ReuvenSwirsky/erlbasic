@@ -1,0 +1,2 @@
+10 PRINT TERM$()
+20 END
