@@ -12,7 +12,8 @@
     declare_array/3,
     target_is_string/1,
     normalize_int/1,
-    format_runtime_error/1
+    format_runtime_error/1,
+    format_runtime_error/2
 ]).
 
 -define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$").
@@ -139,6 +140,19 @@ format_runtime_error(syntax_error) ->
     "?SYNTAX ERROR\r\n";
 format_runtime_error(_) ->
     "?SYNTAX ERROR\r\n".
+
+%% Format runtime error with line number (for program execution)
+format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
+    ErrorType = case Reason of
+        division_by_zero -> "DIVISION BY ZERO ERROR";
+        out_of_data -> "OUT OF DATA ERROR";
+        illegal_function_call -> "ILLEGAL FUNCTION CALL";
+        syntax_error -> "SYNTAX ERROR";
+        _ -> "SYNTAX ERROR"
+    end,
+    io_lib:format("?~s IN ~p\r\n", [ErrorType, LineNumber]);
+format_runtime_error(Reason, _) ->
+    format_runtime_error(Reason).
 
 eval_indices(IndexExprs, Vars, Funcs) ->
     eval_indices(IndexExprs, Vars, Funcs, []).

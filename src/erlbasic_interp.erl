@@ -27,13 +27,24 @@ handle_input(Line, State) ->
         undefined ->
             case parse_program_line(Trimmed) of
                 {program_line, Num, Code} ->
-                    NextProgram = update_program(State#state.prog, Num, Code),
-                    {State#state{prog = NextProgram, data_items = [], data_index = 1}, ["OK\r\n"]};
+                    handle_program_line(Num, Code, State);
                 immediate ->
                     handle_immediate_or_buffer_line(Trimmed, State)
             end;
         _ ->
             handle_pending_input(Trimmed, State)
+    end.
+
+handle_program_line(LineNumber, "", State) ->
+    NextProgram = update_program(State#state.prog, LineNumber, ""),
+    {State#state{prog = NextProgram, data_items = [], data_index = 1}, ["OK\r\n"]};
+handle_program_line(LineNumber, Code, State) ->
+    case erlbasic_parser:validate_program_line(Code) of
+        ok ->
+            NextProgram = update_program(State#state.prog, LineNumber, Code),
+            {State#state{prog = NextProgram, data_items = [], data_index = 1}, ["OK\r\n"]};
+        error ->
+            {State, ["?SYNTAX ERROR\r\n"]}
     end.
 
 parse_program_line("") ->

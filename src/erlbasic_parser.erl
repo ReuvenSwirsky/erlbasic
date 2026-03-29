@@ -1,6 +1,6 @@
 -module(erlbasic_parser).
 
--export([parse_statement/1, should_split_top_level_sequence/1, split_statements/1]).
+-export([parse_statement/1, should_split_top_level_sequence/1, split_statements/1, validate_program_line/1]).
 
 -define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%]?)").
 -define(VAR_BASE_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%]?)").
@@ -9,6 +9,15 @@
 parse_statement(Command) ->
     Trimmed = string:trim(Command),
     parse_print_statement(Trimmed).
+
+validate_program_line(Command) ->
+    Trimmed = string:trim(Command),
+    case has_balanced_quotes(Trimmed) of
+        false ->
+            error;
+        true ->
+            validate_statement_sequence(Trimmed)
+    end.
 
 parse_print_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^PRINT\\s+(.+)$", [{capture, [1], list}]) of
@@ -292,3 +301,133 @@ add_part("", PartsRev) ->
     PartsRev;
 add_part(Part, PartsRev) ->
     [Part | PartsRev].
+
+validate_statement_sequence("") ->
+    ok;
+validate_statement_sequence(Command) ->
+    Statements =
+        case should_split_top_level_sequence(Command) of
+            true -> split_statements(Command);
+            false -> [string:trim(Command)]
+        end,
+    validate_statements(Statements).
+
+validate_statements([]) ->
+    ok;
+validate_statements([Stmt | Rest]) ->
+    case validate_statement(Stmt) of
+        ok -> validate_statements(Rest);
+        error -> error
+    end.
+
+validate_statement(Stmt) ->
+    case parse_statement(Stmt) of
+        {print, Expr} ->
+            validate_expr_syntax(Expr);
+        {input, Target} ->
+            validate_target_syntax(Target);
+        {'let', Target, Expr} ->
+            case validate_target_syntax(Target) of
+                ok -> validate_expr_syntax(Expr);
+                error -> error
+            end;
+        {dim, Decls} ->
+            validate_dim_decls(Decls);
+        {def_fn, _FnName, _ArgVar, Expr} ->
+            validate_expr_syntax(Expr);
+        {if_then_else, CondExpr, ThenStmt, ElseStmt} ->
+            case validate_condition_syntax(CondExpr) of
+                ok ->
+                    case validate_statement_sequence(ThenStmt) of
+                        ok -> validate_optional_statement_sequence(ElseStmt);
+                        error -> error
+                    end;
+                error ->
+                    error
+            end;
+        {goto, LineExpr} ->
+            validate_expr_syntax(LineExpr);
+        {gosub, LineExpr} ->
+            validate_expr_syntax(LineExpr);
+        {for_loop, _Var, StartExpr, EndExpr, undefined} ->
+            validate_expr_pair(StartExpr, EndExpr);
+        {for_loop, _Var, StartExpr, EndExpr, StepExpr} ->
+            case validate_expr_pair(StartExpr, EndExpr) of
+                ok -> validate_expr_syntax(StepExpr);
+                error -> error
+            end;
+        {next_loop, _MaybeVar} ->
+            ok;
+        {data, _Items} ->
+            ok;
+        {read_data, Targets} ->
+            validate_targets(Targets);
+        {'return'} ->
+            ok;
+        {'end'} ->
+            ok;
+        unknown ->
+            error
+    end.
+
+validate_optional_statement_sequence(undefined) ->
+    ok;
+validate_optional_statement_sequence(Stmt) ->
+    validate_statement_sequence(Stmt).
+
+validate_expr_pair(LeftExpr, RightExpr) ->
+    case validate_expr_syntax(LeftExpr) of
+        ok -> validate_expr_syntax(RightExpr);
+        error -> error
+    end.
+
+validate_targets([]) ->
+    ok;
+validate_targets([Target | Rest]) ->
+    case validate_target_syntax(Target) of
+        ok -> validate_targets(Rest);
+        error -> error
+    end.
+
+validate_dim_decls([]) ->
+    ok;
+validate_dim_decls([{_Name, DimExprs} | Rest]) ->
+    case validate_exprs(DimExprs) of
+        ok -> validate_dim_decls(Rest);
+        error -> error
+    end.
+
+validate_target_syntax({var_target, _Var}) ->
+    ok;
+validate_target_syntax({array_target, _Var, IndexExprs}) ->
+    validate_exprs(IndexExprs).
+
+validate_exprs([]) ->
+    ok;
+validate_exprs([Expr | Rest]) ->
+    case validate_expr_syntax(Expr) of
+        ok -> validate_exprs(Rest);
+        error -> error
+    end.
+
+validate_expr_syntax(Expr) ->
+    case erlbasic_eval:eval_expr_result(Expr, #{}, #{}) of
+        {error, syntax_error, _} -> error;
+        _ -> ok
+    end.
+
+validate_condition_syntax(CondExpr) ->
+    case erlbasic_eval:eval_condition_result(CondExpr, #{}, #{}) of
+        {error, syntax_error} -> error;
+        _ -> ok
+    end.
+
+has_balanced_quotes(Text) ->
+    has_balanced_quotes(Text, false).
+
+has_balanced_quotes([], InString) ->
+    not InString;
+has_balanced_quotes([$" | Rest], InString) ->
+    has_balanced_quotes(Rest, not InString);
+has_balanced_quotes([_Ch | Rest], InString) ->
+    has_balanced_quotes(Rest, InString).

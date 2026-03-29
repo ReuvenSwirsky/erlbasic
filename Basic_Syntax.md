@@ -52,7 +52,7 @@ LET CUBE(1,1,1) = 99
 
 Variable rules:
 - Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names or `%` for integer-style names
-- Variable lookup is case-insensitive (`x`, `X`, and `x` all refer to the same variable).
+- Variable lookup is case-insensitive (`X`, and `x` refer to the same variable).
 
 Examples:
 
