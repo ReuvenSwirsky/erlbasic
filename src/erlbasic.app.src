@@ -3,7 +3,7 @@
   {vsn, "0.1.0"},
   {modules, [erlbasic_app, erlbasic_sup, erlbasic_listener, erlbasic_conn, erlbasic_interp,
              erlbasic_ws_handler, erlbasic_http_handler,
-             erlbasic_accounts, erlbasic_admin_handler]},
+             erlbasic_accounts, erlbasic_admin_handler, erlbasic_storage]},
   {registered, []},
   {applications, [kernel, stdlib, crypto, cowboy]},
   {mod, {erlbasic_app, []}},

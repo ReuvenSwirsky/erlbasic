@@ -62,6 +62,7 @@ tcp_prompt_password(Socket, P, N, Attempts) ->
 tcp_try_login(Socket, P, N, Pw, Attempts) ->
     case erlbasic_accounts:authenticate(P, N, Pw) of
         {ok, Name} ->
+            erlang:put(erlbasic_ppn, {P, N}),
             NameStr = binary_to_list(Name),
             Msg = io_lib:format(" ~s  ~s\r\n\r\n Ready\r\n",
                                 [format_ppn(P, N), NameStr]),
@@ -120,15 +121,18 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
             case parse_os_command(Line) of
                 logout ->
                     %% BYE: log off and return to the OS login prompt
+                    erlang:erase(erlbasic_ppn),
                     ok = gen_tcp:send(Socket, io_lib:format(
                             " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
                     tcp_login_loop(Socket, 0);
                 quit ->
                     %% QUIT: disconnect entirely
+                    erlang:erase(erlbasic_ppn),
                     ok = gen_tcp:send(Socket, "Goodbye\r\n"),
                     gen_tcp:close(Socket);
                 {login, HelloResult} ->
                     %% HELLO/LOGIN/I: log off current user and start a new login
+                    erlang:erase(erlbasic_ppn),
                     ok = gen_tcp:send(Socket, io_lib:format(
                             " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
                     case HelloResult of
@@ -231,6 +235,7 @@ ws_prompt_password(WsPid, P, N, Attempts) ->
 ws_try_login(WsPid, P, N, Pw, Attempts) ->
     case erlbasic_accounts:authenticate(P, N, Pw) of
         {ok, Name} ->
+            erlang:put(erlbasic_ppn, {P, N}),
             NameStr = binary_to_list(Name),
             Msg = io_lib:format(" ~s  ~s\r\n\r\n Ready\r\n",
                                 [format_ppn(P, N), NameStr]),
@@ -257,14 +262,17 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
             case parse_os_command(Line) of
                 logout ->
                     %% BYE: log off and return to the OS login prompt
+                    erlang:erase(erlbasic_ppn),
                     WsPid ! {output, io_lib:format(
                                 " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
                     ws_login_loop(WsPid, 0);
                 quit ->
                     %% QUIT: disconnect entirely
+                    erlang:erase(erlbasic_ppn),
                     WsPid ! {output, "Goodbye\r\n"};
                 {login, HelloResult} ->
                     %% HELLO/LOGIN/I: log off current user and start a new login
+                    erlang:erase(erlbasic_ppn),
                     WsPid ! {output, io_lib:format(
                                 " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
                     case HelloResult of

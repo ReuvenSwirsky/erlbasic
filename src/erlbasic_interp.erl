@@ -173,22 +173,12 @@ parse_file_command(Command) ->
     end.
 
 handle_dir_command(State) ->
-    case ensure_user_program_dir() of
-        {ok, UserDir} ->
-            case list_regular_files(UserDir) of
-                {ok, UserFiles} ->
-                    case list_example_files() of
-                        {ok, ExampleFiles} ->
-                            Files = lists:usort(UserFiles ++ ExampleFiles),
-                            Output =
-                                case Files of
-                                    [] -> ["No files\r\n"];
-                                    _ -> [Name ++ "\r\n" || Name <- Files]
-                                end,
-                            {State, Output};
-                        {error, _} ->
-                            {State, ["?FILE ERROR\r\n"]}
-                    end;
+    case erlbasic_storage:list_programs() of
+        {ok, UserFiles} ->
+            case list_example_files() of
+                {ok, ExampleFiles} ->
+                    Output = format_dir_listing(UserFiles, ExampleFiles),
+                    {State, Output};
                 {error, _} ->
                     {State, ["?FILE ERROR\r\n"]}
             end;
@@ -196,19 +186,30 @@ handle_dir_command(State) ->
             {State, ["?FILE ERROR\r\n"]}
     end.
 
+format_dir_listing([], []) ->
+    ["No files\r\n"];
+format_dir_listing(UserFiles, ExampleFiles) ->
+    UserSection =
+        case UserFiles of
+            [] -> [];
+            _  -> ["My programs:\r\n"] ++
+                  ["  " ++ N ++ "\r\n" || N <- lists:sort(UserFiles)]
+        end,
+    ExampleSection =
+        case ExampleFiles of
+            [] -> [];
+            _  -> ["\r\nExamples:\r\n"] ++
+                  ["  " ++ N ++ "\r\n" || N <- lists:sort(ExampleFiles)]
+        end,
+    UserSection ++ ExampleSection.
+
 handle_save_command(State, RawName) ->
     case normalize_program_filename(RawName) of
         {ok, FileName} ->
-            case ensure_user_program_dir() of
-                {ok, Dir} ->
-                    Path = filename:join(Dir, FileName),
-                    Content = serialize_program(State#state.prog),
-                    case file:write_file(Path, Content) of
-                        ok -> {State, ["Saved " ++ FileName ++ "\r\n"]};
-                        {error, _} -> {State, ["?FILE ERROR\r\n"]}
-                    end;
-                {error, _} ->
-                    {State, ["?FILE ERROR\r\n"]}
+            Content = serialize_program(State#state.prog),
+            case erlbasic_storage:write_program(FileName, Content) of
+                ok           -> {State, ["Saved " ++ FileName ++ "\r\n"]};
+                {error, _}   -> {State, ["?FILE ERROR\r\n"]}
             end;
         error ->
             {State, ["?FILE ERROR\r\n"]}
@@ -234,37 +235,40 @@ handle_load_command(State, RawName) ->
     end.
 
 load_program_file(FileName) ->
+    %% 1. Try the shared examples directory first.
     ExamplePath = filename:join(examples_program_dir(), FileName),
     case read_program_file(ExamplePath) of
-        {ok, Program} ->
-            {ok, Program};
-        {syntax_error, _LineNumber} = SyntaxErr ->
-            SyntaxErr;
-        syntax_error ->
-            syntax_error;
-        {error, ExampleReason} ->
-            UserPath = filename:join(user_program_dir(), FileName),
-            case read_program_file(UserPath) of
-                {error, enoent} when ExampleReason =:= enoent ->
+        {ok, _} = Ok         -> Ok;
+        {syntax_error, _} = E -> E;
+        syntax_error          -> syntax_error;
+        {error, enoent} ->
+            %% 2. Fall back to the user's own storage area.
+            case erlbasic_storage:read_program(FileName) of
+                {ok, Bin} ->
+                    parse_bin_as_program(Bin);
+                {error, enoent} ->
                     {error, program_not_found};
-                UserResult ->
-                    UserResult
-            end
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 read_program_file(Path) ->
     case file:read_file(Path) of
-        {ok, Bin} ->
-            case parse_program_text(binary_to_list(Bin)) of
-                {ok, Program} ->
-                    {ok, Program};
-                {error, {syntax_error, LineNumber}} when is_integer(LineNumber) ->
-                    {syntax_error, LineNumber};
-                error ->
-                    syntax_error
-            end;
-        {error, Reason} ->
-            {error, Reason}
+        {ok, Bin} -> parse_bin_as_program(Bin);
+        {error, Reason} -> {error, Reason}
+    end.
+
+parse_bin_as_program(Bin) ->
+    case parse_program_text(binary_to_list(Bin)) of
+        {ok, Program} ->
+            {ok, Program};
+        {error, {syntax_error, LineNumber}} when is_integer(LineNumber) ->
+            {syntax_error, LineNumber};
+        error ->
+            syntax_error
     end.
 
 serialize_program(Program) ->
@@ -292,52 +296,24 @@ parse_program_lines([Line | Rest], Acc) ->
             error
     end.
 
-ensure_user_program_dir() ->
-    case ensure_basic_root_dir() of
-        {ok, _BasicRoot} ->
-            Dir = user_program_dir(),
-            case filelib:ensure_dir(filename:join(Dir, "dummy.txt")) of
-                ok -> {ok, Dir};
-                {error, Reason} -> {error, Reason}
-            end;
+%% ---- File-system helpers (examples dir and utilities) ----
+%% Per-user file I/O is handled by erlbasic_storage.  Only shared
+%% example files are accessed directly here.
+
+list_regular_files(Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            {ok, lists:sort([N || N <- Names, is_regular_file(Dir, N)])};
         {error, Reason} ->
             {error, Reason}
     end.
 
-ensure_basic_root_dir() ->
-    Root = basic_root_dir(),
-    case filelib:ensure_dir(filename:join(Root, "dummy.txt")) of
-        ok -> {ok, Root};
-        {error, Reason} -> {error, Reason}
+is_regular_file(Dir, Name) ->
+    Path = filename:join(Dir, Name),
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = regular}} -> true;
+        _ -> false
     end.
-
-user_program_dir() ->
-    Home = user_home_dir(),
-    UserId = sanitized_user_id(),
-    filename:join([Home, "BASIC", UserId]).
-
-basic_root_dir() ->
-    filename:join(user_home_dir(), "BASIC").
-
-user_home_dir() ->
-    case os:getenv("HOME") of
-        false ->
-            case os:getenv("USERPROFILE") of
-                false -> ".";
-                Path -> Path
-            end;
-        Path -> Path
-    end.
-
-sanitized_user_id() ->
-    Raw =
-        case erlang:get(erlbasic_user_id) of
-            undefined -> "default";
-            Value when is_list(Value) -> Value;
-            Value -> lists:flatten(io_lib:format("~p", [Value]))
-        end,
-    keep_safe_chars(Raw).
-
 normalize_program_filename(RawName) ->
     Name0 = string:trim(RawName),
     Name = keep_safe_chars(Name0),
@@ -360,21 +336,6 @@ keep_safe_chars(Text) ->
     case Safe of
         [] -> "";
         _ -> Safe
-    end.
-
-is_regular_file(Dir, Name) ->
-    Path = filename:join(Dir, Name),
-    case file:read_file_info(Path) of
-        {ok, #file_info{type = regular}} -> true;
-        _ -> false
-    end.
-
-list_regular_files(Dir) ->
-    case file:list_dir(Dir) of
-        {ok, Names} ->
-            {ok, lists:sort([N || N <- Names, is_regular_file(Dir, N)])};
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 list_example_files() ->
