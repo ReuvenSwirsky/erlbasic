@@ -18,7 +18,19 @@ builtin_len_test() ->
 immediate_print_test() ->
     State0 = erlbasic_interp:new_state(),
     {_State1, Output} = erlbasic_interp:handle_input("PRINT 1+1", State0),
-    ?assertEqual("2\r\n", lists:flatten(Output)).
+    ?assertEqual("2\r\n", lists:flatten(Output)),
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        State2 = erlbasic_interp:new_state(),
+        {_State3, ClsOutput} = erlbasic_interp:handle_input("CLS", State2),
+        ?assertEqual("\e[0m\e[2J\e[H", lists:flatten(ClsOutput))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
 
 run_program_output_test() ->
     State0 = erlbasic_interp:new_state(),

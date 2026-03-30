@@ -644,7 +644,7 @@ print_sep_text(comma, Col, StartCol) ->
 
 cls_output() ->
     case erlang:get(erlbasic_conn_type) of
-        websocket -> ["\e[2J\e[H"];
+        websocket -> ["\e[0m\e[2J\e[H"];
         _ -> []
     end.
 
