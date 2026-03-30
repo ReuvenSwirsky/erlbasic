@@ -311,6 +311,13 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
             {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
         {cls} ->
             {continue, State, LoopStack, CallStack, cls_output()};
+        {color, FgExpr, BgExpr} ->
+            case eval_color(FgExpr, BgExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                {error, Reason, _Vars1} ->
+                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+            end;
         {'end'} ->
             {'end', []};
         _ ->
@@ -638,6 +645,44 @@ cls_output() ->
         websocket -> ["\e[2J\e[H"];
         _ -> []
     end.
+
+eval_color(FgExpr, BgExpr, Vars, Funcs) ->
+    case erlbasic_eval:eval_expr_result(FgExpr, Vars, Funcs) of
+        {error, Reason, Vars1} ->
+            {error, Reason, Vars1};
+        {ok, FgValue, Vars1} ->
+            Fg = erlbasic_eval:normalize_int(FgValue),
+            case BgExpr of
+                undefined ->
+                    {ok, Vars1, color_output(Fg, undefined)};
+                _ ->
+                    case erlbasic_eval:eval_expr_result(BgExpr, Vars1, Funcs) of
+                        {error, Reason, Vars2} ->
+                            {error, Reason, Vars2};
+                        {ok, BgValue, Vars2} ->
+                            Bg = erlbasic_eval:normalize_int(BgValue),
+                            {ok, Vars2, color_output(Fg, Bg)}
+                    end
+            end
+    end.
+
+color_output(Fg, Bg) ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket ->
+            FgCode = ansi_fg_code(Fg band 15),
+            BgCode = case Bg of
+                undefined -> [];
+                _ -> [io_lib:format("\e[~Bm", [ansi_bg_code(Bg band 7)])]
+            end,
+            [io_lib:format("\e[~Bm", [FgCode])] ++ BgCode;
+        _ ->
+            []
+    end.
+
+ansi_fg_code(C) when C >= 8 -> 82 + C;   %% bright: 90-97
+ansi_fg_code(C)              -> 30 + C.  %% normal: 30-37
+
+ansi_bg_code(C) -> 40 + C.               %% background: 40-47
 
 render_print_using_items(Items, FormatText, Vars, Funcs, StartCol) ->
     render_print_using_items(Items, FormatText, Vars, Funcs, StartCol, [], StartCol).

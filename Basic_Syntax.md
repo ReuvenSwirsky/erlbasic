@@ -161,6 +161,22 @@ Notes:
 - Cursor movement is supported for WebSocket/xterm sessions.
 - On telnet/TCP sessions, `LOCATE` raises `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
 
+### COLOR
+
+Sets the text foreground and optionally background color.
+
+```text
+COLOR 14
+COLOR 14, 1
+COLOR 7, 0
+```
+
+Notes:
+- Foreground values 0–15 follow the standard GW-BASIC palette (0=black, 1=blue, 2=green, 3=cyan, 4=red, 5=magenta, 6=brown, 7=white, 8–15=bright variants).
+- Background values 0–7 (same palette, no bright variants).
+- On WebSocket/xterm sessions the appropriate ANSI SGR escape is emitted.
+- On telnet/TCP sessions `COLOR` is silently ignored.
+
 ### SAVE
 
 Saves the current stored program to disk.

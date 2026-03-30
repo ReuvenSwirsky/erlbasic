@@ -342,7 +342,17 @@ parse_keyword_statement(Trimmed) ->
         "CLS" -> {cls};
         "RETURN" -> {'return'};
         "END" -> {'end'};
-        _ -> parse_implicit_let_statement(Trimmed)
+        _ -> parse_color_statement(Trimmed)
+    end.
+
+parse_color_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^COLOR\\s+(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [FgExpr]} ->
+            {color, FgExpr, undefined};
+        {match, [FgExpr, BgExpr]} ->
+            {color, FgExpr, BgExpr};
+        nomatch ->
+            parse_implicit_let_statement(Trimmed)
     end.
 
 parse_implicit_let_statement(Trimmed) ->
@@ -459,6 +469,10 @@ validate_statement(Stmt) ->
             ok;
         {cls} ->
             ok;
+        {color, FgExpr, undefined} ->
+            validate_expr_syntax(FgExpr);
+        {color, FgExpr, BgExpr} ->
+            validate_expr_pair(FgExpr, BgExpr);
         {'end'} ->
             ok;
         unknown ->
