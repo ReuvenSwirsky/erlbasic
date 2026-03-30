@@ -220,8 +220,12 @@ handle_load_command(State, RawName) ->
             case load_program_file(FileName) of
                 {ok, Program} ->
                     {State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+                {syntax_error, LineNumber} when is_integer(LineNumber) ->
+                    {State, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]};
                 syntax_error ->
                     {State, ["?SYNTAX ERROR\r\n"]};
+                {error, program_not_found} ->
+                    {State, [erlbasic_eval:format_runtime_error(program_not_found)]};
                 {error, _} ->
                     {State, ["?FILE ERROR\r\n"]}
             end;
@@ -234,11 +238,18 @@ load_program_file(FileName) ->
     case read_program_file(ExamplePath) of
         {ok, Program} ->
             {ok, Program};
+        {syntax_error, _LineNumber} = SyntaxErr ->
+            SyntaxErr;
         syntax_error ->
             syntax_error;
-        {error, _} ->
+        {error, ExampleReason} ->
             UserPath = filename:join(user_program_dir(), FileName),
-            read_program_file(UserPath)
+            case read_program_file(UserPath) of
+                {error, enoent} when ExampleReason =:= enoent ->
+                    {error, program_not_found};
+                UserResult ->
+                    UserResult
+            end
     end.
 
 read_program_file(Path) ->
@@ -247,6 +258,8 @@ read_program_file(Path) ->
             case parse_program_text(binary_to_list(Bin)) of
                 {ok, Program} ->
                     {ok, Program};
+                {error, {syntax_error, LineNumber}} when is_integer(LineNumber) ->
+                    {syntax_error, LineNumber};
                 error ->
                     syntax_error
             end;
@@ -273,7 +286,7 @@ parse_program_lines([Line | Rest], Acc) ->
                 ok ->
                     parse_program_lines(Rest, [{Num, Code} | lists:keydelete(Num, 1, Acc)]);
                 error ->
-                    error
+                    {error, {syntax_error, Num}}
             end;
         immediate ->
             error

@@ -215,7 +215,8 @@ LOAD myprog.bas
 
 Notes:
 - Files are loaded from `~/BASIC/<user-id>/`.
-- Missing or unreadable files raise `?FILE ERROR`.
+- Missing files raise `?PROGRAM NOT FOUND`.
+- Other read failures raise `?FILE ERROR`.
 
 ### DIR
 
