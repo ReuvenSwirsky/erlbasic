@@ -10,6 +10,9 @@ rebar3
 priv/accounts/
 priv/mnesia/
 
+# Credentials (contains passwords — never commit)
+.credentials
+
 # Debug/scratch escripts
 dump_accounts.escript
 test_auth.escript

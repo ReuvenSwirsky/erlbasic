@@ -18,7 +18,8 @@
          list_accounts/0,
          delete_account/2,
          change_password/3,
-         is_privileged/2]).
+         is_privileged/2,
+         parse_credentials/1]).
 
 -record(account, {
     ppn,    %% {Project :: 0..254, Programmer :: 0..254}  - primary key
@@ -35,16 +36,14 @@
 %% Public API
 %% ===================================================================
 
-%% @doc Open (or create) the DETS accounts table and seed defaults.
+%% @doc Open (or create) the DETS accounts table and load credentials from
+%% the .credentials file.  See load_credentials/0 for the full semantics.
 init() ->
     DataDir = data_dir(),
     ok = filelib:ensure_dir(filename:join([DataDir, "x"])),
     File = filename:join(DataDir, "accounts.dets"),
     {ok, _} = dets:open_file(?TABLE, [{file, File}, {type, set}, {keypos, 2}]),
-    case dets:info(?TABLE, size) of
-        0 -> seed_default_accounts();
-        _ -> ok
-    end.
+    load_credentials().
 
 %% @doc Create (or overwrite) an account.  Password is uppercased before hashing.
 create_account(Project, Programmer, Password, Name) ->
@@ -112,6 +111,93 @@ data_dir() ->
     case application:get_env(erlbasic, accounts_dir) of
         {ok, D}   -> D;
         undefined -> filename:join([code:priv_dir(erlbasic), "accounts"])
+    end.
+
+%% @doc Read the .credentials file and upsert accounts from it.
+%%
+%%   File missing        → print error to stderr and halt the VM (exit code 1).
+%%   File empty/comments → call seed_default_accounts/0.
+%%   File has entries    → upsert each entry; accounts not listed are left intact.
+%%
+%% File format (one entry per line):
+%%   [Project,Programmer] PASSWORD[, Display Name[, extra fields...]]
+%%
+%% Lines starting with '#' or '%' are comments; blank lines are ignored.
+%% Passwords are uppercased before hashing (RSTS/E convention).
+load_credentials() ->
+    Path = credentials_path(),
+    case file:read_file(Path) of
+        {error, enoent} ->
+            io:format(standard_error,
+                "~n** ERROR: Credentials file not found: ~s~n"
+                "** Create a .credentials file with entries like:~n"
+                "**   [0,1] SYSTEM~n"
+                "**   [1,1] SYSTEM, System Manager~n~n", [Path]),
+            erlang:halt(1);
+        {ok, Bin} ->
+            Entries = parse_credentials(binary_to_list(Bin)),
+            case Entries of
+                [] ->
+                    seed_default_accounts();
+                _ ->
+                    lists:foreach(fun({P, N, Pw, Name}) ->
+                        ok = create_account(P, N, Pw, Name)
+                    end, Entries)
+            end
+    end.
+
+credentials_path() ->
+    case application:get_env(erlbasic, credentials_file) of
+        {ok, P}   -> P;
+        undefined -> ".credentials"
+    end.
+
+%% Parse all valid account entries from credentials file text.
+%% Returns [{Project, Programmer, Password, Name}].
+parse_credentials(Text) ->
+    Lines = string:split(Text, "\n", all),
+    lists:filtermap(fun parse_credential_line/1, Lines).
+
+%% Expected format: [P,N] PASSWORD[, Name[, extra...]]
+parse_credential_line(Line) ->
+    Trimmed = string:trim(Line),
+    case Trimmed of
+        ""       -> false;
+        [$# | _] -> false;
+        [$% | _] -> false;
+        _ ->
+            case re:run(Trimmed, "^\\[(\\d+),(\\d+)\\]\\s+([^\\s,]+)(.*)",
+                        [{capture, [1, 2, 3, 4], list}]) of
+                {match, [PStr, NStr, Pw, Rest]} ->
+                    P    = list_to_integer(PStr),
+                    N    = list_to_integer(NStr),
+                    Name = parse_name_from_rest(Rest, P, N),
+                    {true, {P, N, Pw, Name}};
+                nomatch ->
+                    io:format(standard_error,
+                        "** WARNING: ignoring malformed .credentials line: ~s~n",
+                        [Trimmed]),
+                    false
+            end
+    end.
+
+%% Extract display name from the optional tail after the password token.
+%% Rest is everything after the password on the line (may be empty or ", Name, ...").
+parse_name_from_rest(Rest, P, N) ->
+    case string:trim(Rest) of
+        [$, | AfterComma] ->
+            %% Strip the leading comma then take the first comma-delimited field
+            AllFields = string:trim(AfterComma),
+            FirstField = hd(string:split(AllFields, ",")),
+            case string:trim(FirstField) of
+                "" -> lists:flatten(io_lib:format("Account [~w,~w]", [P, N]));
+                Name -> Name
+            end;
+        "" ->
+            lists:flatten(io_lib:format("Account [~w,~w]", [P, N]));
+        Other ->
+            %% No comma delimiter — treat the whole tail as the name
+            string:trim(Other)
     end.
 
 seed_default_accounts() ->

@@ -72,12 +72,18 @@ accounts_setup() ->
     %% Close any leftover table from a previous run before opening a new one.
     catch dets:close(account),
     ok = application:set_env(erlbasic, accounts_dir, TempDir),
+    %% Empty credentials file → triggers default account seeding.
+    CredFile = filename:join(TempDir, ".credentials"),
+    ok = file:write_file(CredFile, ""),
+    ok = application:set_env(erlbasic, credentials_file, CredFile),
     ok = erlbasic_accounts:init(),
     TempDir.
 
 accounts_teardown(TempDir) ->
     dets:close(account),
+    application:unset_env(erlbasic, credentials_file),
     file:delete(filename:join(TempDir, "accounts.dets")),
+    file:delete(filename:join(TempDir, ".credentials")),
     file:del_dir(TempDir).
 
 temp_dir() ->
@@ -202,6 +208,47 @@ parse_ppn_only_spaces_test() ->
 parse_ppn_only_invalid_test() ->
     ?assertEqual(error, erlbasic_conn:parse_ppn_only("notanumber")),
     ?assertEqual(error, erlbasic_conn:parse_ppn_only("1")).
+
+%% ===========================================================================
+%% parse_credentials tests
+%% ===========================================================================
+
+parse_credentials_empty_test() ->
+    ?assertEqual([], erlbasic_accounts:parse_credentials("")).
+
+parse_credentials_comments_test() ->
+    Text = "# this is a comment\n% also a comment\n\n",
+    ?assertEqual([], erlbasic_accounts:parse_credentials(Text)).
+
+parse_credentials_basic_test() ->
+    Text = "[1,1] SYSTEM",
+    ?assertEqual([{1, 1, "SYSTEM", "Account [1,1]"}],
+                 erlbasic_accounts:parse_credentials(Text)).
+
+parse_credentials_with_name_test() ->
+    Text = "[0,1] MYPASS, System Account",
+    ?assertEqual([{0, 1, "MYPASS", "System Account"}],
+                 erlbasic_accounts:parse_credentials(Text)).
+
+parse_credentials_with_extra_fields_test() ->
+    %% Extra comma-separated fields after name are silently ignored
+    Text = "[2,3] PASS, Alice Smith, some extra, data",
+    ?assertEqual([{2, 3, "PASS", "Alice Smith"}],
+                 erlbasic_accounts:parse_credentials(Text)).
+
+parse_credentials_multiple_test() ->
+    Text = "[0,1] SYSTEM, System Account\n[1,1] SYSTEM, System Manager\n",
+    ?assertEqual(
+        [{0, 1, "SYSTEM", "System Account"},
+         {1, 1, "SYSTEM", "System Manager"}],
+        erlbasic_accounts:parse_credentials(Text)).
+
+parse_credentials_mixed_test() ->
+    Text = "# comment\n[1,2] PASS, Alice\n\n% skip me\n[3,4] SECRET",
+    ?assertEqual(
+        [{1, 2, "PASS", "Alice"},
+         {3, 4, "SECRET", "Account [3,4]"}],
+        erlbasic_accounts:parse_credentials(Text)).
 
 %% ===========================================================================
 %% parse_os_command tests
