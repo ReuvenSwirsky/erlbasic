@@ -44,7 +44,7 @@ tokenize_expr([Ch | Rest], Acc) when Ch >= $0, Ch =< $9 ->
     {NumberChars, HasDot, Tail} = read_number([Ch | Rest], [], false),
     NumberToken =
         case HasDot of
-            true -> {num, list_to_float(NumberChars)};
+            true -> {num, list_to_float(normalize_float_text(NumberChars))};
             false -> {num, list_to_integer(NumberChars)}
         end,
     tokenize_expr(Tail, [NumberToken | Acc]);
@@ -52,7 +52,7 @@ tokenize_expr([$. | Rest], Acc) ->
     case Rest of
         [Next | _] when Next >= $0, Next =< $9 ->
             {NumberChars, _HasDot, Tail} = read_number([$. | Rest], [], false),
-            tokenize_expr(Tail, [{num, list_to_float(NumberChars)} | Acc]);
+            tokenize_expr(Tail, [{num, list_to_float(normalize_float_text(NumberChars))} | Acc]);
         _ ->
             error
     end;
@@ -76,6 +76,11 @@ read_number([$. | Rest], Acc, false) ->
     read_number(Rest, [$. | Acc], true);
 read_number(Rest, Acc, HasDot) ->
     {lists:reverse(Acc), HasDot, Rest}.
+
+normalize_float_text([$. | _] = NumberChars) ->
+    [$0 | NumberChars];
+normalize_float_text(NumberChars) ->
+    NumberChars.
 
 read_string([$" | Rest], Acc) ->
     {ok, lists:reverse(Acc), Rest};

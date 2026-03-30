@@ -19,6 +19,9 @@ immediate_print_test() ->
     State0 = erlbasic_interp:new_state(),
     {_State1, Output} = erlbasic_interp:handle_input("PRINT 1+1", State0),
     ?assertEqual("2\r\n", lists:flatten(Output)),
+    StateA = erlbasic_interp:new_state(),
+    {_StateB, DotOutput} = erlbasic_interp:handle_input("PRINT .6", StateA),
+    ?assertEqual("0.6\r\n", lists:flatten(DotOutput)),
     PrevConnType = erlang:get(erlbasic_conn_type),
     erlang:put(erlbasic_conn_type, websocket),
     try
