@@ -125,13 +125,29 @@ See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported synt
 - [examples/tictactoe.bas](examples/tictactoe.bas) - Tic-Tac-Toe with human/computer play.
 - [examples/flag.bas](examples/flag.bas) - colorized American flag using loops, `COLOR`, and `STRING$`.
 
+## EUnit Tests
+
+EUnit tests live under `eunit_tests/`.
+
+Run EUnit from the repo root with:
+
+```powershell
+escript $env:USERPROFILE\rebar3 eunit
+```
+
+If `rebar3` is already on your PATH, this also works:
+
+```powershell
+rebar3 eunit
+```
+
 ## Smoke Tests
 
-Sample BASIC programs for smoke testing live in [tests/smoke/run_smoke_tests.ps1](tests/smoke/run_smoke_tests.ps1) and [tests/smoke](tests/smoke).
+Sample BASIC programs for smoke testing live in [smoke_tests/run_smoke_tests.ps1](smoke_tests/run_smoke_tests.ps1) and [smoke_tests](smoke_tests).
 
 Run them with:
 
 ```powershell
-.\tests\smoke\run_smoke_tests.ps1
+.\smoke_tests\run_smoke_tests.ps1
 ```
 

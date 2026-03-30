@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-PSDebug -Off
 Set-Location $PSScriptRoot
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $runnerPath = (Resolve-Path (Join-Path $PSScriptRoot "smoke_runner.escript")).Path
 
 $rebar3 = "$env:USERPROFILE\rebar3"

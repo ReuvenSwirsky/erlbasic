@@ -1,5 +1,5 @@
 #!/usr/bin/env escript
-%%! -pa ../../_build/default/lib/erlbasic/ebin
+%%! -pa ../_build/default/lib/erlbasic/ebin
 
 main([BaseDir]) ->
     BasFiles = lists:sort(filelib:wildcard(filename:join(BaseDir, "*.bas"))),
