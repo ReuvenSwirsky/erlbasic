@@ -8,7 +8,10 @@
 
 parse_statement(Command) ->
     Trimmed = string:trim(Command),
-    parse_print_statement(Trimmed).
+    case re:run(Trimmed, "(?i)^REM(\\s|$)", [{capture, none}]) of
+        match  -> {remark};
+        nomatch -> parse_print_statement(Trimmed)
+    end.
 
 validate_program_line(Command) ->
     Trimmed = string:trim(Command),
@@ -389,7 +392,10 @@ split_statements([$" | Rest], CurrentRev, PartsRev, InString) ->
     split_statements(Rest, [$" | CurrentRev], PartsRev, not InString);
 split_statements([$: | Rest], CurrentRev, PartsRev, false) ->
     Part = string:trim(lists:reverse(CurrentRev)),
-    split_statements(Rest, [], add_part(Part, PartsRev), false);
+    case re:run(Part, "(?i)^REM(\\s|$)", [{capture, none}]) of
+        match   -> lists:reverse(add_part(Part, PartsRev));
+        nomatch -> split_statements(Rest, [], add_part(Part, PartsRev), false)
+    end;
 split_statements([Ch | Rest], CurrentRev, PartsRev, InString) ->
     split_statements(Rest, [Ch | CurrentRev], PartsRev, InString).
 
@@ -473,6 +479,8 @@ validate_statement(Stmt) ->
             validate_expr_syntax(FgExpr);
         {color, FgExpr, BgExpr} ->
             validate_expr_pair(FgExpr, BgExpr);
+        {remark} ->
+            ok;
         {'end'} ->
             ok;
         unknown ->

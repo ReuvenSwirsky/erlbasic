@@ -539,7 +539,7 @@ is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
     "PRINT", "USING", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
-        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD"
+        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM"
     ]).
 
 run_program(State) ->
@@ -743,6 +743,8 @@ execute_statement_single(Command, State) ->
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
+        {remark} ->
+            {State, []};
         {goto, _LineExpr} ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {gosub, _LineExpr} ->

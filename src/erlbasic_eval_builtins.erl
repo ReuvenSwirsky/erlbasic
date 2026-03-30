@@ -6,7 +6,7 @@ is_builtin_function(Name) ->
     lists:member(Name, [
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
         "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$", "TERM$"
+        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "STRING$", "DATE$", "TIME$", "TERM$"
     ]).
 
 apply_math_function("ABS", [X]) ->
@@ -88,6 +88,19 @@ apply_math_function("CHR$", [Code]) ->
     apply_chr(Code);
 apply_math_function("STR$", [Value]) ->
     apply_str(Value);
+apply_math_function("STRING$", [Count, Code]) when is_number(Count), is_number(Code) ->
+    N = trunc(Count),
+    C = trunc(Code),
+    if
+        N < 0; C < 0; C > 255 -> {error, illegal_function_call};
+        true -> {ok, lists:duplicate(N, C)}
+    end;
+apply_math_function("STRING$", [Count, Str]) when is_number(Count), is_list(Str) ->
+    N = trunc(Count),
+    if
+        N < 0; Str =:= [] -> {error, illegal_function_call};
+        true -> {ok, lists:duplicate(N, hd(Str))}
+    end;
 apply_math_function("VAL", [Value]) ->
     apply_val(Value);
 apply_math_function(_, _Args) ->

@@ -311,6 +311,8 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
             {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
         {cls} ->
             {continue, State, LoopStack, CallStack, cls_output()};
+        {remark} ->
+            {continue, State, LoopStack, CallStack, []};
         {color, FgExpr, BgExpr} ->
             case eval_color(FgExpr, BgExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
