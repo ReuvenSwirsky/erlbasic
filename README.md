@@ -8,8 +8,8 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `RENUM`, `QUIT`
-- Program statements: `LET`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
-- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `DATE$`, `TIME$`, `TERM$`)
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
+- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 
 ## Build
 
@@ -106,7 +106,8 @@ RUN
 
 ## Notes
 
-- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `DATE$`, `TIME$`, `TERM$`).
+- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`).
+- `REM` starts a comment statement. Any `:` after `REM` is treated as comment text, not a statement separator.
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
 - Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point when continuation context exists.
@@ -118,6 +119,11 @@ RUN
 ## Syntax Reference
 
 See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported syntax.
+
+## Examples
+
+- [examples/tictactoe.bas](examples/tictactoe.bas) - Tic-Tac-Toe with human/computer play.
+- [examples/flag.bas](examples/flag.bas) - colorized American flag using loops, `COLOR`, and `STRING$`.
 
 ## Smoke Tests
 

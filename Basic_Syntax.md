@@ -72,6 +72,19 @@ LET I% = 42
 PRINT I%
 ```
 
+### REM
+
+Adds a comment. The interpreter ignores the rest of the statement.
+
+```text
+REM THIS IS A COMMENT
+REM DRAW FLAG: RED/WHITE STRIPES
+```
+
+Notes:
+- `REM` is valid in immediate mode and stored program lines.
+- Any `:` after `REM` is treated as comment text, not a statement separator.
+
 ### DEF FN
 
 Defines a user function (GW-BASIC style) for use in expressions.
@@ -379,6 +392,7 @@ Supported expression forms:
 	- `ASC(text)`
 	- `CHR$(code)`
 	- `STR$(number)`
+	- `STRING$(n, code_or_text)`
 	- `DATE$()` (local date in `MM-DD-YYYY`)
 	- `TIME$()` (local time in `HH:MM:SS`)
 	- `TERM$()` (`"XTERM"` for WebSocket terminal sessions, `"TELNET"` for TCP/telnet sessions)
@@ -393,6 +407,7 @@ PRINT SIN(PI() / 2)
 PRINT SQRT(16)
 PRINT LEFT$("HELLO", 2)
 PRINT MID$("HELLO", 2, 3)
+PRINT STRING$(5, 42)
 PRINT DATE$()
 PRINT TIME$()
 PRINT TERM$()
