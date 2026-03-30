@@ -107,12 +107,21 @@
 
     // Output from the server → display in terminal
     ws.onmessage = (evt) => {
+      const data = evt.data;
+      // Control frames start with STX (\x02) and are not displayed
+      if (data.length > 0 && data.charCodeAt(0) === 2) {
+        const cmd = data.slice(1);
+        if (cmd === 'PASSWORD_ON')  { passwordMode = true; }
+        if (cmd === 'PASSWORD_OFF') { passwordMode = false; }
+        return;
+      }
       // Normalise \r\n from BASIC to what xterm expects
-      term.write(evt.data.replace(/\r\n/g, '\r\n'));
+      term.write(data.replace(/\r\n/g, '\r\n'));
     };
 
     // Keyboard input → buffer until Enter, then send line
-    let inputBuffer = '';
+    let inputBuffer  = '';
+    let passwordMode = false;
     term.onKey(({ key, domEvent }) => {
       const code = domEvent.keyCode;
 
@@ -135,7 +144,7 @@
         }
       } else if (key >= ' ' || code === 9) {     // Printable / Tab
         inputBuffer += key;
-        term.write(key);
+        term.write(passwordMode ? '*' : key);
       }
     });
   </script>

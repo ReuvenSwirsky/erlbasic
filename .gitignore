@@ -5,3 +5,11 @@ erl_crash.dump
 _build/
 rebar3
 *.ez
+
+# Runtime data
+priv/accounts/
+priv/mnesia/
+
+# Debug/scratch escripts
+dump_accounts.escript
+test_auth.escript

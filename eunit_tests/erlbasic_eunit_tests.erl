@@ -44,3 +44,215 @@ run_program_output_test() ->
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "42", [{capture, none}])),
     ?assertEqual(match, re:run(Text, "Program ended", [{capture, none}])).
+
+%% ===========================================================================
+%% Accounts (DETS) tests — all run under a single setup/teardown
+%% ===========================================================================
+
+accounts_test() ->
+    Dir = accounts_setup(),
+    try
+        acc_create_and_authenticate(Dir),
+        acc_wrong_password(Dir),
+        acc_nonexistent_account(Dir),
+        acc_password_case_insensitive(Dir),
+        acc_list_accounts(Dir),
+        acc_delete_account(Dir),
+        acc_change_password(Dir),
+        acc_change_password_not_found(Dir),
+        acc_default_accounts_seeded(Dir)
+    after
+        accounts_teardown(Dir)
+    end.
+
+accounts_setup() ->
+    ok = application:ensure_started(crypto),
+    TempDir = temp_dir(),
+    ok = filelib:ensure_dir(filename:join([TempDir, "x"])),
+    %% Close any leftover table from a previous run before opening a new one.
+    catch dets:close(account),
+    ok = application:set_env(erlbasic, accounts_dir, TempDir),
+    ok = erlbasic_accounts:init(),
+    TempDir.
+
+accounts_teardown(TempDir) ->
+    dets:close(account),
+    file:delete(filename:join(TempDir, "accounts.dets")),
+    file:del_dir(TempDir).
+
+temp_dir() ->
+    Base = case os:getenv("TEMP") of
+        false -> "/tmp";
+        D     -> D
+    end,
+    Id = integer_to_list(erlang:unique_integer([positive])),
+    filename:join([Base, "erlbasic_test_" ++ Id]).
+
+acc_create_and_authenticate(_Dir) ->
+    ok = erlbasic_accounts:create_account(10, 5, "PASSWORD", "Test User"),
+    ?assertEqual({ok, <<"Test User">>},
+                 erlbasic_accounts:authenticate(10, 5, "PASSWORD")).
+
+acc_wrong_password(_Dir) ->
+    ok = erlbasic_accounts:create_account(10, 6, "CORRECT", "User"),
+    ?assertEqual({error, bad_credentials},
+                 erlbasic_accounts:authenticate(10, 6, "WRONG")).
+
+acc_nonexistent_account(_Dir) ->
+    ?assertEqual({error, bad_credentials},
+                 erlbasic_accounts:authenticate(99, 99, "ANYTHING")).
+
+%% RSTS/E passwords are uppercased before hashing, so "system" == "SYSTEM"
+acc_password_case_insensitive(_Dir) ->
+    ok = erlbasic_accounts:create_account(10, 7, "SYSTEM", "CaseUser"),
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(10, 7, "system")),
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(10, 7, "System")),
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(10, 7, "SYSTEM")).
+
+acc_list_accounts(_Dir) ->
+    ok = erlbasic_accounts:create_account(5, 1, "PW", "Alice"),
+    ok = erlbasic_accounts:create_account(5, 2, "PW", "Bob"),
+    {ok, List} = erlbasic_accounts:list_accounts(),
+    PPNs = [PPN || {PPN, _} <- List],
+    ?assert(lists:member({5, 1}, PPNs)),
+    ?assert(lists:member({5, 2}, PPNs)).
+
+acc_delete_account(_Dir) ->
+    ok = erlbasic_accounts:create_account(20, 1, "PW", "Temp"),
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(20, 1, "PW")),
+    ok = erlbasic_accounts:delete_account(20, 1),
+    ?assertEqual({error, bad_credentials},
+                 erlbasic_accounts:authenticate(20, 1, "PW")).
+
+acc_change_password(_Dir) ->
+    ok = erlbasic_accounts:create_account(30, 1, "OLDPASS", "ChPwUser"),
+    ok = erlbasic_accounts:change_password(30, 1, "NEWPASS"),
+    ?assertEqual({error, bad_credentials},
+                 erlbasic_accounts:authenticate(30, 1, "OLDPASS")),
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(30, 1, "NEWPASS")).
+
+acc_change_password_not_found(_Dir) ->
+    ?assertEqual({error, not_found},
+                 erlbasic_accounts:change_password(99, 88, "PW")).
+
+acc_default_accounts_seeded(_Dir) ->
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(0, 1, "SYSTEM")),
+    ?assertMatch({ok, _}, erlbasic_accounts:authenticate(1, 1, "SYSTEM")).
+
+is_privileged_test() ->
+    ?assert(erlbasic_accounts:is_privileged(0, 1)),
+    ?assert(erlbasic_accounts:is_privileged(1, 1)),
+    ?assert(erlbasic_accounts:is_privileged(0, 99)),
+    ?assertNot(erlbasic_accounts:is_privileged(2, 1)),
+    ?assertNot(erlbasic_accounts:is_privileged(100, 1)).
+
+%% ===========================================================================
+%% parse_hello / login syntax tests
+%% ===========================================================================
+
+parse_hello_bare_hello_test() ->
+    ?assertEqual(hello_prompt, erlbasic_conn:parse_hello("HELLO")).
+
+parse_hello_bare_lowercase_test() ->
+    ?assertEqual(hello_prompt, erlbasic_conn:parse_hello("hello")).
+
+parse_hello_bare_login_test() ->
+    ?assertEqual(hello_prompt, erlbasic_conn:parse_hello("LOGIN")).
+
+parse_hello_bare_i_test() ->
+    ?assertEqual(hello_prompt, erlbasic_conn:parse_hello("I")).
+
+parse_hello_with_ppn_test() ->
+    ?assertEqual({hello, 1, 1}, erlbasic_conn:parse_hello("HELLO 1,1")).
+
+parse_hello_lowercase_with_ppn_test() ->
+    ?assertEqual({hello, 1, 1}, erlbasic_conn:parse_hello("hello 1,1")).
+
+parse_hello_login_with_ppn_test() ->
+    ?assertEqual({hello, 2, 5}, erlbasic_conn:parse_hello("LOGIN 2,5")).
+
+parse_hello_i_with_ppn_test() ->
+    ?assertEqual({hello, 10, 3}, erlbasic_conn:parse_hello("I 10,3")).
+
+parse_hello_slash_separator_test() ->
+    ?assertEqual({hello, 1, 1}, erlbasic_conn:parse_hello("HELLO 1/1")).
+
+parse_hello_oneline_password_test() ->
+    ?assertEqual({hello, 1, 1, {password, "SYSTEM"}},
+                 erlbasic_conn:parse_hello("HELLO 1,1;SYSTEM")).
+
+parse_hello_oneline_lowercase_test() ->
+    ?assertEqual({hello, 1, 1, {password, "secret"}},
+                 erlbasic_conn:parse_hello("hello 1,1;secret")).
+
+parse_hello_not_hello_test() ->
+    ?assertEqual(not_hello, erlbasic_conn:parse_hello("PRINT X")),
+    ?assertEqual(not_hello, erlbasic_conn:parse_hello("RUN")),
+    ?assertEqual(not_hello, erlbasic_conn:parse_hello("")).
+
+parse_ppn_only_comma_test() ->
+    ?assertEqual({ok, 1, 1}, erlbasic_conn:parse_ppn_only("1,1")).
+
+parse_ppn_only_slash_test() ->
+    ?assertEqual({ok, 10, 5}, erlbasic_conn:parse_ppn_only("10/5")).
+
+parse_ppn_only_spaces_test() ->
+    ?assertEqual({ok, 2, 3}, erlbasic_conn:parse_ppn_only("  2 , 3  ")).
+
+parse_ppn_only_invalid_test() ->
+    ?assertEqual(error, erlbasic_conn:parse_ppn_only("notanumber")),
+    ?assertEqual(error, erlbasic_conn:parse_ppn_only("1")).
+
+%% ===========================================================================
+%% parse_os_command tests
+%% ===========================================================================
+
+parse_os_command_bye_test() ->
+    ?assertEqual(logout, erlbasic_conn:parse_os_command("BYE")).
+
+parse_os_command_bye_lowercase_test() ->
+    ?assertEqual(logout, erlbasic_conn:parse_os_command("bye")).
+
+parse_os_command_bye_mixed_case_test() ->
+    ?assertEqual(logout, erlbasic_conn:parse_os_command("Bye")).
+
+parse_os_command_bye_whitespace_test() ->
+    ?assertEqual(logout, erlbasic_conn:parse_os_command("  BYE  ")).
+
+parse_os_command_quit_test() ->
+    ?assertEqual(quit, erlbasic_conn:parse_os_command("QUIT")).
+
+parse_os_command_quit_lowercase_test() ->
+    ?assertEqual(quit, erlbasic_conn:parse_os_command("quit")).
+
+parse_os_command_quit_whitespace_test() ->
+    ?assertEqual(quit, erlbasic_conn:parse_os_command("  QUIT  ")).
+
+parse_os_command_basic_run_test() ->
+    ?assertEqual(not_os_command, erlbasic_conn:parse_os_command("RUN")).
+
+parse_os_command_basic_print_test() ->
+    ?assertEqual(not_os_command, erlbasic_conn:parse_os_command("PRINT X")).
+
+parse_os_command_basic_list_test() ->
+    ?assertEqual(not_os_command, erlbasic_conn:parse_os_command("LIST")).
+
+%% HELLO, LOGIN, and I are OS commands that return {login, ...}
+parse_os_command_hello_bare_test() ->
+    ?assertEqual({login, hello_prompt}, erlbasic_conn:parse_os_command("HELLO")),
+    ?assertEqual({login, hello_prompt}, erlbasic_conn:parse_os_command("hello")),
+    ?assertEqual({login, hello_prompt}, erlbasic_conn:parse_os_command("LOGIN")),
+    ?assertEqual({login, hello_prompt}, erlbasic_conn:parse_os_command("I")).
+
+parse_os_command_hello_ppn_test() ->
+    ?assertEqual({login, {hello, 1, 1}},
+                 erlbasic_conn:parse_os_command("HELLO 1,1")),
+    ?assertEqual({login, {hello, 2, 5}},
+                 erlbasic_conn:parse_os_command("login 2,5")).
+
+parse_os_command_hello_inline_pw_test() ->
+    ?assertEqual({login, {hello, 1, 1, {password, "SYSTEM"}}},
+                 erlbasic_conn:parse_os_command("HELLO 1,1;SYSTEM")).
+
+parse_os_command_empty_test() ->
+    ?assertEqual(not_os_command, erlbasic_conn:parse_os_command("")).
