@@ -238,6 +238,8 @@ normalize_number(Value) when is_list(Value) ->
 normalize_number(_) ->
     0.
 
+add_values(Left, Right) when is_list(Left) andalso is_list(Right) ->
+    {ok, Left ++ Right};
 add_values(Left, Right) when (is_integer(Left) orelse is_float(Left)) andalso
                            (is_integer(Right) orelse is_float(Right)) ->
     {ok, Left + Right};

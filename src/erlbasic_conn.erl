@@ -118,32 +118,45 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
             erlang:put(interrupted, true),
             tcp_worker_loop(Socket, State, PPN);
         {input, Line} ->
-            case parse_os_command(Line) of
-                logout ->
-                    %% BYE: log off and return to the OS login prompt
-                    erlang:erase(erlbasic_ppn),
-                    ok = gen_tcp:send(Socket, io_lib:format(
-                            " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
-                    tcp_login_loop(Socket, 0);
-                quit ->
-                    %% QUIT: disconnect entirely
-                    erlang:erase(erlbasic_ppn),
-                    ok = gen_tcp:send(Socket, "Goodbye\r\n"),
-                    gen_tcp:close(Socket);
-                {login, HelloResult} ->
-                    %% HELLO/LOGIN/I: log off current user and start a new login
-                    erlang:erase(erlbasic_ppn),
-                    ok = gen_tcp:send(Socket, io_lib:format(
-                            " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
-                    case HelloResult of
-                        hello_prompt ->
+            %% Only intercept OS commands when the BASIC interpreter is not
+            %% waiting for an INPUT statement response.
+            case erlbasic_interp:awaiting_input(State) of
+                false ->
+                    case parse_os_command(Line) of
+                        logout ->
+                            %% BYE: log off and return to the OS login prompt
+                            erlang:erase(erlbasic_ppn),
+                            ok = gen_tcp:send(Socket, io_lib:format(
+                                    " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
                             tcp_login_loop(Socket, 0);
-                        {hello, NP, NN} ->
-                            tcp_prompt_password(Socket, NP, NN, 0);
-                        {hello, NP, NN, {password, Pw}} ->
-                            tcp_try_login(Socket, NP, NN, Pw, 0)
+                        quit ->
+                            %% QUIT: disconnect entirely
+                            erlang:erase(erlbasic_ppn),
+                            ok = gen_tcp:send(Socket, "Goodbye\r\n"),
+                            gen_tcp:close(Socket);
+                        {login, HelloResult} ->
+                            %% HELLO/LOGIN/I: log off current user and start a new login
+                            erlang:erase(erlbasic_ppn),
+                            ok = gen_tcp:send(Socket, io_lib:format(
+                                    " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
+                            case HelloResult of
+                                hello_prompt ->
+                                    tcp_login_loop(Socket, 0);
+                                {hello, NP, NN} ->
+                                    tcp_prompt_password(Socket, NP, NN, 0);
+                                {hello, NP, NN, {password, Pw}} ->
+                                    tcp_try_login(Socket, NP, NN, Pw, 0)
+                            end;
+                        not_os_command ->
+                            tcp_handle_basic(Socket, State, PPN, Line)
                     end;
-                not_os_command ->
+                true ->
+                    %% Interpreter is waiting for INPUT — pass directly through
+                    tcp_handle_basic(Socket, State, PPN, Line)
+            end
+    end.
+
+tcp_handle_basic(Socket, State, PPN, Line) ->
                     %% BASIC interpreter command
                     erlang:put(output_pid, self()),
                     erlang:put(output_socket, Socket),
@@ -164,9 +177,7 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
                             erlang:erase(output_pid),
                             erlang:erase(output_socket),
                             tcp_worker_loop(Socket, State, PPN)
-                    end
-            end
-    end.
+                    end.
 
 %% ---- WebSocket mode ----
 
@@ -259,31 +270,44 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
             ws_loop(WsPid, State, PPN);
         {input, RawLine} ->
             Line = normalize_input_line(list_to_binary(RawLine)),
-            case parse_os_command(Line) of
-                logout ->
-                    %% BYE: log off and return to the OS login prompt
-                    erlang:erase(erlbasic_ppn),
-                    WsPid ! {output, io_lib:format(
-                                " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
-                    ws_login_loop(WsPid, 0);
-                quit ->
-                    %% QUIT: disconnect entirely
-                    erlang:erase(erlbasic_ppn),
-                    WsPid ! {output, "Goodbye\r\n"};
-                {login, HelloResult} ->
-                    %% HELLO/LOGIN/I: log off current user and start a new login
-                    erlang:erase(erlbasic_ppn),
-                    WsPid ! {output, io_lib:format(
-                                " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
-                    case HelloResult of
-                        hello_prompt ->
+            %% Only intercept OS commands when the BASIC interpreter is not
+            %% waiting for an INPUT statement response.
+            case erlbasic_interp:awaiting_input(State) of
+                false ->
+                    case parse_os_command(Line) of
+                        logout ->
+                            %% BYE: log off and return to the OS login prompt
+                            erlang:erase(erlbasic_ppn),
+                            WsPid ! {output, io_lib:format(
+                                        " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
                             ws_login_loop(WsPid, 0);
-                        {hello, NP, NN} ->
-                            ws_prompt_password(WsPid, NP, NN, 0);
-                        {hello, NP, NN, {password, Pw}} ->
-                            ws_try_login(WsPid, NP, NN, Pw, 0)
+                        quit ->
+                            %% QUIT: disconnect entirely
+                            erlang:erase(erlbasic_ppn),
+                            WsPid ! {output, "Goodbye\r\n"};
+                        {login, HelloResult} ->
+                            %% HELLO/LOGIN/I: log off current user and start a new login
+                            erlang:erase(erlbasic_ppn),
+                            WsPid ! {output, io_lib:format(
+                                        " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
+                            case HelloResult of
+                                hello_prompt ->
+                                    ws_login_loop(WsPid, 0);
+                                {hello, NP, NN} ->
+                                    ws_prompt_password(WsPid, NP, NN, 0);
+                                {hello, NP, NN, {password, Pw}} ->
+                                    ws_try_login(WsPid, NP, NN, Pw, 0)
+                            end;
+                        not_os_command ->
+                            ws_handle_basic(WsPid, State, PPN, Line)
                     end;
-                not_os_command ->
+                true ->
+                    %% Interpreter is waiting for INPUT — pass directly through
+                    ws_handle_basic(WsPid, State, PPN, Line)
+            end
+    end.
+
+ws_handle_basic(WsPid, State, PPN, Line) ->
                     %% BASIC interpreter command
                     erlang:put(output_pid, WsPid),
                     try erlbasic_interp:handle_input(Line, State) of
@@ -299,9 +323,7 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
                             WsPid ! {output, "> "},
                             erlang:erase(output_pid),
                             ws_loop(WsPid, State, PPN)
-                    end
-            end
-    end.
+                    end.
 
 %% ---- Shared helpers ----
 

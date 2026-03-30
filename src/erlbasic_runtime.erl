@@ -217,9 +217,12 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
             execute_gosub(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {'return'} ->
             execute_return(Program, State, Pc, LoopStack, CallStack);
-        {input, Target} ->
-            PromptState = State#state{pending_input = {Target, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
+        {input, Targets} ->
+            PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
+            {continue, PromptState, LoopStack, CallStack, ["? "]};
+        {input_line, Target} ->
+            PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
+            {continue, PromptState, LoopStack, CallStack, ["? "]};
         {'end'} ->
             {'end', []};
         _ ->
@@ -306,9 +309,12 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                 {error, Reason, _Vars1} ->
                     {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
             end;
-        {input, Target} ->
-            PromptState = State#state{pending_input = {Target, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
+        {input, Targets} ->
+            PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
+            {continue, PromptState, LoopStack, CallStack, ["? "]};
+        {input_line, Target} ->
+            PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
+            {continue, PromptState, LoopStack, CallStack, ["? "]};
         {cls} ->
             {continue, State, LoopStack, CallStack, cls_output()};
         {remark} ->
@@ -412,15 +418,16 @@ resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack) ->
             end
     end.
 
-update_pending_input_rest(State = #state{pending_input = {Var, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {Var, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {Var, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {Var, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {Targets, {immediate, _OldRemaining}}}, RemainingStatements) when is_list(Targets) ->
+    State#state{pending_input = {Targets, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {Targets, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) when is_list(Targets) ->
+    State#state{pending_input = {Targets, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {input_line, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {input_line, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {input_line, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {input_line, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
-
-format_input_prompt(Target) ->
-    target_to_text(Target) ++ "? ".
 
 target_to_text({var_target, Var}) ->
     Var;

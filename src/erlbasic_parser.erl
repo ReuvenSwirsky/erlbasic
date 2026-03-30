@@ -102,14 +102,33 @@ push_print_part(Rest, CurrentRev, PartsRev, Sep) ->
     end.
 
 parse_input_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^INPUT\\s+(.+)$", [{capture, [1], list}]) of
+    %% INPUT LINE must be checked before plain INPUT to avoid prefix ambiguity.
+    case re:run(Trimmed, "(?i)^INPUT\\s+LINE\\s+(.+)$", [{capture, [1], list}]) of
         {match, [TargetText]} ->
-            case parse_assignment_target(TargetText) of
-                {ok, Target} -> {input, Target};
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {input_line, Target};
                 error -> unknown
             end;
         nomatch ->
-            parse_let_statement(Trimmed)
+            case re:run(Trimmed, "(?i)^INPUT\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetsText]} ->
+                    case parse_input_target_list(split_commas_top_level(TargetsText), []) of
+                        {ok, Targets} -> {input, Targets};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    parse_let_statement(Trimmed)
+            end
+    end.
+
+parse_input_target_list([], []) ->
+    error;
+parse_input_target_list([], Acc) ->
+    {ok, lists:reverse(Acc)};
+parse_input_target_list([Part | Rest], Acc) ->
+    case parse_assignment_target(string:trim(Part)) of
+        {ok, Target} -> parse_input_target_list(Rest, [Target | Acc]);
+        error -> error
     end.
 
 parse_let_statement(Trimmed) ->
@@ -431,7 +450,9 @@ validate_statement(Stmt) ->
                 ok -> validate_print_items(Items);
                 error -> error
             end;
-        {input, Target} ->
+        {input, Targets} ->
+            validate_input_targets(Targets);
+        {input_line, Target} ->
             validate_target_syntax(Target);
         {'let', Target, Expr} ->
             case validate_target_syntax(Target) of
@@ -511,6 +532,18 @@ validate_dim_decls([]) ->
 validate_dim_decls([{_Name, DimExprs} | Rest]) ->
     case validate_exprs(DimExprs) of
         ok -> validate_dim_decls(Rest);
+        error -> error
+    end.
+
+validate_input_targets([]) ->
+    error;                              %% no targets at all: parse error
+validate_input_targets(Targets) ->
+    validate_input_targets_all(Targets).
+
+validate_input_targets_all([]) -> ok;
+validate_input_targets_all([Target | Rest]) ->
+    case validate_target_syntax(Target) of
+        ok    -> validate_input_targets_all(Rest);
         error -> error
     end.
 

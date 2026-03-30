@@ -2,7 +2,7 @@
 
 -include_lib("kernel/include/file.hrl").
 
--export([new_state/0, handle_input/2, next_prompt/1]).
+-export([new_state/0, handle_input/2, next_prompt/1, awaiting_input/1]).
 
 
 -record(state, {
@@ -19,6 +19,10 @@
 
 new_state() ->
     #state{}.
+
+%% @doc True when the interpreter is paused waiting for an INPUT statement response.
+awaiting_input(#state{pending_input = undefined}) -> false;
+awaiting_input(_State) -> true.
 
 next_prompt(#state{pending_input = undefined}) ->
     "> ";
@@ -512,7 +516,7 @@ flush_word(CurrentRev) ->
 is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
-    "PRINT", "USING", "LET", "INPUT", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
+    "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
         "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM"
     ]).
 
@@ -524,23 +528,66 @@ continue_program(State = #state{continue_ctx = undefined}) ->
 continue_program(State = #state{continue_ctx = {Pc, LoopStack, CallStack}}) ->
     erlbasic_runtime:continue_program(State#state{continue_ctx = undefined}, Pc, LoopStack, CallStack).
 
-handle_pending_input(Line, State = #state{pending_input = {Target, Continuation}}) ->
-    case parse_input_value(Target, Line, State#state.vars, State#state.funcs) of
-        {ok, Value} ->
-            case erlbasic_eval:assign_target(Target, Value, State#state.vars, State#state.funcs) of
-                {ok, NextVars} ->
-                    ClearedState = State#state{vars = NextVars, pending_input = undefined},
-                    case Continuation of
-                        {immediate, RemainingStatements} ->
-                            resume_immediate_input(ClearedState, RemainingStatements);
-                        {program, Pc, RemainingStatements, LoopStack, CallStack} ->
-                            resume_program_input(ClearedState, Pc, RemainingStatements, LoopStack, CallStack)
-                    end;
-                {error, Reason} ->
-                    {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
-            end;
+handle_pending_input(Line, State = #state{pending_input = {Targets, Continuation}}) when is_list(Targets) ->
+    Fields = split_input_fields(Line),
+    case apply_input_fields(Targets, Fields, State#state.vars, State#state.funcs) of
+        {ok, NextVars} ->
+            ClearedState = State#state{vars = NextVars, pending_input = undefined},
+            resume_continuation(ClearedState, Continuation);
+        redo ->
+            {State, ["?Redo from start\r\n? "]};
         {error, Reason} ->
             {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
+    end;
+handle_pending_input(Line, State = #state{pending_input = {input_line, Target, Continuation}}) ->
+    case erlbasic_eval:assign_target(Target, Line, State#state.vars, State#state.funcs) of
+        {ok, NextVars} ->
+            ClearedState = State#state{vars = NextVars, pending_input = undefined},
+            resume_continuation(ClearedState, Continuation);
+        {error, Reason} ->
+            {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
+    end.
+
+resume_continuation(State, {immediate, RemainingStatements}) ->
+    resume_immediate_input(State, RemainingStatements);
+resume_continuation(State, {program, Pc, RemainingStatements, LoopStack, CallStack}) ->
+    resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack).
+
+%% Split user input by commas, respecting double-quoted strings.
+split_input_fields(Line) ->
+    split_input_fields(Line, [], [], false).
+
+split_input_fields([], Current, Parts, _InQuote) ->
+    lists:reverse([string:trim(lists:reverse(Current)) | Parts]);
+split_input_fields([$" | Rest], Current, Parts, InQuote) ->
+    split_input_fields(Rest, [$" | Current], Parts, not InQuote);
+split_input_fields([$, | Rest], Current, Parts, false) ->
+    Field = string:trim(lists:reverse(Current)),
+    split_input_fields(Rest, [], [Field | Parts], false);
+split_input_fields([Ch | Rest], Current, Parts, InQuote) ->
+    split_input_fields(Rest, [Ch | Current], Parts, InQuote).
+
+%% Assign each comma-field to the corresponding target.  Returns
+%% {ok, NewVars}, redo (field count mismatch), or {error, Reason}.
+apply_input_fields(Targets, Fields, Vars, Funcs) ->
+    case length(Fields) =:= length(Targets) of
+        false -> redo;
+        true  -> apply_input_fields(Targets, Fields, Vars, Funcs, Vars)
+    end.
+
+apply_input_fields([], [], _Vars, _Funcs, AccVars) ->
+    {ok, AccVars};
+apply_input_fields([Target | RestTargets], [Field | RestFields], Vars, Funcs, AccVars) ->
+    case parse_input_value(Target, Field, Vars, Funcs) of
+        {ok, Value} ->
+            case erlbasic_eval:assign_target(Target, Value, AccVars, Funcs) of
+                {ok, NextVars} ->
+                    apply_input_fields(RestTargets, RestFields, Vars, Funcs, NextVars);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 resume_immediate_input(State, []) ->
@@ -551,10 +598,14 @@ resume_immediate_input(State, RemainingStatements) ->
 resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack) ->
     erlbasic_runtime:resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack).
 
-update_pending_input_rest(State = #state{pending_input = {Var, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {Var, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {Var, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {Var, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {Targets, {immediate, _OldRemaining}}}, RemainingStatements) when is_list(Targets) ->
+    State#state{pending_input = {Targets, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {Targets, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) when is_list(Targets) ->
+    State#state{pending_input = {Targets, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {input_line, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {input_line, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {input_line, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {input_line, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 
@@ -575,9 +626,6 @@ parse_string_input(Line) ->
         nomatch ->
             Trimmed
     end.
-
-format_input_prompt(Target) ->
-    target_to_text(Target) ++ "? ".
 
 target_to_text({var_target, Var}) ->
     Var;
@@ -667,8 +715,10 @@ execute_statement_single(Command, State) ->
                 {error, Reason} ->
                     {DataState, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
-        {input, Target} ->
-            {State#state{pending_input = {Target, {immediate, []}}}, [format_input_prompt(Target)]};
+        {input, Targets} ->
+            {State#state{pending_input = {Targets, {immediate, []}}}, ["? "]};
+        {input_line, Target} ->
+            {State#state{pending_input = {input_line, Target, {immediate, []}}}, ["? "]};
         {locate, RowExpr, ColExpr} ->
             case eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
