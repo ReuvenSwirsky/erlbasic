@@ -614,7 +614,7 @@ is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
     "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
-        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY"
+        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "SLEEP", "TIMER"
     ]).
 
 run_program(State) ->
@@ -902,6 +902,17 @@ execute_statement_single(Command, State) ->
             {State, [erlbasic_eval:format_runtime_error(next_without_for)]};
         {cls} ->
             {State, cls_output()};
+        {sleep, Expr} ->
+            case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
+                {ok, Value, Vars1} when is_number(Value) ->
+                    Ms = max(0, trunc(Value * 1000)),
+                    timer:sleep(Ms),
+                    {State#state{vars = Vars1}, []};
+                {ok, _Value, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(type_mismatch)]};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {color, FgExpr, BgExpr} ->
             case eval_color(FgExpr, BgExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->

@@ -384,7 +384,13 @@ parse_keyword_statement(Trimmed) ->
         "CLS" -> {cls};
         "RETURN" -> {'return'};
         "END" -> {'end'};
-        _ -> parse_color_statement(Trimmed)
+        _ -> parse_sleep_statement(Trimmed)
+    end.
+
+parse_sleep_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^SLEEP\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [Expr]} -> {sleep, Expr};
+        nomatch         -> parse_color_statement(Trimmed)
     end.
 
 parse_color_statement(Trimmed) ->
@@ -520,6 +526,8 @@ validate_statement(Stmt) ->
             ok;
         {cls} ->
             ok;
+        {sleep, Expr} ->
+            validate_expr_syntax(Expr);
         {color, FgExpr, undefined} ->
             validate_expr_syntax(FgExpr);
         {color, FgExpr, BgExpr} ->

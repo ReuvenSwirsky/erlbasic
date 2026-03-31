@@ -6,7 +6,8 @@ is_builtin_function(Name) ->
     lists:member(Name, [
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
         "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "STRING$", "DATE$", "TIME$", "TERM$"
+        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "STRING$", "DATE$", "TIME$", "TERM$",
+        "TIMER"
     ]).
 
 apply_math_function("ABS", [X]) ->
@@ -58,6 +59,10 @@ apply_math_function("TERM$", []) ->
         websocket -> {ok, "XTERM"};
         _         -> {ok, "TELNET"}
     end;
+apply_math_function("TIMER", []) ->
+    %% Seconds since midnight as a float, matching GW-BASIC behaviour.
+    {_, {H, M, S}} = calendar:local_time(),
+    {ok, H * 3600.0 + M * 60.0 + S * 1.0};
 apply_math_function("SGN", [X]) when X < 0 ->
     {ok, -1};
 apply_math_function("SGN", [0]) ->
