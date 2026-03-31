@@ -2,7 +2,7 @@
 
 -include_lib("kernel/include/file.hrl").
 
--export([new_state/0, handle_input/2, next_prompt/1, awaiting_input/1]).
+-export([new_state/0, handle_input/2, next_prompt/1, awaiting_input/1, awaiting_input_nonblocking/1, awaiting_input_getkey/1]).
 
 
 -record(state, {
@@ -14,7 +14,8 @@
     data_items = [],
     data_index = 1,
     print_col = 0,
-    continue_ctx = undefined
+    continue_ctx = undefined,
+    char_buffer = []
 }).
 
 new_state() ->
@@ -23,6 +24,15 @@ new_state() ->
 %% @doc True when the interpreter is paused waiting for an INPUT statement response.
 awaiting_input(#state{pending_input = undefined}) -> false;
 awaiting_input(_State) -> true.
+
+%% @doc True only when paused on a non-blocking GET (conn layer uses a short
+%% timeout so the Erlang scheduler can run other processes between polls).
+awaiting_input_nonblocking(#state{pending_input = {get_nb, _, _}}) -> true;
+awaiting_input_nonblocking(_State) -> false.
+
+%% @doc True only when the interpreter is paused waiting for a GETKEY statement.
+awaiting_input_getkey(#state{pending_input = {getkey, _, _}}) -> true;
+awaiting_input_getkey(_State) -> false.
 
 next_prompt(#state{pending_input = undefined}) ->
     "> ";
@@ -604,7 +614,7 @@ is_basic_keyword(Word) ->
     Upper = string:to_upper(Word),
     lists:member(Upper, [
     "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
-        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM"
+        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY"
     ]).
 
 run_program(State) ->
@@ -630,6 +640,23 @@ handle_pending_input(Line, State = #state{pending_input = {input_line, Target, C
     case erlbasic_eval:assign_target(Target, Line, State#state.vars, State#state.funcs) of
         {ok, NextVars} ->
             ClearedState = State#state{vars = NextVars, pending_input = undefined},
+            resume_continuation(ClearedState, Continuation);
+        {error, Reason} ->
+            {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
+    end;
+handle_pending_input(Line, State = #state{pending_input = {get_nb, Target, Continuation}}) ->
+    handle_getchar(Target, Line, State, Continuation);
+handle_pending_input(Line, State = #state{pending_input = {getkey, Target, Continuation}}) ->
+    handle_getchar(Target, Line, State, Continuation).
+
+handle_getchar(Target, Line, State, Continuation) ->
+    {Ch, Rest} = case Line of
+        []      -> {"", []};
+        [H | T] -> {[H], T}
+    end,
+    case erlbasic_eval:assign_target(Target, Ch, State#state.vars, State#state.funcs) of
+        {ok, NextVars} ->
+            ClearedState = State#state{vars = NextVars, pending_input = undefined, char_buffer = Rest},
             resume_continuation(ClearedState, Continuation);
         {error, Reason} ->
             {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
@@ -693,6 +720,14 @@ update_pending_input_rest(State = #state{pending_input = {input_line, Target, {i
     State#state{pending_input = {input_line, Target, {immediate, RemainingStatements}}};
 update_pending_input_rest(State = #state{pending_input = {input_line, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
     State#state{pending_input = {input_line, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {get_nb, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {get_nb, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {get_nb, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {get_nb, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {getkey, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {getkey, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {getkey, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {getkey, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 
@@ -714,16 +749,8 @@ parse_string_input(Line) ->
             Trimmed
     end.
 
-target_to_text({var_target, Var}) ->
-    Var;
-target_to_text({array_target, Var, _IndexExprs}) ->
-    Var.
-
-format_input_prompt(Targets) when is_list(Targets) ->
-    VarNames = [target_to_text(T) || T <- Targets],
-    string:join(VarNames, ",") ++ "? ";
-format_input_prompt(Target) ->
-    target_to_text(Target) ++ "? ".
+format_input_prompt(_Targets) ->
+    "? ".
 
 execute_statement(Command, State) ->
     case erlbasic_parser:should_split_top_level_sequence(Command) of
@@ -812,6 +839,28 @@ execute_statement_single(Command, State) ->
             {State#state{pending_input = {Targets, {immediate, []}}}, [format_input_prompt(Targets)]};
         {input_line, Target} ->
             {State#state{pending_input = {input_line, Target, {immediate, []}}}, [format_input_prompt(Target)]};
+        {get, Target} ->
+            %% Non-blocking but cooperative: take first buffered char, or suspend
+            %% so the conn layer can yield the CPU before returning "".
+            case State#state.char_buffer of
+                [Ch | Rest] ->
+                    case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
+                        {ok, Vars1} -> {State#state{vars = Vars1, char_buffer = Rest}, []};
+                        {error, Reason} -> {State, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                [] ->
+                    {State#state{pending_input = {get_nb, Target, {immediate, []}}}, []}
+            end;
+        {getkey, Target} ->
+            case State#state.char_buffer of
+                [Ch | Rest] ->
+                    case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
+                        {ok, Vars1} -> {State#state{vars = Vars1, char_buffer = Rest}, []};
+                        {error, Reason} -> {State, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                [] ->
+                    {State#state{pending_input = {getkey, Target, {immediate, []}}}, []}
+            end;
         {locate, RowExpr, ColExpr} ->
             case eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->

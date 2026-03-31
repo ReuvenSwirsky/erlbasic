@@ -118,6 +118,12 @@ tcp_recv_loop(Socket, WorkerPid) ->
 %% before reaching the BASIC interpreter; everything else is forwarded
 %% to handle_input/2.
 tcp_worker_loop(Socket, State, {P, N} = PPN) ->
+    %% For GET (non-blocking), wait at most 10 ms before returning ""
+    %% so the Erlang scheduler can serve other processes during a poll loop.
+    Timeout = case erlbasic_interp:awaiting_input_nonblocking(State) of
+        true  -> 10;
+        false -> infinity
+    end,
     receive
         socket_closed -> ok;
         interrupt ->
@@ -157,9 +163,12 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
                             tcp_handle_basic(Socket, State, PPN, Line)
                     end;
                 true ->
-                    %% Interpreter is waiting for INPUT — pass directly through
+                    %% Interpreter is waiting for INPUT/GETKEY/GET — pass directly through
                     tcp_handle_basic(Socket, State, PPN, Line)
             end
+    after Timeout ->
+        %% GET timed out with no keypress: resume with "" (assigns empty string).
+        tcp_handle_basic(Socket, State, PPN, "")
     end.
 
 tcp_handle_basic(Socket, State, PPN, Line) ->
@@ -270,6 +279,18 @@ ws_try_login(WsPid, P, N, Pw, Attempts) ->
 %% before reaching the BASIC interpreter; everything else is forwarded
 %% to handle_input/2.
 ws_loop(WsPid, State, {P, N} = PPN) ->
+    %% Tell the browser to send individual keypresses for GET/GETKEY.
+    %% CHAR_MODE_ON is idempotent: the browser ignores it if already active.
+    case erlbasic_interp:awaiting_input_nonblocking(State) orelse
+         erlbasic_interp:awaiting_input_getkey(State) of
+        true  -> WsPid ! {output, "\x02CHAR_MODE_ON"};
+        false -> ok
+    end,
+    %% For GET, wait at most 10 ms before returning "".
+    Timeout = case erlbasic_interp:awaiting_input_nonblocking(State) of
+        true  -> 10;
+        false -> infinity
+    end,
     receive
         interrupt ->
             erlang:put(interrupted, true),
@@ -308,9 +329,12 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
                             ws_handle_basic(WsPid, State, PPN, Line)
                     end;
                 true ->
-                    %% Interpreter is waiting for INPUT — pass directly through
+                    %% Interpreter is waiting for INPUT/GETKEY/GET — pass directly through
                     ws_handle_basic(WsPid, State, PPN, Line)
             end
+    after Timeout ->
+        %% GET timed out with no keypress: resume with "" (assigns empty string).
+        ws_handle_basic(WsPid, State, PPN, "")
     end.
 
 ws_handle_basic(WsPid, State, PPN, Line) ->
@@ -318,6 +342,15 @@ ws_handle_basic(WsPid, State, PPN, Line) ->
                     erlang:put(output_pid, WsPid),
                     try erlbasic_interp:handle_input(Line, State) of
                         {NextState, Output} ->
+                            %% When leaving GET/GETKEY char mode, switch the browser back to line mode.
+                            OldCharMode = erlbasic_interp:awaiting_input_nonblocking(State) orelse
+                                          erlbasic_interp:awaiting_input_getkey(State),
+                            NewCharMode = erlbasic_interp:awaiting_input_nonblocking(NextState) orelse
+                                          erlbasic_interp:awaiting_input_getkey(NextState),
+                            case OldCharMode andalso not NewCharMode of
+                                true  -> WsPid ! {output, "\x02CHAR_MODE_OFF"};
+                                false -> ok
+                            end,
                             lists:foreach(fun(T) -> WsPid ! {output, T} end, Output),
                             WsPid ! {output, erlbasic_interp:next_prompt(NextState)},
                             erlang:erase(output_pid),
@@ -362,7 +395,7 @@ banner() ->
     {{Y, Mo, D}, _} = calendar:local_time(),
     DateStr = io_lib:format("~2..0w-~s-~4..0w",
         [D, month_abbr(Mo), Y]),
-    io_lib:format("\r\nRSTS/E V10.1-06     ~s\r\n\r\n", [DateStr]).
+    io_lib:format("\r\nRSTS/Erlang V1.0     ~s\r\n\r\n", [DateStr]).
 
 month_abbr(1)  -> "Jan"; month_abbr(2)  -> "Feb"; month_abbr(3)  -> "Mar";
 month_abbr(4)  -> "Apr"; month_abbr(5)  -> "May"; month_abbr(6)  -> "Jun";

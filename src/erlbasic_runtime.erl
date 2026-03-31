@@ -13,7 +13,8 @@
     data_items = [],
     data_index = 1,
     print_col = 0,
-    continue_ctx = undefined
+    continue_ctx = undefined,
+    char_buffer = []
 }).
 
 run_program(State = #state{prog = Program}) ->
@@ -223,6 +224,34 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
         {input_line, Target} ->
             PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
             {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
+        {get, Target} ->
+            %% Non-blocking but cooperative: take first buffered char, or suspend
+            %% so the conn layer can yield the CPU before returning "".
+            case State#state.char_buffer of
+                [Ch | Rest] ->
+                    case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
+                        {ok, Vars1} ->
+                            {continue, State#state{vars = Vars1, char_buffer = Rest}, LoopStack, CallStack, []};
+                        {error, Reason} ->
+                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    end;
+                [] ->
+                    PendingState = State#state{pending_input = {get_nb, Target, {program, Pc, [], LoopStack, CallStack}}},
+                    {continue, PendingState, LoopStack, CallStack, []}
+            end;
+        {getkey, Target} ->
+            case State#state.char_buffer of
+                [Ch | Rest] ->
+                    case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
+                        {ok, Vars1} ->
+                            {continue, State#state{vars = Vars1, char_buffer = Rest}, LoopStack, CallStack, []};
+                        {error, Reason} ->
+                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    end;
+                [] ->
+                    PendingState = State#state{pending_input = {getkey, Target, {program, Pc, [], LoopStack, CallStack}}},
+                    {continue, PendingState, LoopStack, CallStack, []}
+            end;
         {'end'} ->
             {'end', []};
         _ ->
@@ -426,19 +455,19 @@ update_pending_input_rest(State = #state{pending_input = {input_line, Target, {i
     State#state{pending_input = {input_line, Target, {immediate, RemainingStatements}}};
 update_pending_input_rest(State = #state{pending_input = {input_line, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
     State#state{pending_input = {input_line, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {get_nb, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {get_nb, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {get_nb, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {get_nb, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {getkey, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {getkey, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {getkey, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {getkey, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 
-target_to_text({var_target, Var}) ->
-    Var;
-target_to_text({array_target, Var, _IndexExprs}) ->
-    Var.
-
-format_input_prompt(Targets) when is_list(Targets) ->
-    VarNames = [target_to_text(T) || T <- Targets],
-    string:join(VarNames, ",") ++ "? ";
-format_input_prompt(Target) ->
-    target_to_text(Target) ++ "? ".
+format_input_prompt(_Targets) ->
+    "? ".
 
 collect_program_data(Program) ->
     collect_program_data(Program, []).

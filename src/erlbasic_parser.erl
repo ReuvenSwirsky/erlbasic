@@ -117,6 +117,26 @@ parse_input_statement(Trimmed) ->
                         error -> unknown
                     end;
                 nomatch ->
+                    parse_get_statement(Trimmed)
+            end
+    end.
+
+%% GETKEY must be matched before GET to avoid prefix collision.
+parse_get_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^GETKEY\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {getkey, Target};
+                error -> unknown
+            end;
+        nomatch ->
+            case re:run(Trimmed, "(?i)^GET\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetText]} ->
+                    case parse_assignment_target(string:trim(TargetText)) of
+                        {ok, Target} -> {get, Target};
+                        error -> unknown
+                    end;
+                nomatch ->
                     parse_let_statement(Trimmed)
             end
     end.
@@ -453,6 +473,10 @@ validate_statement(Stmt) ->
         {input, Targets} ->
             validate_input_targets(Targets);
         {input_line, Target} ->
+            validate_target_syntax(Target);
+        {get, Target} ->
+            validate_target_syntax(Target);
+        {getkey, Target} ->
             validate_target_syntax(Target);
         {'let', Target, Expr} ->
             case validate_target_syntax(Target) of

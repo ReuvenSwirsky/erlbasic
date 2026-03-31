@@ -435,3 +435,72 @@ parse_os_command_hello_inline_pw_test() ->
 
 parse_os_command_empty_test() ->
     ?assertEqual(not_os_command, erlbasic_conn:parse_os_command("")).
+
+%% ---- GET / GETKEY tests ----
+
+%% GETKEY in a program suspends execution (awaiting_input = true),
+%% then resumes when a line arrives; only the first character is stored.
+getkey_program_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 GETKEY K$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT K$", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    %% RUN suspends at line 10 waiting for a key.
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    ?assert(erlbasic_interp:awaiting_input(S4)),
+    ?assertNot(erlbasic_interp:awaiting_input_nonblocking(S4)),
+    %% Supply "XYZ" — only "X" should be assigned to K$.
+    {S5, Output} = erlbasic_interp:handle_input("XYZ", S4),
+    ?assertNot(erlbasic_interp:awaiting_input(S5)),
+    ?assertEqual(match, re:run(lists:flatten(Output), "X\r\n", [{capture, none}])).
+
+%% GET in a program sets pending_input = {get_nb,...} (non-blocking).
+%% Sending "" (as the conn layer does on timeout) assigns "" to the variable.
+get_nonblocking_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 GET K$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT \"[\" : PRINT K$ : PRINT \"]\"", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    ?assert(erlbasic_interp:awaiting_input(S4)),
+    %% GET is non-blocking: the conn layer checks this flag.
+    ?assert(erlbasic_interp:awaiting_input_nonblocking(S4)),
+    %% Simulate the conn-layer timeout: pass "" to handle_input.
+    {S5, Output} = erlbasic_interp:handle_input("", S4),
+    ?assertNot(erlbasic_interp:awaiting_input(S5)),
+    Text = lists:flatten(Output),
+    %% K$ should be "" — no characters between the brackets.
+    ?assertEqual(match, re:run(Text, "\\[\\s*\\]", [{capture, none}])).
+
+%% When GETKEY receives a multi-character line, the leftover characters
+%% are stored in char_buffer and consumed by subsequent GET/GETKEY calls
+%% without any further suspension.
+getkey_char_buffer_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 GETKEY A$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 GET B$", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT A$", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 PRINT B$", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 END", S4),
+    %% RUN suspends at line 10 (GETKEY).
+    {S6, _} = erlbasic_interp:handle_input("RUN", S5),
+    ?assert(erlbasic_interp:awaiting_input(S6)),
+    %% Send "AB" — A$ gets "A", "B" goes into char_buffer.
+    %% Line 20 GET B$ then immediately consumes "B" from the buffer
+    %% without suspending again.
+    {S7, Output} = erlbasic_interp:handle_input("AB", S6),
+    ?assertNot(erlbasic_interp:awaiting_input(S7)),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "A", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "B", [{capture, none}])).
+
+%% GETKEY in immediate mode sets pending_input; resolves on next handle_input.
+getkey_immediate_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _Prompt} = erlbasic_interp:handle_input("GETKEY K$", S0),
+    ?assert(erlbasic_interp:awaiting_input(S1)),
+    {S2, _} = erlbasic_interp:handle_input("Z", S1),
+    ?assertNot(erlbasic_interp:awaiting_input(S2)),
+    %% Verify K$ was set by printing it.
+    {_S3, Out} = erlbasic_interp:handle_input("PRINT K$", S2),
+    ?assertEqual("Z\r\n", lists:flatten(Out)).

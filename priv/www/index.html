@@ -113,23 +113,37 @@
         const cmd = data.slice(1);
         if (cmd === 'PASSWORD_ON')  { passwordMode = true; }
         if (cmd === 'PASSWORD_OFF') { passwordMode = false; }
+        if (cmd === 'CHAR_MODE_ON')  { charMode = true; }
+        if (cmd === 'CHAR_MODE_OFF') { charMode = false; inputBuffer = ''; }
         return;
       }
       // Normalise \r\n from BASIC to what xterm expects
       term.write(data.replace(/\r\n/g, '\r\n'));
     };
 
-    // Keyboard input → buffer until Enter, then send line
+    // Keyboard input.
+    // In normal mode: buffer until Enter, then send the whole line.
+    // In char mode (GET/GETKEY): send each key immediately as a single character,
+    // without echoing or waiting for Enter.
     let inputBuffer  = '';
     let passwordMode = false;
+    let charMode     = false;
     term.onKey(({ key, domEvent }) => {
       const code = domEvent.keyCode;
 
-      // Ctrl-C to interrupt
+      // Ctrl-C to interrupt (always)
       if (domEvent.ctrlKey && code === 67) {
         term.write('^C');
         ws.send('\x03');
         inputBuffer = '';
+        return;
+      }
+
+      if (charMode) {
+        // In char mode: send the raw character immediately, no echo, no buffering.
+        if (key && key.length === 1) {
+          ws.send(key + '\n');
+        }
         return;
       }
 
