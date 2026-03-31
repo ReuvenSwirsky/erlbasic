@@ -6,28 +6,33 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## March 30, 2026 - Fix Login Hang After Failed Attempts
 
-**Commit:** b00cb53
+**Commit:** [pending]
 
 ### Bug Fix
-Fixed a hang condition when users repeatedly hit enter without logging in. After 3 failed login attempts, the connection previously would hang instead of closing cleanly.
+Fixed a hang condition when users repeatedly hit enter without logging in. After failed login attempts, the connection previously would hang instead of closing cleanly.
 
 ### Problem
-The login worker process correctly exits after 3 failed attempts (via `tcp_login_loop(_Socket, 3) -> ok`), but the receive loop (`tcp_recv_loop/2`) only checked if the worker was alive during timeout periods. When data kept arriving (e.g., user hitting enter repeatedly), the receive loop would continue sending messages to the dead worker process indefinitely, creating an infinite loop.
+The login worker process exits after failed attempts, but the receive loop (TCP) and WebSocket handler didn't properly close the connection. This created a hang when users kept hitting enter without authenticating.
 
 ### Solution
-Added a worker liveness check in the data reception path (line 84 in `tcp_recv_loop/2`). When data is received, the function now checks `erlang:is_process_alive(WorkerPid)` before attempting to send messages to the worker. If the worker has exited, the socket is closed immediately.
+For TCP connections: Added `gen_tcp:close(Socket)` when the attempt limit is reached, immediately closing the socket.
+
+For WebSocket connections: Worker sends a `close` message to the WebSocket handler, which returns `{stop, State}` to cleanly terminate the connection.
+
+Set the attempt limit to 4 for both connection types, giving users adequate opportunity to log in while preventing indefinite hangs.
 
 **Files Changed:**
-- `src/erlbasic_conn.erl`: Added worker liveness check in tcp_recv_loop when receiving data
+- `src/erlbasic_conn.erl`: Updated `tcp_login_loop/2` and `ws_login_loop/2` to close connections after 4 failed attempts
+- `src/erlbasic_ws_handler.erl`: Added handler for `close` message to stop WebSocket connection
 
 ### Testing
 Manual test:
-1. Connect via telnet to port 8080
-2. Hit enter 3 times without logging in
-3. Connection closes cleanly after 3rd attempt instead of hanging
+1. Connect via WebSocket (web terminal) or telnet to port 8080
+2. Hit enter 4 times without logging in
+3. Connection closes cleanly after 4th attempt with proper disconnect message
 
 ### Rationale
-The original code assumed that timeout periods would be sufficient to detect worker death. However, if data arrives continuously (faster than the 5-second timeout), the timeout check never executes. This is a classic edge case in Erlang concurrent programming where message sending to dead processes succeeds silently. The fix ensures the connection closes gracefully regardless of input timing.
+The original code assumed that timeout periods or link exits would handle cleanup, but this didn't work for continuous input or WebSocket connections. The fix ensures graceful connection termination regardless of connection type or input timing, preventing resource leaks and improving user experience.
 
 ---
 

@@ -16,9 +16,9 @@ start(Socket) ->
 
 %% ---- RSTS/E login phase (TCP) ----
 
-%% Up to 3 attempts; after that the worker exits and the link kills recv_loop.
-tcp_login_loop(_Socket, 3) ->
-    ok;
+%% Up to 4 attempts; after that the worker exits and the link kills recv_loop.
+tcp_login_loop(Socket, 4) ->
+    gen_tcp:close(Socket);
 tcp_login_loop(Socket, Attempts) ->
     ok = gen_tcp:send(Socket, "#"),
     receive
@@ -203,8 +203,8 @@ send_input(Pid, Line) ->
 
 %% ---- RSTS/E login phase (WebSocket) ----
 
-ws_login_loop(_WsPid, 3) ->
-    ok;
+ws_login_loop(WsPid, 4) ->
+    WsPid ! close;
 ws_login_loop(WsPid, Attempts) ->
     WsPid ! {output, "#"},
     receive

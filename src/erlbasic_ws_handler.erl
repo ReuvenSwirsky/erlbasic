@@ -27,6 +27,8 @@ websocket_handle(_Frame, State) ->
 %% Messages from the interpreter process (output to send to browser).
 websocket_info({output, Text}, State) ->
     {reply, {text, list_to_binary(Text)}, State};
+websocket_info(close, State) ->
+    {stop, State};
 websocket_info(_Info, State) ->
     {ok, State}.
 
