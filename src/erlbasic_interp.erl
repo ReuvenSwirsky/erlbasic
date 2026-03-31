@@ -629,8 +629,14 @@ parse_string_input(Line) ->
 
 target_to_text({var_target, Var}) ->
     Var;
-target_to_text({array_target, Var, IndexExprs}) ->
-    Var ++ "(" ++ string:join(IndexExprs, ",") ++ ")".
+target_to_text({array_target, Var, _IndexExprs}) ->
+    Var.
+
+format_input_prompt(Targets) when is_list(Targets) ->
+    VarNames = [target_to_text(T) || T <- Targets],
+    string:join(VarNames, ",") ++ "? ";
+format_input_prompt(Target) ->
+    target_to_text(Target) ++ "? ".
 
 execute_statement(Command, State) ->
     case erlbasic_parser:should_split_top_level_sequence(Command) of
@@ -716,9 +722,9 @@ execute_statement_single(Command, State) ->
                     {DataState, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {input, Targets} ->
-            {State#state{pending_input = {Targets, {immediate, []}}}, ["? "]};
+            {State#state{pending_input = {Targets, {immediate, []}}}, [format_input_prompt(Targets)]};
         {input_line, Target} ->
-            {State#state{pending_input = {input_line, Target, {immediate, []}}}, ["? "]};
+            {State#state{pending_input = {input_line, Target, {immediate, []}}}, [format_input_prompt(Target)]};
         {locate, RowExpr, ColExpr} ->
             case eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->

@@ -219,10 +219,10 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
             execute_return(Program, State, Pc, LoopStack, CallStack);
         {input, Targets} ->
             PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, ["? "]};
+            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Targets)]};
         {input_line, Target} ->
             PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, ["? "]};
+            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
         {'end'} ->
             {'end', []};
         _ ->
@@ -311,10 +311,10 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
             end;
         {input, Targets} ->
             PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, ["? "]};
+            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Targets)]};
         {input_line, Target} ->
             PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, ["? "]};
+            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
         {cls} ->
             {continue, State, LoopStack, CallStack, cls_output()};
         {remark} ->
@@ -431,8 +431,14 @@ update_pending_input_rest(State, _RemainingStatements) ->
 
 target_to_text({var_target, Var}) ->
     Var;
-target_to_text({array_target, Var, IndexExprs}) ->
-    Var ++ "(" ++ string:join(IndexExprs, ",") ++ ")".
+target_to_text({array_target, Var, _IndexExprs}) ->
+    Var.
+
+format_input_prompt(Targets) when is_list(Targets) ->
+    VarNames = [target_to_text(T) || T <- Targets],
+    string:join(VarNames, ",") ++ "? ";
+format_input_prompt(Target) ->
+    target_to_text(Target) ++ "? ".
 
 collect_program_data(Program) ->
     collect_program_data(Program, []).
