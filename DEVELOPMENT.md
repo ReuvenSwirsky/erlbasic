@@ -6,7 +6,7 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## March 30, 2026 - Fix Login Hang After Failed Attempts
 
-**Commit:** [pending]
+**Commit:** b00cb53
 
 ### Bug Fix
 Fixed a hang condition when users repeatedly hit enter without logging in. After 3 failed login attempts, the connection previously would hang instead of closing cleanly.
