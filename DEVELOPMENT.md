@@ -6,7 +6,7 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## March 30, 2026 - RND() Function Testing and Documentation
 
-**Commit:** (pending)
+**Commit:** 469a06c
 
 ### Enhancement
 Added comprehensive testing and improved documentation for the RND() function, which was already implemented following DEC BASIC / GW-BASIC syntax.
