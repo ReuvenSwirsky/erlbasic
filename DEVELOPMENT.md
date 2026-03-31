@@ -4,6 +4,34 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## March 30, 2026 - LIST Command Range Parameters
+
+**Commit:** bdfb11b
+
+### Enhancement
+Added support for LIST command range parameters following GW-BASIC syntax.
+
+### Implementation
+- `LIST` - lists entire program (existing behavior)
+- `LIST <line>` - lists a single line (e.g., `LIST 20`)
+- `LIST <start>-<end>` - lists lines in range (e.g., `LIST 10-50`)
+- `LIST -<end>` - lists from beginning to line (e.g., `LIST -30`)
+- `LIST <start>-` - lists from line to end (e.g., `LIST 40-`)
+
+**Files Changed:**
+- `src/erlbasic_interp.erl`: Added `parse_list_command/1` and `filter_program_by_range/3`, refactored `exec_immediate/2`
+- `Basic_Syntax.md`: Updated documentation with LIST examples
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added `list_command_test/0` to verify all variations
+
+### Testing
+- All 48 smoke tests pass
+- Unit test verifies all LIST variations work correctly
+
+### Rationale
+GW-BASIC LIST command supported range parameters, allowing users to view specific sections of their program without scrolling through the entire listing. This is particularly useful for large programs and enables efficient program navigation and debugging.
+
+---
+
 ## March 30, 2026 - INPUT Prompt Variable Names Fix
 
 **Commit:** c9b10b3
