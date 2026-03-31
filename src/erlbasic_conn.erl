@@ -79,21 +79,27 @@ tcp_try_login(Socket, P, N, Pw, Attempts) ->
 tcp_recv_loop(Socket, WorkerPid) ->
     case gen_tcp:recv(Socket, 0, 5000) of
         {ok, Bin} ->
-            %% Check for Ctrl-C (ASCII 3) or telnet interrupt (IAC IP: 255 244)
-            case binary:match(Bin, <<3>>) of
-                {_, _} ->
-                    WorkerPid ! interrupt,
-                    tcp_recv_loop(Socket, WorkerPid);
-                nomatch ->
-                    case binary:match(Bin, <<255, 244>>) of
+            %% First check if worker is still alive
+            case erlang:is_process_alive(WorkerPid) of
+                false ->
+                    gen_tcp:close(Socket);
+                true ->
+                    %% Check for Ctrl-C (ASCII 3) or telnet interrupt (IAC IP: 255 244)
+                    case binary:match(Bin, <<3>>) of
                         {_, _} ->
-                            %% Telnet interrupt protocol (IAC IP)
                             WorkerPid ! interrupt,
                             tcp_recv_loop(Socket, WorkerPid);
                         nomatch ->
-                            Line = normalize_input_line(Bin),
-                            WorkerPid ! {input, Line},
-                            tcp_recv_loop(Socket, WorkerPid)
+                            case binary:match(Bin, <<255, 244>>) of
+                                {_, _} ->
+                                    %% Telnet interrupt protocol (IAC IP)
+                                    WorkerPid ! interrupt,
+                                    tcp_recv_loop(Socket, WorkerPid);
+                                nomatch ->
+                                    Line = normalize_input_line(Bin),
+                                    WorkerPid ! {input, Line},
+                                    tcp_recv_loop(Socket, WorkerPid)
+                            end
                     end
             end;
         {error, timeout} ->

@@ -4,6 +4,33 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## March 30, 2026 - Fix Login Hang After Failed Attempts
+
+**Commit:** [pending]
+
+### Bug Fix
+Fixed a hang condition when users repeatedly hit enter without logging in. After 3 failed login attempts, the connection previously would hang instead of closing cleanly.
+
+### Problem
+The login worker process correctly exits after 3 failed attempts (via `tcp_login_loop(_Socket, 3) -> ok`), but the receive loop (`tcp_recv_loop/2`) only checked if the worker was alive during timeout periods. When data kept arriving (e.g., user hitting enter repeatedly), the receive loop would continue sending messages to the dead worker process indefinitely, creating an infinite loop.
+
+### Solution
+Added a worker liveness check in the data reception path (line 84 in `tcp_recv_loop/2`). When data is received, the function now checks `erlang:is_process_alive(WorkerPid)` before attempting to send messages to the worker. If the worker has exited, the socket is closed immediately.
+
+**Files Changed:**
+- `src/erlbasic_conn.erl`: Added worker liveness check in tcp_recv_loop when receiving data
+
+### Testing
+Manual test:
+1. Connect via telnet to port 8080
+2. Hit enter 3 times without logging in
+3. Connection closes cleanly after 3rd attempt instead of hanging
+
+### Rationale
+The original code assumed that timeout periods would be sufficient to detect worker death. However, if data arrives continuously (faster than the 5-second timeout), the timeout check never executes. This is a classic edge case in Erlang concurrent programming where message sending to dead processes succeeds silently. The fix ensures the connection closes gracefully regardless of input timing.
+
+---
+
 ## March 30, 2026 - RND() Function Testing and Documentation
 
 **Commit:** 469a06c
