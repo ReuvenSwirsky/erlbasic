@@ -141,7 +141,13 @@ exec_immediate(Command, State) ->
             Filtered = filter_program_by_range(State#state.prog, StartLine, EndLine),
             {State, format_program(Filtered)};
         nomatch ->
-            exec_immediate_other(Upper, Command, State)
+            case parse_delete_command(Upper) of
+                {delete, StartLine, EndLine} ->
+                    NewProg = delete_lines_by_range(State#state.prog, StartLine, EndLine),
+                    {State#state{prog = NewProg, continue_ctx = undefined}, ["OK\r\n"]};
+                nomatch ->
+                    exec_immediate_other(Upper, Command, State)
+            end
     end.
 
 exec_immediate_other(Upper, Command, State) ->
@@ -223,6 +229,39 @@ filter_program_by_range(Program, StartLine, EndLine) ->
     [{LineNum, Code} || {LineNum, Code} <- Program,
                         LineNum >= StartLine,
                         EndLine =:= infinity orelse LineNum =< EndLine].
+
+parse_delete_command(Command) ->
+    Trimmed = string:trim(Command),
+    %% DELETE 10      -> delete line 10
+    %% DELETE 10-50   -> delete lines 10 through 50
+    %% DELETE -50     -> delete from start to line 50
+    %% DELETE 50-     -> delete from line 50 to end
+    case re:run(Trimmed, "^DELETE\\s+(\\d+)-(\\d+)$", [{capture, [1, 2], list}]) of
+        {match, [StartStr, EndStr]} ->
+            {delete, list_to_integer(StartStr), list_to_integer(EndStr)};
+        nomatch ->
+            case re:run(Trimmed, "^DELETE\\s+-(\\d+)$", [{capture, [1], list}]) of
+                {match, [EndStr]} ->
+                    {delete, 0, list_to_integer(EndStr)};
+                nomatch ->
+                    case re:run(Trimmed, "^DELETE\\s+(\\d+)-$", [{capture, [1], list}]) of
+                        {match, [StartStr]} ->
+                            {delete, list_to_integer(StartStr), infinity};
+                        nomatch ->
+                            case re:run(Trimmed, "^DELETE\\s+(\\d+)$", [{capture, [1], list}]) of
+                                {match, [LineStr]} ->
+                                    Line = list_to_integer(LineStr),
+                                    {delete, Line, Line};
+                                nomatch ->
+                                    nomatch
+                            end
+                    end
+            end
+    end.
+
+delete_lines_by_range(Program, StartLine, EndLine) ->
+    [{LineNum, Code} || {LineNum, Code} <- Program,
+                        LineNum < StartLine orelse (EndLine =/= infinity andalso LineNum > EndLine)].
 
 handle_dir_command(State) ->
     case erlbasic_storage:list_programs() of

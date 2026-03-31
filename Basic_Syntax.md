@@ -28,6 +28,10 @@ These commands can be entered without a line number:
 - `LIST <start>-<end>` - prints lines in the given range.
 - `LIST -<end>` - prints from the beginning to the specified line.
 - `LIST <start>-` - prints from the specified line to the end.
+- `DELETE <line>` - deletes a single line.
+- `DELETE <start>-<end>` - deletes lines in the given range.
+- `DELETE -<end>` - deletes from the beginning to the specified line.
+- `DELETE <start>-` - deletes from the specified line to the end.
 - `RUN` - executes the stored program.
 - `CONT` - continues execution after a `BREAK` caused by Ctrl-C during `RUN`.
 - `NEW` - clears the stored program.
@@ -44,6 +48,11 @@ LIST 100      - lists line 100 only
 LIST 10-50    - lists lines 10 through 50
 LIST -30      - lists from beginning through line 30
 LIST 40-      - lists from line 40 to the end
+
+DELETE 100    - deletes line 100
+DELETE 10-50  - deletes lines 10 through 50
+DELETE -30    - deletes from beginning through line 30
+DELETE 40-    - deletes from line 40 to the end
 ```
 
 Notes:

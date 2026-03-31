@@ -85,6 +85,53 @@ list_command_test() ->
     ?assertEqual(match, re:run(Text5, "30 PRINT", [{capture, none}])),
     ?assertEqual(match, re:run(Text5, "40 PRINT", [{capture, none}])).
 
+delete_command_test() ->
+    State0 = erlbasic_interp:new_state(),
+    {State1, _} = erlbasic_interp:handle_input("10 PRINT \"A\"", State0),
+    {State2, _} = erlbasic_interp:handle_input("20 PRINT \"B\"", State1),
+    {State3, _} = erlbasic_interp:handle_input("30 PRINT \"C\"", State2),
+    {State4, _} = erlbasic_interp:handle_input("40 PRINT \"D\"", State3),
+    {State5, _} = erlbasic_interp:handle_input("50 PRINT \"E\"", State4),
+    
+    %% Test DELETE 30 (single line)
+    {State6, _} = erlbasic_interp:handle_input("DELETE 30", State5),
+    {State7, Out1} = erlbasic_interp:handle_input("LIST", State6),
+    Text1 = lists:flatten(Out1),
+    ?assertEqual(match, re:run(Text1, "10 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text1, "20 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text1, "30 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text1, "40 PRINT", [{capture, none}])),
+    
+    %% Test DELETE 10-20 (range)
+    {State8, _} = erlbasic_interp:handle_input("DELETE 10-20", State7),
+    {State9, Out2} = erlbasic_interp:handle_input("LIST", State8),
+    Text2 = lists:flatten(Out2),
+    ?assertEqual(nomatch, re:run(Text2, "10 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text2, "20 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text2, "40 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text2, "50 PRINT", [{capture, none}])),
+    
+    %% Add more lines for testing other variations
+    {State10, _} = erlbasic_interp:handle_input("10 PRINT \"X\"", State9),
+    {State11, _} = erlbasic_interp:handle_input("20 PRINT \"Y\"", State10),
+    {State12, _} = erlbasic_interp:handle_input("30 PRINT \"Z\"", State11),
+    
+    %% Test DELETE -25 (from start to line)
+    {State13, _} = erlbasic_interp:handle_input("DELETE -25", State12),
+    {State14, Out3} = erlbasic_interp:handle_input("LIST", State13),
+    Text3 = lists:flatten(Out3),
+    ?assertEqual(nomatch, re:run(Text3, "10 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text3, "20 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text3, "30 PRINT", [{capture, none}])),
+    
+    %% Test DELETE 35- (from line to end)
+    {State15, _} = erlbasic_interp:handle_input("DELETE 35-", State14),
+    {_State16, Out4} = erlbasic_interp:handle_input("LIST", State15),
+    Text4 = lists:flatten(Out4),
+    ?assertEqual(match, re:run(Text4, "30 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text4, "40 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text4, "50 PRINT", [{capture, none}])).
+
 %% ===========================================================================
 %% Accounts (DETS) tests — all run under a single setup/teardown
 %% ===========================================================================

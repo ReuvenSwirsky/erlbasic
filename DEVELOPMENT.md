@@ -4,6 +4,33 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## March 30, 2026 - DELETE Command Implementation
+
+**Commit:** (pending)
+
+### Enhancement
+Added DELETE command to delete single lines or ranges of lines following DEC BASIC syntax.
+
+### Implementation
+- `DELETE <line>` - deletes a single line (e.g., `DELETE 20`)
+- `DELETE <start>-<end>` - deletes lines in range (e.g., `DELETE 10-50`)
+- `DELETE -<end>` - deletes from beginning to line (e.g., `DELETE -30`)
+- `DELETE <start>-` - deletes from line to end (e.g., `DELETE 40-`)
+
+**Files Changed:**
+- `src/erlbasic_interp.erl`: Added `parse_delete_command/1` and `delete_lines_by_range/2`, updated `exec_immediate/2`
+- `Basic_Syntax.md`: Updated documentation with DELETE examples
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added `delete_command_test/0` to verify all variations
+
+### Testing
+- All 48 smoke tests pass
+- Unit test verifies all DELETE variations work correctly
+
+### Rationale
+DEC BASIC's DELETE command allowed efficient removal of line ranges without manually deleting each line individually. This is essential for program editing and maintenance, especially when restructuring code or removing large blocks. The syntax mirrors the LIST command for consistency.
+
+---
+
 ## March 30, 2026 - LIST Command Range Parameters
 
 **Commit:** bdfb11b
