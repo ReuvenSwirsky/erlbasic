@@ -4,6 +4,34 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## March 30, 2026 - RND() Function Testing and Documentation
+
+**Commit:** (pending)
+
+### Enhancement
+Added comprehensive testing and improved documentation for the RND() function, which was already implemented following DEC BASIC / GW-BASIC syntax.
+
+### Implementation
+The RND() function was already correctly implemented with DEC BASIC semantics:
+- `RND` or `RND(x)` with x > 0 - returns next random value in range [0, 1)
+- `RND(0)` - returns the last random value generated
+- `RND(x)` with x < 0 - seeds the random generator deterministically from x
+
+**Files Changed:**
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added `rnd_function_test/0` to verify RND behavior
+- `smoke_tests/rnd_test.bas` and `smoke_tests/rnd_test.out`: Added smoke test for RND
+- `Basic_Syntax.md`: Enhanced documentation with detailed RND examples and clarified DEC BASIC syntax
+
+### Testing
+- Added unit test verifying all RND variations (no argument, positive, zero, negative)
+- Added smoke test verifying deterministic seeding and last-value retrieval
+- All 49 smoke tests pass
+
+### Rationale
+While the RND() function was already fully implemented, it lacked comprehensive tests and clear documentation. The DEC BASIC RND syntax allows for reproducible random sequences (via seeding with negative values) which is essential for testing, debugging, and creating games with consistent behavior. The enhanced documentation with examples makes this functionality discoverable to users.
+
+---
+
 ## March 30, 2026 - DELETE Command Implementation
 
 **Commit:** ee38a2f

@@ -443,10 +443,19 @@ GW-BASIC alignment notes:
 - `/` performs floating-point division.
 - `\\` performs integer division.
 - `MOD` returns remainder.
-- `RND` behavior follows GW-BASIC style:
-	- `RND` or `RND(x)` with `x > 0`: next pseudo-random value.
-	- `RND(0)`: repeat the previous random value.
-	- `RND(x)` with `x < 0`: reseed deterministically from `x` and return the first value from that seed.
+- `RND` behavior follows DEC BASIC / GW-BASIC syntax:
+	- `RND` or `RND(x)` with `x > 0`: returns next pseudo-random value in range [0, 1).
+	- `RND(0)`: returns the previous random value (allows repeating the last result).
+	- `RND(x)` with `x < 0`: reseeds the random number generator deterministically from `x` and returns the first value from that seed. Same negative value produces same sequence.
+- Random number examples:
+	```text
+	10 PRINT RND          ' Random value
+	20 PRINT RND(1)       ' Another random value
+	30 PRINT RND(0)       ' Repeat last value
+	40 PRINT RND(-42)     ' Seed and get value
+	50 PRINT RND(-42)     ' Same seed = same value
+	60 PRINT INT(RND*100) ' Random 0-99
+	```
 - Runtime math errors use GW-BASIC-style messages and stop `RUN`:
 	- `?DIVISION BY ZERO ERROR`
 	- `?ILLEGAL FUNCTION CALL`

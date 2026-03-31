@@ -132,6 +132,51 @@ delete_command_test() ->
     ?assertEqual(nomatch, re:run(Text4, "40 PRINT", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text4, "50 PRINT", [{capture, none}])).
 
+rnd_function_test() ->
+    %% Test RND() or RND(1) returns a value between 0 and 1
+    {ok, Val1} = erlbasic_eval_builtins:apply_math_function("RND", []),
+    ?assert(Val1 >= 0.0),
+    ?assert(Val1 < 1.0),
+    
+    {ok, Val2} = erlbasic_eval_builtins:apply_math_function("RND", [1]),
+    ?assert(Val2 >= 0.0),
+    ?assert(Val2 < 1.0),
+    
+    %% Test RND() generates different values
+    ?assertNotEqual(Val1, Val2),
+    
+    %% Test RND(0) returns the last random value
+    {ok, LastVal} = erlbasic_eval_builtins:apply_math_function("RND", [0]),
+    ?assertEqual(Val2, LastVal),
+    
+    %% Test RND(0) again should return the same value
+    {ok, LastVal2} = erlbasic_eval_builtins:apply_math_function("RND", [0]),
+    ?assertEqual(LastVal, LastVal2),
+    
+    %% Test RND(-1) seeds the generator
+    {ok, Seeded1} = erlbasic_eval_builtins:apply_math_function("RND", [-1]),
+    ?assert(Seeded1 >= 0.0),
+    ?assert(Seeded1 < 1.0),
+    
+    %% Test same negative seed produces same sequence
+    {ok, Seeded2} = erlbasic_eval_builtins:apply_math_function("RND", [-1]),
+    ?assertEqual(Seeded1, Seeded2),
+    
+    %% Test different seeds produce different values
+    {ok, Seeded3} = erlbasic_eval_builtins:apply_math_function("RND", [-42]),
+    {ok, Seeded4} = erlbasic_eval_builtins:apply_math_function("RND", [-1]),
+    ?assertNotEqual(Seeded3, Seeded4),
+    
+    %% Test RND(positive) generates new value after seeding
+    {ok, _} = erlbasic_eval_builtins:apply_math_function("RND", [-100]),
+    {ok, Next1} = erlbasic_eval_builtins:apply_math_function("RND", [5]),
+    {ok, Next2} = erlbasic_eval_builtins:apply_math_function("RND", [10]),
+    ?assertNotEqual(Next1, Next2),
+    ?assert(Next1 >= 0.0),
+    ?assert(Next1 < 1.0),
+    ?assert(Next2 >= 0.0),
+    ?assert(Next2 < 1.0).
+
 %% ===========================================================================
 %% Accounts (DETS) tests — all run under a single setup/teardown
 %% ===========================================================================
