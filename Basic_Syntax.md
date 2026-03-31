@@ -279,6 +279,56 @@ Notes:
 - Numeric variables receive numeric values.
 - Reading past available `DATA` raises `?OUT OF DATA ERROR`.
 
+### GET
+
+Reads one character from the keyboard buffer into a string variable (non-blocking).
+
+```text
+GET A$
+```
+
+Notes:
+- If the keyboard buffer is empty, the variable is set to `""` and execution continues immediately.
+- The connection layer yields for up to 10 ms before resuming, so a polling loop runs cooperatively at ~100 Hz without spinning the CPU.
+- On WebSocket sessions, the browser switches to char mode so individual keystrokes arrive immediately without waiting for Enter.
+
+Typical usage:
+
+```text
+10 GET A$
+20 IF A$ = "" THEN 10
+30 PRINT "KEY: "; A$
+```
+
+### GETKEY
+
+Blocks until one character is available in the keyboard buffer, then assigns it to a string variable.
+
+```text
+GETKEY A$
+```
+
+Notes:
+- Execution suspends until a keystroke arrives; no CPU is consumed while waiting.
+- On WebSocket sessions, the browser switches to char mode for the duration of the wait.
+- Any extra characters received with the keystroke are stored in an internal buffer and consumed by subsequent `GET` or `GETKEY` calls.
+
+### SLEEP
+
+Pauses execution for the specified number of seconds (DEC BASIC).
+
+```text
+SLEEP 1
+SLEEP 0.5
+```
+
+Notes:
+- The argument is a numeric expression (integer or float).
+- Fractional seconds are supported (e.g., `SLEEP 0.25` pauses for 250 ms).
+- Negative values are treated as zero (no pause).
+- The Erlang scheduler is yielded during the sleep; other connections continue unaffected.
+- Passing a string raises `?TYPE MISMATCH ERROR`.
+
 ### END
 
 Stops execution of a running stored program.
@@ -406,7 +456,7 @@ Supported expression forms:
 - Built-in numeric functions (case-insensitive):
 	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `CEIL`, `COS`, `DEG`, `EXP`, `FIX`, `FLOOR`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`, `VAL`
 	- Two-argument: `ATAN2`, `POW`
-	- Zero-argument: `PI`, `RND`
+	- Zero-argument: `PI`, `RND`, `TIMER`
 - Built-in string functions (case-insensitive):
 	- `LEFT$(text, n)`
 	- `RIGHT$(text, n)`
@@ -438,7 +488,8 @@ PRINT TERM$()
 
 Undefined variables evaluate to `0`.
 
-GW-BASIC alignment notes:
+GW-BASIC / DEC BASIC alignment notes:
+- `TIMER` returns the number of seconds elapsed since midnight as a floating-point number, matching GW-BASIC behaviour.
 - `^` binds tighter than unary `-`, so `-2^2` evaluates as `-(2^2)` and yields `-4`.
 - `/` performs floating-point division.
 - `\\` performs integer division.

@@ -4,6 +4,64 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## March 31, 2026 - Add TIMER Function and SLEEP Statement
+
+**Commit:** 812cac6
+
+### Enhancement
+Added `TIMER` (GW-BASIC) and `SLEEP` (DEC BASIC) to the interpreter.
+
+### Implementation
+- `TIMER` — zero-argument numeric function returning seconds elapsed since midnight as a float, matching GW-BASIC behaviour. Implemented via `calendar:local_time/0`.
+- `SLEEP n` — statement pausing execution for `n` seconds (integer or float). Calls `timer:sleep/1` which yields the Erlang scheduler so other connections continue unaffected. Negative values are clamped to zero. Passing a string raises `?TYPE MISMATCH ERROR`.
+
+**Files Changed:**
+- `src/erlbasic_eval_builtins.erl`: Added `"TIMER"` to `is_builtin_function/1`; added `apply_math_function("TIMER", [])` clause
+- `src/erlbasic_parser.erl`: Added `parse_sleep_statement/1`; added `{sleep, Expr}` to `validate_statement/1`
+- `src/erlbasic_interp.erl`: Added `"SLEEP"` and `"TIMER"` to keyword list; added `{sleep, Expr}` case to `execute_statement_single/2`
+- `src/erlbasic_runtime.erl`: Added `{sleep, Expr}` case to `execute_basic_statement/7`
+- `smoke_tests/timer.bas`, `smoke_tests/timer.out`: Smoke test for TIMER
+- `smoke_tests/sleep.bas`, `smoke_tests/sleep.out`: Smoke test for SLEEP
+
+### Testing
+- All EUnit tests pass
+- All 51 smoke tests pass (sleep and timer added)
+
+### Rationale
+`TIMER` is essential for timing loops and simple benchmarks, while `SLEEP` is needed for programs that want to pace output or wait between actions (e.g., game loops, animations). Both are standard in GW-BASIC and DEC BASIC. Using `timer:sleep/1` (rather than a busy-wait `receive after` in the runtime) correctly yields the Erlang scheduler without burning CPU.
+
+---
+
+## March 31, 2026 - Add GET and GETKEY Single-Key Input
+
+**Commit:** 46aff02
+
+### Enhancement
+Added `GET` (non-blocking single-key read) and `GETKEY` (blocking single-key read) statements matching Commodore BASIC 7.0 / GW-BASIC behaviour for interactive programs.
+
+### Implementation
+- `GET A$` — reads one character from the keyboard buffer. If the buffer is empty, the variable is set to `""` and execution continues. Internally the interpreter suspends with `pending_input = {get_nb,...}` and the connection layer waits up to 10 ms before resuming, so a polling loop runs cooperatively at ~100 Hz without spinning the CPU.
+- `GETKEY A$` — blocks indefinitely until a keystroke arrives, then assigns the first character to the target variable. Any extra characters are stored in an internal buffer and consumed by subsequent `GET`/`GETKEY` calls.
+- WebSocket clients receive `CHAR_MODE_ON` / `CHAR_MODE_OFF` control frames (byte `\x02` prefix) that switch the browser into char mode so individual keystrokes are sent immediately without waiting for Enter.
+
+**Files Changed:**
+- `src/erlbasic_parser.erl`: Added `parse_get_statement/1`, `parse_getkey_statement/1`; added `{get,...}` and `{getkey,...}` to `validate_statement/1`
+- `src/erlbasic_interp.erl`: Added keyword entries and execution cases for GET/GETKEY; added `char_buffer` field handling
+- `src/erlbasic_runtime.erl`: Added `{get,...}` and `{getkey,...}` cases; added `char_buffer` to state record
+- `src/erlbasic_conn.erl`: Added `after 10` timeout for GET in both TCP and WebSocket loops; added CHAR_MODE_ON/OFF frame emission
+- `priv/www/index.html`: Added `charMode` flag; CHAR_MODE_ON/OFF handling; immediate keystroke send in char mode
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added GET/GETKEY tests; updated smoke expected output
+
+### Testing
+- All EUnit tests pass
+- All 50 smoke tests pass
+- Manual WebSocket test: `GET` polling loop runs without browser tab spinning; `GETKEY` blocks cleanly
+
+### Rationale
+Without GET/GETKEY, interactive programs (games, menus) must use `INPUT` which requires pressing Enter. Commodity BASICs all provided single-key input for this purpose. Using a 10 ms `after` timeout (rather than `after 0`) in the conn layer prevents the CPU from spinning flat-out in polling loops while keeping latency imperceptible.
+
+---
+
 ## March 30, 2026 - Fix Login Hang After Failed Attempts
 
 **Commit:** 93c5f3f

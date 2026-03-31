@@ -8,8 +8,8 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `RENUM`, `QUIT`
-- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `END`
-- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `GET`, `GETKEY`, `SLEEP`, `END`
+- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 
 ## Build
 
@@ -107,6 +107,7 @@ RUN
 ## Notes
 
 - Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`).
+- `TIMER` returns seconds since midnight as a float (GW-BASIC compatible).
 - `REM` starts a comment statement. Any `:` after `REM` is treated as comment text, not a statement separator.
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
@@ -114,6 +115,8 @@ RUN
 - Runtime errors include `?TYPE MISMATCH ERROR`, `?CAN'T CONTINUE ERROR`, and `?RETURN WITHOUT GOSUB ERROR`.
 - `LOCATE row, col` moves the cursor for WebSocket/xterm clients. Telnet/TCP sessions report `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
 - `COLOR fg[, bg]` sets text color (0–15 foreground, 0–7 background). No-op on telnet/TCP.
+- `GET A$` reads one character non-blocking (empty string if buffer empty); `GETKEY A$` blocks until a keystroke arrives. Both switch the WebSocket browser into char mode for immediate keystroke delivery.
+- `SLEEP n` pauses execution for `n` seconds (float). Yields the Erlang scheduler; other connections are unaffected.
 - `SAVE <name>`, `LOAD <name>`, and `DIR` manage stored programs in a per-user directory under `~/BASIC/<user-id>` (falls back to `default`).
 
 ## Syntax Reference
@@ -148,6 +151,6 @@ Sample BASIC programs for smoke testing live in [smoke_tests/run_smoke_tests.ps1
 Run them with:
 
 ```powershell
-.\smoke_tests\run_smoke_tests.ps1
+.\run_tests.ps1
 ```
 
