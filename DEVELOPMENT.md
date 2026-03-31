@@ -6,7 +6,7 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## March 30, 2026 - DELETE Command Implementation
 
-**Commit:** (pending)
+**Commit:** ee38a2f
 
 ### Enhancement
 Added DELETE command to delete single lines or ranges of lines following DEC BASIC syntax.
