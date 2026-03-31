@@ -127,6 +127,7 @@ See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported synt
 
 - [examples/tictactoe.bas](examples/tictactoe.bas) - Tic-Tac-Toe with human/computer play.
 - [examples/flag.bas](examples/flag.bas) - colorized American flag using loops, `COLOR`, and `STRING$`.
+- [examples/enterprise.bas](examples/enterprise.bas) - Starship Enterprise side-view with animated twinkling starfield, using `LOCATE`, `COLOR`, `SLEEP`, and `TIMER`.
 
 ## EUnit Tests
 
