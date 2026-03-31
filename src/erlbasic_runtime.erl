@@ -1,21 +1,14 @@
 -module(erlbasic_runtime).
 
--export([run_program/1, continue_program/4, resume_program_input/5]).
+-export([run_program/1, continue_program/4, resume_program_input/5,
+         update_pending_input_rest/2, format_input_prompt/1,
+         collect_program_data/1, apply_read_vars/2, eval_locate/4,
+         apply_dim_decls/3, render_print_items/4, cls_output/0,
+         eval_color/4, render_print_using_items/5]).
 
 -define(FLUSH_OUTPUT_EVERY, 50).
 
--record(state, {
-    vars = #{},
-    prog = [],
-    funcs = #{},
-    pending_input = undefined,
-    immediate_for_buffer = undefined,
-    data_items = [],
-    data_index = 1,
-    print_col = 0,
-    continue_ctx = undefined,
-    char_buffer = []
-}).
+-include("erlbasic_state.hrl").
 
 run_program(State = #state{prog = Program}) ->
     DataItems = collect_program_data(Program),
