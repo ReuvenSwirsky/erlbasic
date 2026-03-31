@@ -134,9 +134,18 @@ exec_immediate("", State) ->
     {State, []};
 exec_immediate(Command, State) ->
     Upper = string:to_upper(Command),
-    case Upper of
-        "LIST" ->
+    case parse_list_command(Upper) of
+        {list, all} ->
             {State, format_program(State#state.prog)};
+        {list, StartLine, EndLine} ->
+            Filtered = filter_program_by_range(State#state.prog, StartLine, EndLine),
+            {State, format_program(Filtered)};
+        nomatch ->
+            exec_immediate_other(Upper, Command, State)
+    end.
+
+exec_immediate_other(Upper, Command, State) ->
+    case Upper of
         "DIR" ->
             handle_dir_command(State);
         "NEW" ->
@@ -175,6 +184,45 @@ parse_file_command(Command) ->
                     nomatch
             end
     end.
+
+parse_list_command(Command) ->
+    Trimmed = string:trim(Command),
+    case Trimmed of
+        "LIST" ->
+            {list, all};
+        _ ->
+            %% LIST 10      -> list line 10
+            %% LIST 10-50   -> list lines 10 through 50
+            %% LIST -50     -> list from start to line 50
+            %% LIST 50-     -> list from line 50 to end
+            case re:run(Trimmed, "^LIST\\s+(\\d+)-(\\d+)$", [{capture, [1, 2], list}]) of
+                {match, [StartStr, EndStr]} ->
+                    {list, list_to_integer(StartStr), list_to_integer(EndStr)};
+                nomatch ->
+                    case re:run(Trimmed, "^LIST\\s+-(\\d+)$", [{capture, [1], list}]) of
+                        {match, [EndStr]} ->
+                            {list, 0, list_to_integer(EndStr)};
+                        nomatch ->
+                            case re:run(Trimmed, "^LIST\\s+(\\d+)-$", [{capture, [1], list}]) of
+                                {match, [StartStr]} ->
+                                    {list, list_to_integer(StartStr), infinity};
+                                nomatch ->
+                                    case re:run(Trimmed, "^LIST\\s+(\\d+)$", [{capture, [1], list}]) of
+                                        {match, [LineStr]} ->
+                                            Line = list_to_integer(LineStr),
+                                            {list, Line, Line};
+                                        nomatch ->
+                                            nomatch
+                                    end
+                            end
+                    end
+            end
+    end.
+
+filter_program_by_range(Program, StartLine, EndLine) ->
+    [{LineNum, Code} || {LineNum, Code} <- Program,
+                        LineNum >= StartLine,
+                        EndLine =:= infinity orelse LineNum =< EndLine].
 
 handle_dir_command(State) ->
     case erlbasic_storage:list_programs() of

@@ -24,6 +24,10 @@ Rules:
 These commands can be entered without a line number:
 
 - `LIST` - prints all stored program lines in numeric order.
+- `LIST <line>` - prints a single line.
+- `LIST <start>-<end>` - prints lines in the given range.
+- `LIST -<end>` - prints from the beginning to the specified line.
+- `LIST <start>-` - prints from the specified line to the end.
 - `RUN` - executes the stored program.
 - `CONT` - continues execution after a `BREAK` caused by Ctrl-C during `RUN`.
 - `NEW` - clears the stored program.
@@ -32,6 +36,15 @@ These commands can be entered without a line number:
 - `LOAD <name>` - loads a saved program file into memory.
 - `RENUM [start[,increment]]` - renumbers stored program lines in order (defaults: `10,10`) and updates direct `GOTO`/`GOSUB` line-number references.
 - `QUIT` - disconnects from the TCP session.
+
+Examples:
+```text
+LIST          - lists entire program
+LIST 100      - lists line 100 only
+LIST 10-50    - lists lines 10 through 50
+LIST -30      - lists from beginning through line 30
+LIST 40-      - lists from line 40 to the end
+```
 
 Notes:
 - `CONT` without a prior break context raises `?CAN'T CONTINUE ERROR`.

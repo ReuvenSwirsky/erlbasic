@@ -45,6 +45,46 @@ run_program_output_test() ->
     ?assertEqual(match, re:run(Text, "42", [{capture, none}])),
     ?assertEqual(match, re:run(Text, "Program ended", [{capture, none}])).
 
+list_command_test() ->
+    State0 = erlbasic_interp:new_state(),
+    {State1, _} = erlbasic_interp:handle_input("10 PRINT \"A\"", State0),
+    {State2, _} = erlbasic_interp:handle_input("20 PRINT \"B\"", State1),
+    {State3, _} = erlbasic_interp:handle_input("30 PRINT \"C\"", State2),
+    {State4, _} = erlbasic_interp:handle_input("40 PRINT \"D\"", State3),
+    
+    %% Test LIST (all lines)
+    {State5, Output1} = erlbasic_interp:handle_input("LIST", State4),
+    Text1 = lists:flatten(Output1),
+    ?assertEqual(match, re:run(Text1, "10 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text1, "40 PRINT", [{capture, none}])),
+    
+    %% Test LIST 20 (single line)
+    {State6, Output2} = erlbasic_interp:handle_input("LIST 20", State5),
+    Text2 = lists:flatten(Output2),
+    ?assertEqual(match, re:run(Text2, "20 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text2, "10 PRINT", [{capture, none}])),
+    
+    %% Test LIST 20-30 (range)
+    {State7, Output3} = erlbasic_interp:handle_input("LIST 20-30", State6),
+    Text3 = lists:flatten(Output3),
+    ?assertEqual(match, re:run(Text3, "20 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text3, "30 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text3, "40 PRINT", [{capture, none}])),
+    
+    %% Test LIST -25 (from start to line)
+    {State8, Output4} = erlbasic_interp:handle_input("LIST -25", State7),
+    Text4 = lists:flatten(Output4),
+    ?assertEqual(match, re:run(Text4, "10 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text4, "20 PRINT", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text4, "30 PRINT", [{capture, none}])),
+    
+    %% Test LIST 25- (from line to end)
+    {_State9, Output5} = erlbasic_interp:handle_input("LIST 25-", State8),
+    Text5 = lists:flatten(Output5),
+    ?assertEqual(nomatch, re:run(Text5, "10 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text5, "30 PRINT", [{capture, none}])),
+    ?assertEqual(match, re:run(Text5, "40 PRINT", [{capture, none}])).
+
 %% ===========================================================================
 %% Accounts (DETS) tests — all run under a single setup/teardown
 %% ===========================================================================
