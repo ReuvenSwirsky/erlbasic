@@ -9,6 +9,7 @@
          parse_delete_command/1, delete_lines_by_range/3,
          parse_file_command/1,
          handle_dir_command/1, handle_save_command/2, handle_load_command/2,
+         handle_scratch_command/2,
          parse_renum_command/1, renumber_program/3,
          parse_bin_as_program/1, serialize_program/1]).
 
@@ -104,14 +105,19 @@ parse_file_command(Command) ->
                 {match, [Name]} ->
                     {load, string:trim(Name)};
                 nomatch ->
-                    nomatch
+                    case re:run(Trimmed, "(?i)^SCRATCH\\s+(.+)$", [{capture, [1], list}]) of
+                        {match, [Name]} ->
+                            {scratch, string:trim(Name)};
+                        nomatch ->
+                            nomatch
+                    end
             end
     end.
 
 handle_dir_command(State) ->
-    case erlbasic_storage:list_programs() of
+    case erlbasic_storage:list_programs_with_info() of
         {ok, UserFiles} ->
-            case list_example_files() of
+            case list_example_files_with_info() of
                 {ok, ExampleFiles} ->
                     Output = format_dir_listing(UserFiles, ExampleFiles),
                     {State, Output};
@@ -123,31 +129,68 @@ handle_dir_command(State) ->
     end.
 
 format_dir_listing([], []) ->
-    ["No files\r\n"];
+    PPN = erlbasic_storage:user_ppn_string(),
+    ["DIR ", PPN, "\r\n",
+     "Name             .Ext  Size Prot   Date       SY:", PPN, "\r\n\r\n",
+     "Total of 0 blocks in 0 files in SY:", PPN, "\r\n"];
 format_dir_listing(UserFiles, ExampleFiles) ->
-    UserSection =
-        case UserFiles of
-            [] -> [];
-            _  -> ["My programs:\r\n"] ++
-                  ["  " ++ N ++ "\r\n" || N <- lists:sort(UserFiles)]
-        end,
-    ExampleSection =
-        case ExampleFiles of
-            [] -> [];
-            _  -> ["\r\nExamples:\r\n"] ++
-                  ["  " ++ N ++ "\r\n" || N <- lists:sort(ExampleFiles)]
-        end,
-    UserSection ++ ExampleSection.
+    PPN = erlbasic_storage:user_ppn_string(),
+    AllFiles = UserFiles ++ ExampleFiles,
+    TotalFiles = length(AllFiles),
+    TotalBlocks = lists:sum([blocks_from_bytes(Size) || {_, Size, _} <- AllFiles]),
+    Header = ["DIR ", PPN, "\r\n",
+              "Name             .Ext  Size Prot   Date       SY:", PPN, "\r\n\r\n"],
+    FileLines = [format_file_entry(Name, Size, MTime) || {Name, Size, MTime} <- AllFiles],
+    Footer = ["\r\nTotal of ", integer_to_list(TotalBlocks), " blocks in ",
+              integer_to_list(TotalFiles), " files in SY:", PPN, "\r\n"],
+    Header ++ FileLines ++ Footer.
+
+format_file_entry(FileName, Size, MTime) ->
+    {Name, Ext} = split_filename(FileName),
+    NamePart = string:pad(Name, 16, trailing),
+    ExtPart = string:pad(Ext, 5, trailing),
+    Blocks = blocks_from_bytes(Size),
+    SizePart = string:pad(integer_to_list(Blocks), 4, leading) ++ "P",
+    ProtPart = "< 40>",
+    DatePart = format_date(MTime),
+    [NamePart, " ", ExtPart, " ", SizePart, " ", ProtPart, " ", DatePart, "\r\n"].
+
+split_filename(FileName) ->
+    case string:split(FileName, ".", trailing) of
+        [Name, Ext] -> {Name, "." ++ Ext};
+        [Name]      -> {Name, "    "}
+    end.
+
+blocks_from_bytes(Bytes) ->
+    %% RSTS/E uses 512-byte blocks
+    (Bytes + 511) div 512.
+
+format_date(UnixTime) ->
+    %% Convert Unix timestamp to datetime
+    DateTime = calendar:gregorian_seconds_to_datetime(UnixTime + 62167219200),
+    {{Year, Month, Day}, _} = DateTime,
+    MonthName = lists:nth(Month, ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]),
+    DayStr = string:pad(integer_to_list(Day), 2, leading, $0),
+    YearStr = string:pad(integer_to_list(Year rem 100), 2, leading, $0),
+    DayStr ++ "-" ++ MonthName ++ "-" ++ YearStr.
 
 handle_save_command(State, RawName) ->
     case normalize_program_filename(RawName) of
         {ok, FileName} ->
-            Content = serialize_program(State#state.prog),
-            case erlbasic_storage:write_program(FileName, Content) of
-                ok           -> {State, ["Saved " ++ FileName ++ "\r\n"]};
-                {error, _}   -> {State, ["?FILE ERROR\r\n"]}
+            %% Check if base name (without extension) is too long
+            BaseName = filename:basename(FileName, filename:extension(FileName)),
+            case length(BaseName) > 16 of
+                true ->
+                    {State, ["?FILE NAME TOO LONG\r\n"]};
+                false ->
+                    Content = serialize_program(State#state.prog),
+                    case erlbasic_storage:write_program(FileName, Content) of
+                        ok           -> {State, ["Saved " ++ FileName ++ "\r\n"]};
+                        {error, _}   -> {State, ["?FILE ERROR\r\n"]}
+                    end
             end;
-        error ->
+        {error, _} ->
             {State, ["?FILE ERROR\r\n"]}
     end.
 
@@ -166,7 +209,19 @@ handle_load_command(State, RawName) ->
                 {error, _} ->
                     {State, ["?FILE ERROR\r\n"]}
             end;
-        error ->
+        {error, _} ->
+            {State, ["?FILE ERROR\r\n"]}
+    end.
+
+handle_scratch_command(State, RawName) ->
+    case normalize_program_filename(RawName) of
+        {ok, FileName} ->
+            case erlbasic_storage:delete_program(FileName) of
+                ok             -> {State, ["Deleted " ++ FileName ++ "\r\n"]};
+                {error, enoent} -> {State, [erlbasic_eval:format_runtime_error(program_not_found)]};
+                {error, _}     -> {State, ["?FILE ERROR\r\n"]}
+            end;
+        {error, _} ->
             {State, ["?FILE ERROR\r\n"]}
     end.
 
@@ -251,12 +306,32 @@ is_regular_file(Dir, Name) ->
         _ -> false
     end.
 
+list_files_with_info(Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            Infos = lists:filtermap(fun(N) -> get_file_info(Dir, N) end, Names),
+            {ok, lists:sort(Infos)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+get_file_info(Dir, Name) ->
+    Path = filename:join(Dir, Name),
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = regular, size = Size, mtime = MTime}} ->
+            %% Convert mtime to Unix timestamp
+            UnixTime = calendar:datetime_to_gregorian_seconds(MTime) - 62167219200,
+            {true, {Name, Size, UnixTime}};
+        _ ->
+            false
+    end.
+
 normalize_program_filename(RawName) ->
     Name0 = string:trim(RawName),
     Name = keep_safe_chars(Name0),
     case Name of
         "" ->
-            error;
+            {error, invalid_filename};
         _ ->
             case filename:extension(Name) of
                 "" -> {ok, Name ++ ".bas"};
@@ -280,6 +355,17 @@ list_example_files() ->
     case file:list_dir(Dir) of
         {ok, _} ->
             list_regular_files(Dir);
+        {error, enoent} ->
+            {ok, []};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+list_example_files_with_info() ->
+    Dir = examples_program_dir(),
+    case file:list_dir(Dir) of
+        {ok, _} ->
+            list_files_with_info(Dir);
         {error, enoent} ->
             {ok, []};
         {error, Reason} ->

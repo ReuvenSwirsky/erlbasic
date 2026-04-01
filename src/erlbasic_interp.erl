@@ -153,6 +153,8 @@ exec_immediate_other(Upper, Command, State) ->
                     erlbasic_commands:handle_save_command(State, FileName);
                 {load, FileName} ->
                     erlbasic_commands:handle_load_command(State, FileName);
+                {scratch, FileName} ->
+                    erlbasic_commands:handle_scratch_command(State, FileName);
                 nomatch ->
                     case erlbasic_commands:parse_renum_command(Command) of
                         {ok, StartLine, Increment} ->

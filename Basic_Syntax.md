@@ -38,6 +38,7 @@ These commands can be entered without a line number:
 - `DIR` - lists saved program files for the current user.
 - `SAVE <name>` - saves the current stored program to a file.
 - `LOAD <name>` - loads a saved program file into memory.
+- `SCRATCH <name>` - deletes a saved program file from the user's directory.
 - `RENUM [start[,increment]]` - renumbers stored program lines in order (defaults: `10,10`) and updates direct `GOTO`/`GOSUB` line-number references.
 - `QUIT` - disconnects from the TCP session.
 
@@ -224,6 +225,8 @@ SAVE myprog.bas
 Notes:
 - The file is saved to `~/BASIC/<user-id>/`.
 - Filenames are normalized for safety.
+- Filenames (excluding extension) must not exceed 16 characters.
+- Filenames longer than 16 characters raise `?FILE NAME TOO LONG`.
 - File write failures raise `?FILE ERROR`.
 
 ### LOAD
@@ -239,6 +242,21 @@ Notes:
 - Files are loaded from `~/BASIC/<user-id>/`.
 - Missing files raise `?PROGRAM NOT FOUND`.
 - Other read failures raise `?FILE ERROR`.
+
+### SCRATCH
+
+Deletes a saved program file from the user's directory.
+
+```text
+SCRATCH DEMO
+SCRATCH myprog.bas
+```
+
+Notes:
+- Files are deleted from `~/BASIC/<user-id>/`.
+- Example files (in the shared `examples/` directory) cannot be deleted with `SCRATCH`.
+- Missing files raise `?PROGRAM NOT FOUND`.
+- Other file errors raise `?FILE ERROR`.
 
 ### DIR
 

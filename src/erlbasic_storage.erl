@@ -24,8 +24,10 @@
 -export([read_program/1,
          write_program/2,
          list_programs/0,
+         list_programs_with_info/0,
          delete_program/1,
          user_dir/0,
+         user_ppn_string/0,
          ensure_user_dir/0]).
 
 %% ===================================================================
@@ -63,6 +65,16 @@ list_programs() ->
             {error, Reason}
     end.
 
+%% @doc List program files with metadata (name, size, mtime).
+-spec list_programs_with_info() -> {ok, [{string(), integer(), integer()}]} | {error, term()}.
+list_programs_with_info() ->
+    case ensure_user_dir() of
+        {ok, Dir} ->
+            list_files_with_info(Dir);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 %% @doc Delete a program file from the user's storage area.
 -spec delete_program(FileName :: string()) -> ok | {error, term()}.
 delete_program(FileName) ->
@@ -78,6 +90,16 @@ delete_program(FileName) ->
 -spec user_dir() -> string().
 user_dir() ->
     filename:join(erl_users_root(), user_subdir()).
+
+%% @doc Return the user's PPN as a formatted string "[P,N]".
+-spec user_ppn_string() -> string().
+user_ppn_string() ->
+    case erlang:get(erlbasic_ppn) of
+        {P, N} ->
+            "[" ++ integer_to_list(P) ++ "," ++ integer_to_list(N) ++ "]";
+        _ ->
+            "[1,2]"
+    end.
 
 %% @doc Ensure the user's storage directory exists, creating it if needed.
 -spec ensure_user_dir() -> {ok, string()} | {error, term()}.
@@ -130,4 +152,24 @@ is_regular_file(Dir, Name) ->
     case file:read_file_info(filename:join(Dir, Name)) of
         {ok, #file_info{type = regular}} -> true;
         _ -> false
+    end.
+
+list_files_with_info(Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            Infos = lists:filtermap(fun(N) -> get_file_info(Dir, N) end, Names),
+            {ok, lists:sort(Infos)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+get_file_info(Dir, Name) ->
+    Path = filename:join(Dir, Name),
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = regular, size = Size, mtime = MTime}} ->
+            %% Convert mtime to Unix timestamp
+            UnixTime = calendar:datetime_to_gregorian_seconds(MTime) - 62167219200,
+            {true, {Name, Size, UnixTime}};
+        _ ->
+            false
     end.
