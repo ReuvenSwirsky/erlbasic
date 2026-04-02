@@ -345,9 +345,19 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
         {cls} ->
             {continue, State, LoopStack, CallStack, cls_output()};
         {hgr} ->
-            {continue, State, LoopStack, CallStack, hgr_output()};
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    {continue, State, LoopStack, CallStack, hgr_output()};
+                _ ->
+                    handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
         {text} ->
-            {continue, State, LoopStack, CallStack, text_output()};
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    {continue, State, LoopStack, CallStack, text_output()};
+                _ ->
+                    handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
         {pset, XExpr, YExpr, ColorExpr} ->
             case eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->

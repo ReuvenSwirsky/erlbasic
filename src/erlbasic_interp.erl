@@ -435,9 +435,19 @@ execute_statement_single(Command, State) ->
         {cls} ->
             {State, erlbasic_runtime:cls_output()};
         {hgr} ->
-            {State, erlbasic_runtime:hgr_output()};
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    {State, erlbasic_runtime:hgr_output()};
+                _ ->
+                    {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
+            end;
         {text} ->
-            {State, erlbasic_runtime:text_output()};
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    {State, erlbasic_runtime:text_output()};
+                _ ->
+                    {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
+            end;
         {pset, XExpr, YExpr, ColorExpr} ->
             case erlbasic_runtime:eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
