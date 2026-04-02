@@ -434,6 +434,31 @@ execute_statement_single(Command, State) ->
             {State, [erlbasic_eval:format_runtime_error(next_without_for)]};
         {cls} ->
             {State, erlbasic_runtime:cls_output()};
+        {hgr} ->
+            {State, erlbasic_runtime:hgr_output()};
+        {text} ->
+            {State, erlbasic_runtime:text_output()};
+        {pset, XExpr, YExpr, ColorExpr} ->
+            case erlbasic_runtime:eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
+            case erlbasic_runtime:eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {circle, XExpr, YExpr, RadiusExpr, ColorExpr} ->
+            case erlbasic_runtime:eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->

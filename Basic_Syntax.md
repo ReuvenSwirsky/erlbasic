@@ -220,6 +220,77 @@ Notes:
 - On WebSocket/xterm sessions the appropriate ANSI SGR escape is emitted.
 - On telnet/TCP sessions `COLOR` is silently ignored.
 
+### HGR
+
+Enters high-resolution graphics mode (640×480 with 16 colors).
+
+```text
+HGR
+```
+
+Notes:
+- On WebSocket sessions, hides the terminal and displays a graphics canvas.
+- On telnet/TCP sessions, `HGR` is silently ignored.
+- The graphics canvas is cleared to black when entering graphics mode.
+
+### TEXT
+
+Returns to text mode from graphics mode.
+
+```text
+TEXT
+```
+
+Notes:
+- On WebSocket sessions, hides the graphics canvas and restores the terminal.
+- On telnet/TCP sessions, `TEXT` is silently ignored.
+
+### PSET
+
+Sets a pixel at coordinates (x, y) to the specified color.
+
+```text
+PSET (100, 200), 14
+PSET (X, Y), C
+```
+
+Notes:
+- Coordinates are 0-based: x ∈ [0, 639], y ∈ [0, 479].
+- Color values 0–15 use the EGA/VGA palette.
+- Only works in graphics mode (after `HGR`).
+- On telnet/TCP sessions, `PSET` is silently ignored.
+
+### LINE
+
+Draws a line from (x1, y1) to (x2, y2) in the specified color.
+
+```text
+LINE (10, 10)-(100, 100), 15
+LINE (X1, Y1)-(X2, Y2), C
+```
+
+Notes:
+- Coordinates are 0-based.
+- Color values 0–15 use the EGA/VGA palette.
+- Only works in graphics mode (after `HGR`).
+- On telnet/TCP sessions, `LINE` is silently ignored.
+
+### CIRCLE
+
+Draws a circle centered at (x, y) with the specified radius and color.
+
+```text
+CIRCLE (320, 240), 50, 12
+CIRCLE (X, Y), R, C
+```
+
+Notes:
+- Coordinates are 0-based.
+- Radius is in pixels.
+- Color values 0–15 use the EGA/VGA palette.
+- Only works in graphics mode (after `HGR`).
+- On telnet/TCP sessions, `CIRCLE` is silently ignored.
+
 ### SAVE
 
 Saves the current stored program to disk.

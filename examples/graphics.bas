@@ -1,0 +1,31 @@
+10 REM GRAPHICS DEMO - DRAW SOME SHAPES
+20 HGR
+30 REM Draw a white rectangle border
+40 LINE (50, 50)-(590, 50), 15
+50 LINE (590, 50)-(590, 430), 15
+60 LINE (590, 430)-(50, 430), 15
+70 LINE (50, 430)-(50, 50), 15
+80 REM Draw colorful circles
+90 FOR I = 0 TO 7
+100 LET C = I + 1
+110 LET X = 100 + I * 60
+120 CIRCLE (X, 120), 30, C
+130 NEXT I
+140 REM Draw a gradient of lines
+150 FOR I = 0 TO 15
+160 LET X = 100 + I * 30
+170 LINE (X, 200)-(X, 400), I
+180 NEXT I
+190 REM Draw random pixels
+200 FOR I = 1 TO 500
+210 LET X = INT(RND(1) * 640)
+220 LET Y = INT(RND(1) * 480)
+230 LET C = INT(RND(1) * 16)
+240 PSET (X, Y), C
+250 NEXT I
+260 REM Wait 5 seconds
+270 SLEEP 5
+280 REM Return to text mode
+290 TEXT
+300 PRINT "GRAPHICS DEMO COMPLETE"
+310 END

@@ -433,9 +433,33 @@ unquote_data_item(_Other) ->
 parse_keyword_statement(Trimmed) ->
     case string:to_upper(Trimmed) of
         "CLS" -> {cls};
+        "HGR" -> {hgr};
+        "TEXT" -> {text};
         "RETURN" -> {'return'};
         "END" -> {'end'};
-        _ -> parse_sleep_statement(Trimmed)
+        _ -> parse_pset_statement(Trimmed)
+    end.
+
+parse_pset_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^PSET\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, ColorExpr]} -> {pset, XExpr, YExpr, ColorExpr};
+        nomatch -> parse_line_statement(Trimmed)
+    end.
+
+parse_line_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^LINE\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", 
+                [{capture, [1, 2, 3, 4, 5], list}]) of
+        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} -> 
+            {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch -> parse_circle_statement(Trimmed)
+    end.
+
+parse_circle_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^CIRCLE\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", 
+                [{capture, [1, 2, 3, 4], list}]) of
+        {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} -> 
+            {circle, XExpr, YExpr, RadiusExpr, ColorExpr};
+        nomatch -> parse_sleep_statement(Trimmed)
     end.
 
 parse_sleep_statement(Trimmed) ->
@@ -595,6 +619,33 @@ validate_statement(Stmt) ->
             ok;
         {cls} ->
             ok;
+        {hgr} ->
+            ok;
+        {text} ->
+            ok;
+        {pset, XExpr, YExpr, ColorExpr} ->
+            case validate_expr_pair(XExpr, YExpr) of
+                ok -> validate_expr_syntax(ColorExpr);
+                error -> error
+            end;
+        {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
+            case validate_expr_pair(X1Expr, Y1Expr) of
+                ok ->
+                    case validate_expr_pair(X2Expr, Y2Expr) of
+                        ok -> validate_expr_syntax(ColorExpr);
+                        error -> error
+                    end;
+                error -> error
+            end;
+        {circle, XExpr, YExpr, RadiusExpr, ColorExpr} ->
+            case validate_expr_pair(XExpr, YExpr) of
+                ok ->
+                    case validate_expr_syntax(RadiusExpr) of
+                        ok -> validate_expr_syntax(ColorExpr);
+                        error -> error
+                    end;
+                error -> error
+            end;
         {sleep, Expr} ->
             validate_expr_syntax(Expr);
         {color, FgExpr, undefined} ->

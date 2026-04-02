@@ -34,6 +34,7 @@
       padding: 1rem;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
     #terminal {
       flex: 1;
@@ -42,6 +43,33 @@
       overflow: hidden;
       padding: 4px;
       background: #000;
+      position: relative;
+      z-index: 2;
+    }
+    #graphics-canvas {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      right: 1rem;
+      bottom: 0;
+      width: calc(100% - 2rem);
+      height: calc(100% - 1rem);
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      background: #000;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    #terminal-container.graphics-mode #terminal {
+      z-index: 1;
+    }
+    #terminal-container.graphics-mode #graphics-canvas {
+      z-index: 3;
+      opacity: 1;
+      pointer-events: auto;
     }
     #status {
       margin-top: 0.5rem;
@@ -62,6 +90,7 @@
   </header>
 
   <div id="terminal-container">
+    <canvas id="graphics-canvas" width="640" height="480"></canvas>
     <div id="terminal"></div>
     <div id="status" class="disconnected">Connecting…</div>
   </div>
@@ -107,6 +136,72 @@
       statusEl.className = 'disconnected';
     };
 
+    // Graphics setup
+    const canvas = document.getElementById('graphics-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // 16-color EGA/VGA palette
+    const palette = [
+      '#000000', '#0000AA', '#00AA00', '#00AAAA',
+      '#AA0000', '#AA00AA', '#AA5500', '#AAAAAA',
+      '#555555', '#5555FF', '#55FF55', '#55FFFF',
+      '#FF5555', '#FF55FF', '#FFFF55', '#FFFFFF'
+    ];
+    
+    function handleGraphicsCommand(cmd) {
+      const parts = cmd.split(':');
+      const action = parts[0];
+      
+      switch(action) {
+        case 'HGR':
+          document.getElementById('terminal-container').classList.add('graphics-mode');
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, 640, 480);
+          break;
+          
+        case 'TEXT':
+          document.getElementById('terminal-container').classList.remove('graphics-mode');
+          break;
+          
+        case 'PSET':
+          const x = parseInt(parts[1]);
+          const y = parseInt(parts[2]);
+          const c = parseInt(parts[3]) & 15;
+          ctx.fillStyle = palette[c];
+          ctx.fillRect(x, y, 1, 1);
+          break;
+          
+        case 'LINE':
+          const x1 = parseInt(parts[1]);
+          const y1 = parseInt(parts[2]);
+          const x2 = parseInt(parts[3]);
+          const y2 = parseInt(parts[4]);
+          const lc = parseInt(parts[5]) & 15;
+          ctx.strokeStyle = palette[lc];
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          break;
+          
+        case 'CIRCLE':
+          const cx = parseInt(parts[1]);
+          const cy = parseInt(parts[2]);
+          const r = parseInt(parts[3]);
+          const cc = parseInt(parts[4]) & 15;
+          ctx.strokeStyle = palette[cc];
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+          ctx.stroke();
+          break;
+          
+        case 'GCLS':
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, 640, 480);
+          break;
+      }
+    }
+    
     // Output from the server → display in terminal
     ws.onmessage = (evt) => {
       const data = evt.data;
@@ -117,6 +212,7 @@
         if (cmd === 'PASSWORD_OFF') { passwordMode = false; }
         if (cmd === 'CHAR_MODE_ON')  { charMode = true; }
         if (cmd === 'CHAR_MODE_OFF') { charMode = false; inputBuffer = ''; }
+        if (cmd.startsWith('GFX:')) { handleGraphicsCommand(cmd.slice(4)); }
         return;
       }
       // Normalise \r\n from BASIC to what xterm expects
