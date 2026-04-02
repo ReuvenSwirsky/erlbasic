@@ -36,9 +36,6 @@
 360       RECT (PX, PY) - (PX + CELLSIZE - 1, PY + CELLSIZE - 1), C
 370     NEXT X
 380   NEXT Y
-390   REM
-400   REM Pause to watch evolution
-410   SLEEP 0.05
 420   REM
 430   REM Calculate next generation
 440   FOR Y = 1 TO H
