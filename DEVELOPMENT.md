@@ -6,7 +6,7 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## April 1, 2026 - Add ON ERROR GOTO and RESUME Error Handling
 
-**Commits:** (pending)
+**Commits:** 47cea45
 
 ### Enhancement
 Added comprehensive error handling support with ON ERROR GOTO and RESUME statements, allowing programs to trap and recover from runtime errors gracefully.
