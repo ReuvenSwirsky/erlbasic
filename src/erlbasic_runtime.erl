@@ -7,7 +7,7 @@
          eval_color/4, render_print_using_items/5,
          hgr_output/0, text_output/0, eval_pset/4, eval_line/6, eval_lineto/6, eval_lineto/7, eval_rect/6, eval_circle/5]).
 
--define(FLUSH_OUTPUT_EVERY, 50).
+-define(FLUSH_OUTPUT_EVERY, 1).
 
 -include("erlbasic_state.hrl").
 
