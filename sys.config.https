@@ -1,0 +1,24 @@
+%% ErlBASIC HTTPS Development Configuration
+%% Use this for local development with HTTPS enabled
+%%
+%% Generate certificates first: pwsh generate_certs.ps1
+%% Then start with: erl -config sys.config.https -s erlbasic_app
+%%
+%% Or copy to sys.config: cp sys.config.https sys.config
+
+[
+  {erlbasic, [
+    %% HTTP on standard dev port
+    {http_port, 8081},
+    
+    %% HTTPS enabled with self-signed certificates
+    {enable_https, true},
+    {https_port, 8443},
+    {certfile, "priv/ssl/cert.pem"},
+    {keyfile, "priv/ssl/key.pem"}
+  ]},
+  
+  {kernel, [
+    {logger_level, info}
+  ]}
+].

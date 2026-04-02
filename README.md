@@ -56,6 +56,30 @@ or navigate to URL
 http://localhost:8081/
 ```
 
+### HTTPS Support
+
+ErlBASIC supports HTTPS for secure connections. For development with self-signed certificates:
+
+```powershell
+# Generate self-signed certificates
+pwsh generate_certs.ps1
+
+# Enable HTTPS in sys.config
+cp sys.config.https sys.config
+
+# Build and run
+pwsh run.ps1
+```
+
+Then access via:
+```
+https://localhost:8443/
+```
+
+For production deployment with Let's Encrypt and automatic certificate renewal, see [CERTBOT_DEPLOYMENT.md](CERTBOT_DEPLOYMENT.md).
+
+For testing on localhost and local network, see [HTTPS_TESTING.md](HTTPS_TESTING.md).
+
 ## Example session
 
 ```text

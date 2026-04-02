@@ -10,6 +10,13 @@ rebar3
 priv/accounts/
 priv/mnesia/
 
+# SSL certificates and keys (never commit private keys)
+priv/ssl/
+*.pem
+*.key
+*.crt
+*.csr
+
 # Credentials (contains passwords — never commit)
 .credentials
 

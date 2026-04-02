@@ -4,6 +4,178 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 1, 2026 - Add HTTPS Support with Certbot Auto-Renewal
+
+**Commit:** (pending)
+
+### Enhancement
+Added comprehensive HTTPS/TLS support to the Cowboy web server with both development (self-signed certificates) and production (Let's Encrypt/Certbot) configurations.
+
+### Implementation
+- **HTTPS Listener**: Added `start_https_listener/1` to `erlbasic_sup.erl` that starts a TLS-enabled Cowboy listener using `cowboy:start_tls/3`
+- **Optional HTTPS**: HTTPS is opt-in via configuration (`enable_https` flag), keeping HTTP-only development simple
+- **Certificate Validation**: Checks for certificate file existence before starting HTTPS listener, providing helpful error messages
+- **Configuration System**: Created `sys.config` with examples for development, production, and reverse proxy scenarios
+- **Development Tools**: Created `generate_certs.ps1` PowerShell script to generate self-signed certificates with Subject Alternative Names (SANs) for localhost and local network IPs
+- **Production Deployment**: Created comprehensive `CERTBOT_DEPLOYMENT.md` guide covering:
+  - Initial Let's Encrypt certificate generation with certbot
+  - Automatic renewal using systemd timers or cron jobs
+  - Certificate copy and permission management
+  - Zero-downtime renewal with post-renewal hooks
+  - Reverse proxy configuration (nginx) for standard ports
+- **Testing Guide**: Created `HTTPS_TESTING.md` with instructions for testing on localhost and local network devices
+
+**Files Changed:**
+- `src/erlbasic_sup.erl`: Added `start_https_listener/1` with TLS configuration
+- `run.ps1`: Updated to load `sys.config` for runtime configuration
+- `sys.config`: New configuration file with HTTP/HTTPS parameters
+- `sys.config.https`: Example HTTPS-enabled configuration
+- `generate_certs.ps1`: Self-signed certificate generation script with SAN support
+- `CERTBOT_DEPLOYMENT.md`: Production deployment guide with auto-renewal
+- `HTTPS_TESTING.md`: Local and network testing guide
+
+### Configuration Options
+```erlang
+{erlbasic, [
+    {http_port, 8081},           % HTTP listener port
+    {enable_https, false},       % Enable/disable HTTPS
+    {https_port, 8443},          % HTTPS listener port
+    {certfile, "priv/ssl/cert.pem"},
+    {keyfile, "priv/ssl/key.pem"},
+    {cacertfile, "..."}          % Optional CA certificate
+]}
+```
+
+### Testing
+- Manual test: Generated self-signed certificates and verified HTTPS on localhost:8443
+- Manual test: Verified certificate includes SANs for localhost and local IP addresses
+- Manual test: Confirmed WebSocket connections work over both HTTP and HTTPS (ws:// and wss://)
+- Verified graceful failure when certificates are missing (doesn't crash, shows helpful message)
+
+### Rationale
+TLS/HTTPS support is essential for production deployment and testing secure connections during development. The implementation provides:
+
+1. **Development Flexibility**: Self-signed certificates with `generate_certs.ps1` allow HTTPS testing on localhost and local network without external dependencies
+2. **Production Ready**: Full Let's Encrypt/Certbot integration with automatic renewal prevents certificate expiration
+3. **Zero Configuration for Simple Use**: HTTP-only mode remains the default for quick development
+4. **Security Best Practices**: Certificate file validation, proper permissions, and secure defaults
+5. **WebSocket Compatibility**: WSS (WebSocket Secure) works automatically with HTTPS enabled
+6. **Network Testing**: Generated certificates include IP addresses via SANs, enabling testing from mobile devices and other computers on the local network
+
+The automatic renewal system using systemd timers ensures certificates stay valid in production without manual intervention. The guide includes both standalone and reverse proxy configurations to accommodate different deployment scenarios.
+
+---
+
+## March 31, 2026 - Implement SCRATCH Command and Update DIR Output Format
+
+**Commit:** 89223e1
+
+### Enhancement
+Added `SCRATCH` command to delete saved programs and improved `DIR` output with RSTS/E style columnar format. Also added 16-character filename limit for SAVE operations.
+
+### Implementation
+- `SCRATCH "filename"` — deletes the specified saved program file from the user's priv/accounts directory. Files in the examples/ directory cannot be deleted (protection against accidental deletion of system examples).
+- `DIR` command now outputs in RSTS/E style columnar format showing:
+  - User's saved programs from priv/accounts/username/ directory
+  - Example programs from examples/ directory (marked read-only)
+  - File sizes and creation dates
+- `SAVE` command now enforces 16-character maximum filename length (matches DEC BASIC / RSTS/E convention)
+
+**Files Changed:**
+- `src/erlbasic_commands.erl`: Added `exec_scratch/3`; updated `exec_dir/2` with columnar format; added filename length validation to `exec_save/3`
+- `src/erlbasic_storage.erl`: Added `delete_program/2` function with examples/ directory protection
+- `src/erlbasic_interp.erl`: Added `"SCRATCH"` to keyword list
+- `smoke_tests/filename_length.bas`, `smoke_tests/filename_length.direct`, `smoke_tests/filename_length.out`: Test for filename length limit
+- `smoke_tests/scratch_test.bas`, `smoke_tests/scratch_test.direct`, `smoke_tests/scratch_test.out`: Test for SCRATCH command
+- `Basic_Syntax.md`: Added SCRATCH documentation and DIR output example
+- `README.md`: Updated DIR command description
+
+### Testing
+- All smoke tests pass (including new filename_length and scratch_test)
+- Manual test: SCRATCH successfully deletes user files but rejects attempts to delete example files
+
+### Rationale
+DEC BASIC's SCRATCH command allowed users to delete unwanted saved programs, essential for managing disk space and organizing saved work. The columnar DIR format matches RSTS/E conventions and provides better readability than the previous simple list. The 16-character filename limit matches historical DEC BASIC conventions and prevents excessively long filenames that could cause display issues.
+
+---
+
+## March 31, 2026 - Refactor: Split Interpreter into Commands/State Modules
+
+**Commit:** 17f4e30
+
+### Refactoring
+Major code reorganization to improve maintainability by separating concerns and eliminating code duplication.
+
+### Implementation
+Created three new/updated modules to extract functionality from the monolithic interpreter:
+
+- `src/erlbasic_state.hrl` — shared `#state{}` record definition (previously copy-pasted between interp and runtime modules)
+- `src/erlbasic_commands.erl` — REPL commands extracted from `erlbasic_interp.erl`:
+  - File I/O: `SAVE`, `LOAD`, `DIR`, `RENUM`
+  - Program text: `LIST`, `DELETE`, `format_program`, `renumber_program`
+  - Serialization: `parse_bin_as_program`, `serialize_program`
+  - Keyword highlighting: `normalize_keywords_for_list`
+- `src/erlbasic_runtime.erl` — exported shared render/eval helpers used by interp:
+  - `render_print_items`, `render_print_using_items`, `cls_output`, `eval_color`
+  - `apply_dim_decls`, `collect_program_data`, `apply_read_vars`, `eval_locate`
+  - `update_pending_input_rest`, `format_input_prompt`
+- `src/erlbasic_interp.erl` — reduced from 1158 lines to 491 lines (-667 lines), now focused on REPL dispatch and INPUT continuation
+
+**Files Changed:**
+- `src/erlbasic_commands.erl`: New file (449 lines)
+- `src/erlbasic_state.hrl`: New file (13 lines)
+- `src/erlbasic_interp.erl`: Reduced from 1158 to 491 lines
+- `src/erlbasic_runtime.erl`: Added exports for shared functions
+
+### Testing
+- All existing tests pass unchanged (no behavior changes)
+- All smoke tests pass
+
+### Rationale
+The original `erlbasic_interp.erl` had grown to over 1100 lines with mixed concerns (REPL commands, program editing, file I/O, rendering). The `#state{}` record was duplicated between modules. This refactoring:
+1. Eliminates code duplication by defining shared state in a header file
+2. Groups related functionality (file commands, rendering helpers) into focused modules
+3. Makes the codebase more maintainable and easier to navigate
+4. Reduces coupling by explicitly exporting shared functions
+5. Sets the foundation for future enhancements without growing monolithic modules
+
+---
+
+## March 31, 2026 - Add Enterprise Example
+
+**Commits:** d19952c, c689d9b, e4357ba
+
+### Enhancement
+Added a full-featured text adventure game example demonstrating advanced BASIC programming techniques.
+
+### Implementation
+Created `examples/enterprise.bas` — a Star Trek themed text adventure game featuring:
+- Multiple locations (Bridge, Engineering, Sickbay, Transporter Room, Cargo Bay)
+- Inventory system and object interactions
+- Energy management mechanics
+- Victory/loss conditions
+- Demonstrates GOSUBs, arrays, nested IF/THEN, INPUT handling, and program structure
+
+**Files Changed:**
+- `examples/enterprise.bas`: New 77-line adventure game
+- `priv/www/index.html`: Added Enterprise to example list in web UI
+- `README.md`: Updated example description (referenced as "startrek" in UI)
+
+### Testing
+- Manual playthrough confirms all game paths work correctly
+- All commands (LOOK, TAKE, DROP, USE, GO, INVENTORY) function as designed
+- Victory and loss conditions trigger appropriately
+
+### Rationale
+The existing examples (flag.bas, tictactoe.bas) demonstrated basic functionality, but a more complex example was needed to showcase:
+1. Program structure and organization for larger projects
+2. State management across multiple locations
+3. Interactive fiction techniques in BASIC
+4. Practical use of arrays, GOSUBs, and string handling
+The Enterprise example serves as both a playable game and a learning resource for intermediate BASIC programming.
+
+---
+
 ## March 31, 2026 - Add TIMER Function and SLEEP Statement
 
 **Commit:** 812cac6
