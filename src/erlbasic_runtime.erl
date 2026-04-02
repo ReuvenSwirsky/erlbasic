@@ -347,44 +347,64 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
         {hgr} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State, LoopStack, CallStack, hgr_output()};
+                    {continue, State#state{graphics_mode = true}, LoopStack, CallStack, hgr_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {text} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State, LoopStack, CallStack, text_output()};
+                    {continue, State#state{graphics_mode = false}, LoopStack, CallStack, text_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {pset, XExpr, YExpr, ColorExpr} ->
-            case eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
-                {ok, Vars1, Output} ->
-                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
-                {error, Reason, _Vars1} ->
-                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+            case State#state.graphics_mode of
+                true ->
+                    case eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                        {ok, Vars1, Output} ->
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {error, Reason, _Vars1} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
-            case eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
-                {ok, Vars1, Output} ->
-                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
-                {error, Reason, _Vars1} ->
-                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+            case State#state.graphics_mode of
+                true ->
+                    case eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
+                        {ok, Vars1, Output} ->
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {error, Reason, _Vars1} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
-            case eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
-                {ok, Vars1, Output} ->
-                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
-                {error, Reason, _Vars1} ->
-                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+            case State#state.graphics_mode of
+                true ->
+                    case eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
+                        {ok, Vars1, Output} ->
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {error, Reason, _Vars1} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {circle, XExpr, YExpr, RadiusExpr, ColorExpr} ->
-            case eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
-                {ok, Vars1, Output} ->
-                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
-                {error, Reason, _Vars1} ->
-                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+            case State#state.graphics_mode of
+                true ->
+                    case eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                        {ok, Vars1, Output} ->
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {error, Reason, _Vars1} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
