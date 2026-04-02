@@ -5,7 +5,8 @@
 -define(EXPR_KEYWORDS, [
     "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
     "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "MOD",
-    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$", "TERM$"
+    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$", "TERM$",
+    "AND", "OR", "NOT", "XOR"
 ]).
 
 tokenize_expr(Text) ->
@@ -91,7 +92,7 @@ read_string([], _Acc) ->
 
 read_identifier([Ch | Rest], Acc) when (Ch >= $A andalso Ch =< $Z) orelse (Ch >= $a andalso Ch =< $z) orelse (Ch >= $0 andalso Ch =< $9) orelse Ch =:= $_ ->
     read_identifier(Rest, Acc ++ [Ch]);
-read_identifier([Suffix | Rest], Acc) when Suffix =:= $$; Suffix =:= $% ->
+read_identifier([Suffix | Rest], Acc) when Suffix =:= $$; Suffix =:= $%; Suffix =:= $& ->
     {Acc ++ [Suffix], Rest};
 read_identifier(Rest, Acc) ->
     {Acc, Rest}.

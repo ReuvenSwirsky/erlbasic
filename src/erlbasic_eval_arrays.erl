@@ -7,7 +7,9 @@
     put_array_value/4,
     normalize_dims/1,
     auto_array_dims/1,
-    is_string_var/1
+    is_string_var/1,
+    is_byte_var/1,
+    normalize_byte_value/1
 ]).
 
 -define(ARRAYS_KEY, '$ARRAYS$').
@@ -67,19 +69,23 @@ read_array_meta(ArrayMeta, Name, Indices) ->
             Key = indices_key(Indices),
             {ok, maps:get(Key, Values, default_scalar_value(Name))};
         error ->
-            {error, illegal_function_call}
+            {error, subscript_out_of_range}
     end.
 
-write_array_meta(ArrayMeta, _Name, Indices, Value) ->
+write_array_meta(ArrayMeta, Name, Indices, Value) ->
     Dims = maps:get(dims, ArrayMeta),
     case validate_indices(Dims, Indices) of
         ok ->
+            NormalizedValue = case is_byte_var(Name) of
+                true -> normalize_byte_value(Value);
+                false -> Value
+            end,
             Values0 = maps:get(values, ArrayMeta, #{}),
             Key = indices_key(Indices),
-            Values1 = maps:put(Key, Value, Values0),
+            Values1 = maps:put(Key, NormalizedValue, Values0),
             {ok, maps:put(values, Values1, ArrayMeta)};
         error ->
-            {error, illegal_function_call}
+            {error, subscript_out_of_range}
     end.
 
 auto_array_dims([_]) ->
@@ -126,6 +132,26 @@ default_scalar_value(Name) ->
 
 is_string_var(Name) when is_list(Name) ->
     Name =/= [] andalso lists:last(Name) =:= $$.
+
+is_byte_var(Name) when is_list(Name) ->
+    Name =/= [] andalso lists:last(Name) =:= $&.
+
+%% Normalize a value for byte variable storage (clamp to 0-255)
+normalize_byte_value(Value) when is_integer(Value) ->
+    if
+        Value < 0 -> 0;
+        Value > 255 -> 255;
+        true -> Value
+    end;
+normalize_byte_value(Value) when is_float(Value) ->
+    IntValue = erlang:trunc(Value),
+    if
+        IntValue < 0 -> 0;
+        IntValue > 255 -> 255;
+        true -> IntValue
+    end;
+normalize_byte_value(_) ->
+    0.
 
 normalize_dims(Dims) ->
     normalize_dims(Dims, []).

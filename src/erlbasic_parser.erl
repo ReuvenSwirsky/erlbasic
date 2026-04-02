@@ -2,9 +2,9 @@
 
 -export([parse_statement/1, should_split_top_level_sequence/1, split_statements/1, validate_program_line/1]).
 
--define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%]?)").
--define(VAR_BASE_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%]?)").
--define(LOOP_VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*%?)").
+-define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&]?)").
+-define(VAR_BASE_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&]?)").
+-define(LOOP_VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[%&]?)").
 
 parse_statement(Command) ->
     Trimmed = string:trim(Command),

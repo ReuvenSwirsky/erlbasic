@@ -83,7 +83,8 @@ LET CUBE(1,1,1) = 99
 ```
 
 Variable rules:
-- Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names or `%` for integer-style names
+- Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names, `%` for integer-style names, or `&` for byte-style names
+- Byte variables (`&` suffix) store integers clamped to 0-255 range
 - Variable lookup is case-insensitive (`X`, and `x` refer to the same variable).
 
 Examples:
@@ -93,6 +94,11 @@ LET A$ = "HELLO"
 PRINT A$
 LET I% = 42
 PRINT I%
+LET B& = 200
+PRINT B&
+LET B& = 300
+PRINT B&
+REM Prints 255 (clamped to byte range)
 ```
 
 ### REM
@@ -181,6 +187,7 @@ Notes:
 - Numeric variables parse the entered text as an integer expression.
 - Variables ending in `$` store the entered text as a string.
 - Variables ending in `%` behave like integer-style numeric variables.
+- Variables ending in `&` behave like byte variables (values clamped to 0-255).
 - During `RUN`, program execution pauses until a value is entered.
 
 ### LOCATE
@@ -368,7 +375,7 @@ DIM CUBE(2,2,2)
 Notes:
 - Indices are zero-based (`0..upper_bound`).
 - One-, two-, and three-dimensional arrays are supported.
-- Using an index outside the declared bounds raises `?ILLEGAL FUNCTION CALL`.
+- Using an index outside the declared bounds raises `?SUBSCRIPT OUT OF RANGE`.
 
 ### IF ... THEN ... [ELSE ...]
 
@@ -601,6 +608,11 @@ Supported expression forms:
 - GW-BASIC-compatible numeric operators:
 	- Integer division: `\\`
 	- Modulus: `MOD`
+- Logical/Bitwise operators (work on integers as bitwise, on boolean values as logical):
+	- `AND` - Bitwise/logical AND
+	- `OR` - Bitwise/logical OR
+	- `XOR` - Bitwise/logical XOR
+	- `NOT` - Bitwise/logical NOT
 - Built-in numeric functions (case-insensitive):
 	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `CEIL`, `COS`, `DEG`, `EXP`, `FIX`, `FLOOR`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`, `VAL`
 	- Two-argument: `ATAN2`, `POW`
@@ -659,6 +671,7 @@ GW-BASIC / DEC BASIC alignment notes:
 	- `?DIVISION BY ZERO ERROR`
 	- `?ILLEGAL FUNCTION CALL`
 	- `?OUT OF DATA ERROR`
+	- `?SUBSCRIPT OUT OF RANGE`
 	- `?TYPE MISMATCH ERROR`
 	- `?CAN'T CONTINUE ERROR`
 	- `?RETURN WITHOUT GOSUB ERROR`
@@ -678,6 +691,24 @@ Examples:
 ```text
 IF X <> 0 THEN PRINT "NONZERO"
 IF NAME = "ALICE" THEN PRINT "HI"
+IF X > 5 AND Y < 10 THEN PRINT "IN RANGE"
+IF A = 1 OR B = 1 THEN PRINT "ONE IS SET"
+IF NOT (X = 0) THEN PRINT "NOT ZERO"
+```
+
+Logical operators (`AND`, `OR`, `XOR`, `NOT`) can be used in conditions and work as expected:
+- `AND` - Both conditions must be true
+- `OR` - At least one condition must be true  
+- `XOR` - Exactly one condition must be true (exclusive or)
+- `NOT` - Negates the condition
+
+Bitwise operations on integers:
+
+```text
+LET A = 12 AND 10    REM Bitwise AND: 12 (1100) AND 10 (1010) = 8 (1000)
+LET B = 12 OR 3      REM Bitwise OR: 12 (1100) OR 3 (0011) = 15 (1111)
+LET C = 12 XOR 10    REM Bitwise XOR: 12 (1100) XOR 10 (1010) = 6 (0110)
+LET D = NOT 0        REM Bitwise NOT: NOT 0 = -1 (two's complement)
 ```
 
 If no comparison operator is present, truthiness is used:

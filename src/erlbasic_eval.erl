@@ -18,7 +18,7 @@
     error_code/1
 ]).
 
--define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$").
+-define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%&]?$").
 
 format_value(Value) when is_integer(Value) ->
     integer_to_list(Value) ++ "\r\n";
@@ -125,7 +125,11 @@ with_user_funcs(Funcs, Fun) ->
     end.
 
 assign_target({var_target, Var}, Value, Vars, _Funcs) ->
-    {ok, maps:put(Var, Value, Vars)};
+    NormalizedValue = case erlbasic_eval_arrays:is_byte_var(Var) of
+        true -> erlbasic_eval_arrays:normalize_byte_value(Value);
+        false -> Value
+    end,
+    {ok, maps:put(Var, NormalizedValue, Vars)};
 assign_target({array_target, Var, IndexExprs}, Value, Vars, Funcs) ->
     case eval_indices(IndexExprs, Vars, Funcs) of
         {ok, Indices} ->
@@ -156,6 +160,8 @@ format_runtime_error(out_of_data) ->
     "?OUT OF DATA ERROR\r\n";
 format_runtime_error(illegal_function_call) ->
     "?ILLEGAL FUNCTION CALL\r\n";
+format_runtime_error(subscript_out_of_range) ->
+    "?SUBSCRIPT OUT OF RANGE\r\n";
 format_runtime_error(type_mismatch) ->
     "?TYPE MISMATCH ERROR\r\n";
 format_runtime_error(cant_continue) ->
@@ -181,6 +187,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         division_by_zero -> "DIVISION BY ZERO ERROR";
         out_of_data -> "OUT OF DATA ERROR";
         illegal_function_call -> "ILLEGAL FUNCTION CALL";
+        subscript_out_of_range -> "SUBSCRIPT OUT OF RANGE";
         type_mismatch -> "TYPE MISMATCH ERROR";
         cant_continue -> "CAN'T CONTINUE ERROR";
         return_without_gosub -> "RETURN WITHOUT GOSUB ERROR";
@@ -199,6 +206,7 @@ format_runtime_error(Reason, _) ->
 error_code(division_by_zero) -> 11;
 error_code(out_of_data) -> 4;
 error_code(illegal_function_call) -> 5;
+error_code(subscript_out_of_range) -> 9;
 error_code(type_mismatch) -> 13;
 error_code(cant_continue) -> 17;
 error_code(return_without_gosub) -> 3;
@@ -232,6 +240,55 @@ normalize_int(_) ->
 
 eval_condition_result(CondExpr, Vars) ->
     Trimmed = string:trim(CondExpr),
+    %% Try to handle logical operators (AND, OR, XOR, NOT) at the top level
+    case find_logical_op(Trimmed) of
+        {ok, "OR", Left, Right} ->
+            case {eval_condition_result(Left, Vars), eval_condition_result(Right, Vars)} of
+                {{ok, L}, {ok, R}} -> {ok, L orelse R};
+                {{error, Reason}, _} -> {error, Reason};
+                {_, {error, Reason}} -> {error, Reason}
+            end;
+        {ok, "XOR", Left, Right} ->
+            case {eval_condition_result(Left, Vars), eval_condition_result(Right, Vars)} of
+                {{ok, L}, {ok, R}} -> {ok, L xor R};
+                {{error, Reason}, _} -> {error, Reason};
+                {_, {error, Reason}} -> {error, Reason}
+            end;
+        {ok, "AND", Left, Right} ->
+            case {eval_condition_result(Left, Vars), eval_condition_result(Right, Vars)} of
+                {{ok, L}, {ok, R}} -> {ok, L andalso R};
+                {{error, Reason}, _} -> {error, Reason};
+                {_, {error, Reason}} -> {error, Reason}
+            end;
+        not_found ->
+            %% Check for NOT prefix
+            case string:prefix(Trimmed, "NOT ") of
+                nomatch ->
+                    eval_simple_condition(Trimmed, Vars);
+                SubExpr ->
+                    case eval_condition_result(string:trim(SubExpr), Vars) of
+                        {ok, Result} -> {ok, not Result};
+                        {error, Reason} -> {error, Reason}
+                    end
+            end
+    end.
+
+eval_simple_condition(Trimmed, Vars) ->
+    %% Check if wrapped in parentheses
+    case string:prefix(Trimmed, "(") of
+        nomatch ->
+            eval_simple_condition_inner(Trimmed, Vars);
+        Rest ->
+            case lists:reverse(Rest) of
+                [$) | RevInner] ->
+                    Inner = lists:reverse(RevInner),
+                    eval_condition_result(Inner, Vars);
+                _ ->
+                    eval_simple_condition_inner(Trimmed, Vars)
+            end
+    end.
+
+eval_simple_condition_inner(Trimmed, Vars) ->
     case re:run(Trimmed, "^(.*?)(<=|>=|<>|=|<|>)(.*)$", [{capture, [1, 2, 3], list}]) of
         {match, [LeftExpr, Op, RightExpr]} ->
             case eval_expr_result(LeftExpr, Vars) of
@@ -252,6 +309,55 @@ eval_condition_result(CondExpr, Vars) ->
                 {ok, Value, _} ->
                     {ok, truthy(Value)}
             end
+    end.
+
+%% Find logical operators at the top level (not inside parentheses)
+%% Returns the operator with the lowest precedence: OR, XOR, then AND
+find_logical_op(Expr) ->
+    case find_logical_op_at_level(Expr, "OR") of
+        not_found ->
+            case find_logical_op_at_level(Expr, "XOR") of
+                not_found ->
+                    find_logical_op_at_level(Expr, "AND");
+                Found -> Found
+            end;
+        Found -> Found
+    end.
+
+find_logical_op_at_level(Expr, Op) ->
+    FullExpr = Expr, %% Keep reference to full expression
+    find_logical_op_scan(Expr, Op, FullExpr, 0, 1, []).
+
+find_logical_op_scan([], _Op, _FullExpr, _ParenDepth, _Pos, []) ->
+    not_found;
+find_logical_op_scan([], Op, FullExpr, _ParenDepth, _Pos, Matches) ->
+    %% Use the last match (rightmost, lowest precedence)
+    {Pos, Len} = lists:last(Matches),
+    Left = string:sub_string(FullExpr, 1, Pos - 1),
+    Right = string:sub_string(FullExpr, Pos + Len),
+    {ok, Op, Left, Right};
+find_logical_op_scan([$( | Rest], Op, FullExpr, ParenDepth, Pos, Matches) ->
+    find_logical_op_scan(Rest, Op, FullExpr, ParenDepth + 1, Pos + 1, Matches);
+find_logical_op_scan([$) | Rest], Op, FullExpr, ParenDepth, Pos, Matches) ->
+    find_logical_op_scan(Rest, Op, FullExpr, max(0, ParenDepth - 1), Pos + 1, Matches);
+find_logical_op_scan(Expr, Op, FullExpr, 0, Pos, Matches) ->
+    %% At top level, check for the operator
+    OpWithSpace = " " ++ Op ++ " ",
+    case string:prefix(Expr, OpWithSpace) of
+        nomatch ->
+            case Expr of
+                [] -> find_logical_op_scan([], Op, FullExpr, 0, Pos, Matches);
+                [_Ch | Rest] -> find_logical_op_scan(Rest, Op, FullExpr, 0, Pos + 1, Matches)
+            end;
+        _Match ->
+            NewMatches = Matches ++ [{Pos, length(OpWithSpace)}],
+            Rest = string:slice(Expr, length(OpWithSpace)),
+            find_logical_op_scan(Rest, Op, FullExpr, 0, Pos + length(OpWithSpace), NewMatches)
+    end;
+find_logical_op_scan(Expr, Op, FullExpr, ParenDepth, Pos, Matches) ->
+    case Expr of
+        [] -> find_logical_op_scan([], Op, FullExpr, ParenDepth, Pos, Matches);
+        [_Ch | Rest] -> find_logical_op_scan(Rest, Op, FullExpr, ParenDepth, Pos + 1, Matches)
     end.
 
 eval_condition_result(CondExpr, Vars, Funcs) ->

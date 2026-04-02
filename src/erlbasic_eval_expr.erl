@@ -5,7 +5,7 @@
 eval_arith_expr(Expr, Vars) ->
     case erlbasic_eval_lexer:tokenize_expr(Expr) of
         {ok, Tokens} ->
-            case parse_sum(Tokens, Vars) of
+            case parse_or(Tokens, Vars) of
                 {ok, Value, []} ->
                     {ok, Value};
                 {error, Reason} ->
@@ -23,6 +23,66 @@ current_user_funcs() ->
         Funcs when is_map(Funcs) -> Funcs;
         _ -> #{}
     end.
+
+%% Logical OR and XOR (lowest precedence)
+parse_or(Tokens, Vars) ->
+    case parse_xor(Tokens, Vars) of
+        {ok, Value, Rest} -> parse_or_rest(Value, Rest, Vars);
+        Error -> Error
+    end.
+
+parse_or_rest(Value, [{kw, "OR"} | Rest], Vars) ->
+    case parse_xor(Rest, Vars) of
+        {ok, Right, Next} ->
+            Result = apply_logical_or(Value, Right),
+            parse_or_rest(Result, Next, Vars);
+        Error -> Error
+    end;
+parse_or_rest(Value, Rest, _Vars) ->
+    {ok, Value, Rest}.
+
+parse_xor(Tokens, Vars) ->
+    case parse_and(Tokens, Vars) of
+        {ok, Value, Rest} -> parse_xor_rest(Value, Rest, Vars);
+        Error -> Error
+    end.
+
+parse_xor_rest(Value, [{kw, "XOR"} | Rest], Vars) ->
+    case parse_and(Rest, Vars) of
+        {ok, Right, Next} ->
+            Result = apply_logical_xor(Value, Right),
+            parse_xor_rest(Result, Next, Vars);
+        Error -> Error
+    end;
+parse_xor_rest(Value, Rest, _Vars) ->
+    {ok, Value, Rest}.
+
+%% Logical AND
+parse_and(Tokens, Vars) ->
+    case parse_not(Tokens, Vars) of
+        {ok, Value, Rest} -> parse_and_rest(Value, Rest, Vars);
+        Error -> Error
+    end.
+
+parse_and_rest(Value, [{kw, "AND"} | Rest], Vars) ->
+    case parse_not(Rest, Vars) of
+        {ok, Right, Next} ->
+            Result = apply_logical_and(Value, Right),
+            parse_and_rest(Result, Next, Vars);
+        Error -> Error
+    end;
+parse_and_rest(Value, Rest, _Vars) ->
+    {ok, Value, Rest}.
+
+%% Logical NOT
+parse_not([{kw, "NOT"} | Rest], Vars) ->
+    case parse_not(Rest, Vars) of
+        {ok, Value, Next} ->
+            {ok, apply_logical_not(Value), Next};
+        Error -> Error
+    end;
+parse_not(Tokens, Vars) ->
+    parse_sum(Tokens, Vars).
 
 parse_sum(Tokens, Vars) ->
     case parse_term(Tokens, Vars) of
@@ -169,7 +229,7 @@ parse_call_args(Tokens, Vars) ->
     parse_call_args(Tokens, Vars, []).
 
 parse_call_args(Tokens, Vars, Acc) ->
-    case parse_sum(Tokens, Vars) of
+    case parse_or(Tokens, Vars) of
         {ok, Value, [comma | Rest]} ->
             parse_call_args(Rest, Vars, [Value | Acc]);
         {ok, Value, [rparen | Rest]} ->
@@ -251,3 +311,44 @@ mul_values(Left, Right) when (is_integer(Left) orelse is_float(Left)) andalso
     {ok, Left * Right};
 mul_values(_Left, _Right) ->
     {error, type_mismatch}.
+
+%% Logical/bitwise operations
+%% For integers: bitwise operations
+%% For other types: convert to boolean (0/non-zero) and return 0 or -1
+apply_logical_and(Left, Right) when is_integer(Left), is_integer(Right) ->
+    Left band Right;
+apply_logical_and(Left, Right) ->
+    case (to_boolean(Left) andalso to_boolean(Right)) of
+        true -> -1;
+        false -> 0
+    end.
+
+apply_logical_or(Left, Right) when is_integer(Left), is_integer(Right) ->
+    Left bor Right;
+apply_logical_or(Left, Right) ->
+    case (to_boolean(Left) orelse to_boolean(Right)) of
+        true -> -1;
+        false -> 0
+    end.
+
+apply_logical_xor(Left, Right) when is_integer(Left), is_integer(Right) ->
+    Left bxor Right;
+apply_logical_xor(Left, Right) ->
+    case (to_boolean(Left) xor to_boolean(Right)) of
+        true -> -1;
+        false -> 0
+    end.
+
+apply_logical_not(Value) when is_integer(Value) ->
+    bnot Value;
+apply_logical_not(Value) ->
+    case to_boolean(Value) of
+        true -> 0;
+        false -> -1
+    end.
+
+%% Convert value to boolean for logical operations
+to_boolean(Value) when is_integer(Value) -> Value =/= 0;
+to_boolean(Value) when is_float(Value) -> Value =/= 0.0;
+to_boolean(Value) when is_list(Value) -> string:trim(Value) =/= "";
+to_boolean(_) -> false.
