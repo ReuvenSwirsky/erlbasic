@@ -14,7 +14,8 @@
     target_is_string/1,
     normalize_int/1,
     format_runtime_error/1,
-    format_runtime_error/2
+    format_runtime_error/2,
+    error_code/1
 ]).
 
 -define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%]?$").
@@ -163,6 +164,8 @@ format_runtime_error(return_without_gosub) ->
     "?RETURN WITHOUT GOSUB ERROR\r\n";
 format_runtime_error(next_without_for) ->
     "?NEXT WITHOUT FOR ERROR\r\n";
+format_runtime_error(resume_without_error) ->
+    "?RESUME WITHOUT ERROR\r\n";
 format_runtime_error(tty_no_cursor_movement) ->
     "?TTY DOESN'T SUPPORT CURSOR MOVEMENT\r\n";
 format_runtime_error(program_not_found) ->
@@ -182,6 +185,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         cant_continue -> "CAN'T CONTINUE ERROR";
         return_without_gosub -> "RETURN WITHOUT GOSUB ERROR";
         next_without_for -> "NEXT WITHOUT FOR ERROR";
+        resume_without_error -> "RESUME WITHOUT ERROR";
         tty_no_cursor_movement -> "TTY DOESN'T SUPPORT CURSOR MOVEMENT";
         program_not_found -> "PROGRAM NOT FOUND";
         syntax_error -> "SYNTAX ERROR";
@@ -190,6 +194,18 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
     io_lib:format("?~s IN ~p\r\n", [ErrorType, LineNumber]);
 format_runtime_error(Reason, _) ->
     format_runtime_error(Reason).
+
+%% Map error reasons to ERR codes (GW-BASIC compatible)
+error_code(division_by_zero) -> 11;
+error_code(out_of_data) -> 4;
+error_code(illegal_function_call) -> 5;
+error_code(type_mismatch) -> 13;
+error_code(cant_continue) -> 17;
+error_code(return_without_gosub) -> 3;
+error_code(next_without_for) -> 1;
+error_code(resume_without_error) -> 20;
+error_code(syntax_error) -> 2;
+error_code(_) -> 255.  % Unknown error
 
 eval_indices(IndexExprs, Vars, Funcs) ->
     eval_indices(IndexExprs, Vars, Funcs, []).

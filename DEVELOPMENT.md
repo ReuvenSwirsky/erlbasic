@@ -4,6 +4,75 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 1, 2026 - Add ON ERROR GOTO and RESUME Error Handling
+
+**Commits:** (pending)
+
+### Enhancement
+Added comprehensive error handling support with ON ERROR GOTO and RESUME statements, allowing programs to trap and recover from runtime errors gracefully.
+
+### Implementation
+- **State Extensions**: Added error handler tracking fields to `erlbasic_state.hrl`:
+  - `error_handler` - Line number of active error handler (or undefined)
+  - `error_resume_pc` - PC where error occurred (for RESUME)
+  - `error_code` - ERR variable value (GW-BASIC compatible error code)
+  - `error_line` - ERL variable value (line number where error occurred)
+- **Parser Support**: Extended `erlbasic_parser.erl` to recognize:
+  - `ON ERROR GOTO line` / `ON ERROR GOTO 0` (enable/disable handler)
+  - `RESUME` (retry statement)
+  - `RESUME NEXT` (continue after error)
+  - `RESUME line` (jump to specific line)
+- **Runtime Error Handling**: Refactored `erlbasic_runtime.erl` error handling:
+  - Created `handle_runtime_error/6` function that checks for active error handler
+  - When handler is set, jumps to handler line with ERR and ERL variables set
+  - When no handler, stops with error message (original behavior)
+- **Error Codes**: Added `error_code/1` function to `erlbasic_eval.erl` mapping error reasons to GW-BASIC error codes:
+  - 1 = NEXT WITHOUT FOR, 2 = SYNTAX ERROR, 3 = RETURN WITHOUT GOSUB
+  - 4 = OUT OF DATA, 5 = ILLEGAL FUNCTION CALL, 11 = DIVISION BY ZERO
+  - 13 = TYPE MISMATCH, 17 = CAN'T CONTINUE, 20 = RESUME WITHOUT ERROR
+- **RESUME Execution**: Implemented three RESUME variants:
+  - `RESUME` - Retry the statement that caused the error
+  - `RESUME NEXT` - Continue with statement after the error
+  - `RESUME line` - Jump to specific line number
+- **Documentation**: Updated `Basic_Syntax.md` with comprehensive error handling examples and error code table
+
+**Syntax:**
+```basic
+ON ERROR GOTO line   ' Set error handler
+ON ERROR GOTO 0      ' Disable error handler
+RESUME               ' Retry error statement
+RESUME NEXT          ' Skip to next statement
+RESUME line          ' Jump to line
+ERR                  ' Error code variable
+ERL                  ' Error line variable
+```
+
+**Example:**
+```basic
+10 ON ERROR GOTO 1000
+20 X = 1 / 0          ' Causes error
+30 PRINT "AFTER"
+40 END
+1000 PRINT "Error"; ERR; "at line"; ERL
+1010 RESUME NEXT      ' Continue at line 30
+```
+
+**Files Changed:**
+- `src/erlbasic_state.hrl`: Added error tracking fields
+- `src/erlbasic_parser.erl`: Added ON ERROR GOTO and RESUME parsing
+- `src/erlbasic_runtime.erl`: Refactored error handling, added RESUME execution
+- `src/erlbasic_eval.erl`: Added error_code/1 mapping function
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added 6 error handling tests (66 total)
+- `smoke_tests/error_handler.bas`: New smoke test (55 total)
+- `Basic_Syntax.md`: Comprehensive error handling documentation
+
+**Testing:**
+- 6 new EUnit tests covering all RESUME variants, ERR/ERL variables, and edge cases
+- 1 new smoke test verifying end-to-end error handling behavior
+- All 66 EUnit tests pass, all 55 smoke tests pass
+
+---
+
 ## April 1, 2026 - Add ON...GOSUB and ON...GOTO Computed Jump Statements
 
 **Commits:** 11b1012

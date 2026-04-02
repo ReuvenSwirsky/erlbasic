@@ -221,7 +221,38 @@ parse_if_statement(Trimmed) ->
         {match, [CondExpr, ThenStmt, ElseStmt]} ->
             {if_then_else, CondExpr, ThenStmt, ElseStmt};
         nomatch ->
-            parse_jump_statement(Trimmed)
+            parse_error_handler_statement(Trimmed)
+    end.
+
+parse_error_handler_statement(Trimmed) ->
+    %% Check for ON ERROR GOTO
+    case re:run(Trimmed, "(?i)^ON\\s+ERROR\\s+GOTO\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [TargetExpr]} ->
+            {on_error_goto, string:trim(TargetExpr)};
+        nomatch ->
+            parse_resume_statement(Trimmed)
+    end.
+
+parse_resume_statement(Trimmed) ->
+    %% Check for RESUME variants
+    case re:run(Trimmed, "(?i)^RESUME\\s+NEXT$", [{capture, none}]) of
+        match ->
+            {resume_next};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^RESUME\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [LineExpr]} ->
+                    case string:trim(LineExpr) of
+                        "0" -> {resume};  % RESUME 0 is same as RESUME
+                        Other -> {resume_line, Other}
+                    end;
+                nomatch ->
+                    case re:run(Trimmed, "(?i)^RESUME$", [{capture, none}]) of
+                        match ->
+                            {resume};
+                        nomatch ->
+                            parse_jump_statement(Trimmed)
+                    end
+            end
     end.
 
 parse_jump_statement(Trimmed) ->
@@ -537,6 +568,14 @@ validate_statement(Stmt) ->
                 ok -> validate_line_targets(Targets);
                 error -> error
             end;
+        {on_error_goto, TargetExpr} ->
+            validate_expr_syntax(TargetExpr);
+        {resume} ->
+            ok;
+        {resume_next} ->
+            ok;
+        {resume_line, LineExpr} ->
+            validate_expr_syntax(LineExpr);
         {for_loop, _Var, StartExpr, EndExpr, undefined} ->
             validate_expr_pair(StartExpr, EndExpr);
         {for_loop, _Var, StartExpr, EndExpr, StepExpr} ->

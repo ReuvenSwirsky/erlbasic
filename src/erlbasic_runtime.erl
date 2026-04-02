@@ -266,14 +266,14 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                 {ok, NextState} ->
                     {continue, NextState, LoopStack, CallStack, []};
                 {error, Reason} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {dim, Decls} ->
             case apply_dim_decls(Decls, State) of
                 {ok, NextState} ->
                     {continue, NextState, LoopStack, CallStack, []};
                 {error, Reason} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {print, Items, EndWithNewline} ->
             case render_print_items(Items, State#state.vars, State#state.funcs, State#state.print_col) of
@@ -290,7 +290,7 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                         end,
                     {continue, State#state{vars = Vars1, print_col = FinalCol}, LoopStack, CallStack, [FinalText]};
                 {error, Reason, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {print_using, FormatExpr, Items, EndWithNewline} ->
             case erlbasic_eval:eval_expr_result(FormatExpr, State#state.vars, State#state.funcs) of
@@ -309,12 +309,12 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                                 end,
                             {continue, State#state{vars = Vars2, print_col = FinalCol}, LoopStack, CallStack, [FinalText]};
                         {error, Reason, _Vars2} ->
-                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
                     end;
                 {ok, _Other, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(type_mismatch, LineNumber)]};
+                    handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
                 {error, Reason, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {'let', Target, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
@@ -323,17 +323,17 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                         {ok, Vars2} ->
                             {continue, State#state{vars = Vars2}, LoopStack, CallStack, []};
                         {error, Reason} ->
-                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
                     end;
                 {error, Reason, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {locate, RowExpr, ColExpr} ->
             case eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                 {error, Reason, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {input, Targets} ->
             PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
@@ -350,9 +350,9 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                     timer:sleep(Ms),
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, []};
                 {ok, _Value, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(type_mismatch, LineNumber)]};
+                    handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
                 {error, Reason, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {remark} ->
             {continue, State, LoopStack, CallStack, []};
@@ -361,12 +361,20 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
                 {ok, Vars1, Output} ->
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                 {error, Reason, _Vars1} ->
-                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
+        {on_error_goto, TargetExpr} ->
+            execute_on_error_goto(TargetExpr, Program, State, Pc, LoopStack, CallStack);
+        {resume} ->
+            execute_resume(State, Pc, LoopStack, CallStack);
+        {resume_next} ->
+            execute_resume_next(State, Pc, LoopStack, CallStack);
+        {resume_line, LineExpr} ->
+            execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {'end'} ->
             {'end', []};
         _ ->
-            {stop, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]}
+            handle_runtime_error(syntax_error, LineNumber, State, Pc, LoopStack, CallStack)
     end.
 
 finalize_for_loop(Var, StartValue, EndValue, StepValue, Vars2, State, Pc, LoopStack, CallStack) ->
@@ -790,3 +798,113 @@ render_print_using_items([{Expr, Sep} | Rest], FormatText, Vars, Funcs, StartCol
             {error, Reason, Vars1}
     end.
 
+
+%% =============================================================================
+%% Error Handler Support (ON ERROR GOTO / RESUME)
+%% =============================================================================
+
+%% Handle runtime errors - either call error handler or stop
+handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack) ->
+    case State#state.error_handler of
+        undefined ->
+            %% No error handler - stop with error message
+            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]};
+        HandlerLine ->
+            %% Error handler is set - jump to handler with error context
+            Program = State#state.prog,
+            ErrorCode = erlbasic_eval:error_code(Reason),
+            %% Set ERR and ERL variables
+            Vars1 = maps:put("ERR", ErrorCode, State#state.vars),
+            Vars2 = maps:put("ERL", LineNumber, Vars1),
+            %% Store error context for RESUME
+            State1 = State#state{
+                vars = Vars2,
+                error_resume_pc = Pc,
+                error_code = ErrorCode,
+                error_line = LineNumber
+            },
+            %% Find error handler PC
+            case resolve_target_pc(integer_to_list(HandlerLine), Program, Vars2, State#state.funcs) of
+                {ok, HandlerPc} ->
+                    {jump, HandlerPc, State1, LoopStack, CallStack, []};
+                missing ->
+                    {stop, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]}
+            end
+    end.
+
+%% ON ERROR GOTO line
+execute_on_error_goto(TargetExpr, Program, State, Pc, LoopStack, CallStack) ->
+    LineNumber = get_line_number(Program, Pc),
+    case erlbasic_eval:eval_expr_result(TargetExpr, State#state.vars, State#state.funcs) of
+        {error, Reason, _} ->
+            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack);
+        {ok, Value, Vars1} ->
+            TargetLine = erlbasic_eval:normalize_int(Value),
+            State1 = case TargetLine of
+                0 ->
+                    %% ON ERROR GOTO 0 - disable error handler
+                    State#state{vars = Vars1, error_handler = undefined};
+                _ ->
+                    %% ON ERROR GOTO line - set error handler
+                    State#state{vars = Vars1, error_handler = TargetLine}
+            end,
+            {continue, State1, LoopStack, CallStack, []}
+    end.
+
+%% RESUME - retry the statement that caused the error
+execute_resume(State, _Pc, LoopStack, CallStack) ->
+    case State#state.error_resume_pc of
+        undefined ->
+            {stop, ["?RESUME WITHOUT ERROR\r\n"]};
+        ResumePc ->
+            %% Clear error context and resume at the error PC
+            State1 = State#state{
+                error_resume_pc = undefined,
+                error_code = 0,
+                error_line = 0
+            },
+            {jump, ResumePc, State1, LoopStack, CallStack, []}
+    end.
+
+%% RESUME NEXT - continue with the statement after the error
+execute_resume_next(State, _Pc, LoopStack, CallStack) ->
+    case State#state.error_resume_pc of
+        undefined ->
+            {stop, ["?RESUME WITHOUT ERROR\r\n"]};
+        ResumePc ->
+            %% Clear error context and continue after the error PC
+            State1 = State#state{
+                error_resume_pc = undefined,
+                error_code = 0,
+                error_line = 0
+            },
+            %% Jump to the statement after the one that caused the error
+            {jump, ResumePc + 1, State1, LoopStack, CallStack, []}
+    end.
+
+%% RESUME line - continue at a specific line
+execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack) ->
+    case State#state.error_resume_pc of
+        undefined ->
+            {stop, ["?RESUME WITHOUT ERROR\r\n"]};
+        _ResumePc ->
+            LineNumber = get_line_number(Program, Pc),
+            case erlbasic_eval:eval_expr_result(LineExpr, State#state.vars, State#state.funcs) of
+                {error, Reason, _} ->
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack);
+                {ok, Value, _Vars1} ->
+                    TargetLine = erlbasic_eval:normalize_int(Value),
+                    case resolve_target_pc(integer_to_list(TargetLine), Program, State#state.vars, State#state.funcs) of
+                        {ok, TargetPc} ->
+                            %% Clear error context and jump to target
+                            State1 = State#state{
+                                error_resume_pc = undefined,
+                                error_code = 0,
+                                error_line = 0
+                            },
+                            {jump, TargetPc, State1, LoopStack, CallStack, []};
+                        missing ->
+                            handle_runtime_error(syntax_error, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
+            end
+    end.

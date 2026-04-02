@@ -1,0 +1,9 @@
+10 REM Test ON ERROR GOTO and RESUME
+20 ON ERROR GOTO 1000
+30 PRINT "Before error"
+40 X = 1 / 0
+50 PRINT "After error"
+60 END
+1000 REM Error handler
+1010 PRINT "Error"; ERR; "at line"; ERL
+1020 RESUME NEXT

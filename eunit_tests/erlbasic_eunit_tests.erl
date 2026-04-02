@@ -681,3 +681,88 @@ on_goto_zero_index_test() ->
     ?assertEqual(match, re:run(Text, "ZERO", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text, "LINE1", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text, "LINE2", [{capture, none}])).
+
+%% =============================================================================
+%% ON ERROR GOTO and RESUME Tests
+%% =============================================================================
+
+%% Test ON ERROR GOTO with RESUME NEXT
+on_error_goto_resume_next_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 ON ERROR GOTO 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT \"START\"", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 X = 1 / 0", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 PRINT \"AFTER\"", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 END", S4),
+    {S6, _} = erlbasic_interp:handle_input("100 PRINT \"ERROR\"; ERR", S5),
+    {S7, _} = erlbasic_interp:handle_input("110 RESUME NEXT", S6),
+    {_S8, Output} = erlbasic_interp:handle_input("RUN", S7),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "START", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "ERROR11", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "AFTER", [{capture, none}])).
+
+%% Test ON ERROR GOTO with RESUME (retry)
+on_error_goto_resume_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 ON ERROR GOTO 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 X = 0", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT 10 / X", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("100 X = 5", S4),
+    {S6, _} = erlbasic_interp:handle_input("110 RESUME", S5),
+    {_S7, Output} = erlbasic_interp:handle_input("RUN", S6),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "2", [{capture, none}])).
+
+%% Test ON ERROR GOTO with RESUME line
+on_error_goto_resume_line_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 ON ERROR GOTO 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 X = 1 / 0", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"SKIP\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 PRINT \"TARGET\"", S4),
+    {S6, _} = erlbasic_interp:handle_input("60 END", S5),
+    {S7, _} = erlbasic_interp:handle_input("100 RESUME 50", S6),
+    {_S8, Output} = erlbasic_interp:handle_input("RUN", S7),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "TARGET", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SKIP", [{capture, none}])).
+
+%% Test ON ERROR GOTO 0 (disable error handler)
+on_error_goto_zero_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 ON ERROR GOTO 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 ON ERROR GOTO 0", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 X = 1 / 0", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("100 PRINT \"HANDLER\"", S4),
+    {S6, _} = erlbasic_interp:handle_input("110 END", S5),
+    {_S7, Output} = erlbasic_interp:handle_input("RUN", S6),
+    Text = lists:flatten(Output),
+    %% Should get error, not handler
+    ?assertEqual(match, re:run(Text, "DIVISION BY ZERO ERROR", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "HANDLER", [{capture, none}])).
+
+%% Test ERR and ERL variables
+err_erl_variables_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 ON ERROR GOTO 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 X = 1 / 0", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("100 PRINT ERR; ERL", S3),
+    {S5, _} = erlbasic_interp:handle_input("110 END", S4),
+    {_S6, Output} = erlbasic_interp:handle_input("RUN", S5),
+    Text = lists:flatten(Output),
+    %% ERR=11 (division by zero), ERL=20
+    ?assertEqual(match, re:run(Text, "1120", [{capture, none}])).
+
+%% Test RESUME without error
+resume_without_error_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 RESUME", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 END", S1),
+    {_S3, Output} = erlbasic_interp:handle_input("RUN", S2),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "RESUME WITHOUT ERROR", [{capture, none}])).

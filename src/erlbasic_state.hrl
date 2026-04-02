@@ -9,5 +9,9 @@
     data_index = 1,
     print_col = 0,
     continue_ctx = undefined,
-    char_buffer = []
+    char_buffer = [],
+    error_handler = undefined,  % Line number of error handler (or undefined)
+    error_resume_pc = undefined, % PC where error occurred (for RESUME)
+    error_code = 0,             % ERR - last error code
+    error_line = 0              % ERL - line number where error occurred
 }).

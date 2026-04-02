@@ -484,6 +484,91 @@ NEXT
 NEXT I
 ```
 
+### ON ERROR GOTO / RESUME
+
+Error handling statements that allow programs to trap runtime errors and recover gracefully.
+
+#### Setting an Error Handler
+
+```text
+ON ERROR GOTO line
+```
+
+Sets an error handler at the specified line number. When a runtime error occurs, execution jumps to the handler instead of stopping the program.
+
+```text
+ON ERROR GOTO 0
+```
+
+Disables error handling and restores default behavior (stop on error).
+
+#### RESUME Statements
+
+Used within an error handler to continue execution after handling an error.
+
+```text
+RESUME
+RESUME 0
+```
+
+Retries the statement that caused the error. Useful when the error handler fixes the problem.
+
+```text
+RESUME NEXT
+```
+
+Continues execution with the statement immediately after the one that caused the error. Most common form.
+
+```text
+RESUME line
+```
+
+Continues execution at a specific line number.
+
+#### Error Variables
+
+Two special variables are automatically set when an error occurs:
+
+- `ERR` - Error code number (integer)
+- `ERL` - Line number where the error occurred (integer)
+
+Error codes follow GW-BASIC conventions:
+- 1 = NEXT WITHOUT FOR
+- 2 = SYNTAX ERROR
+- 3 = RETURN WITHOUT GOSUB
+- 4 = OUT OF DATA
+- 5 = ILLEGAL FUNCTION CALL
+- 11 = DIVISION BY ZERO
+- 13 = TYPE MISMATCH
+- 17 = CAN'T CONTINUE
+- 20 = RESUME WITHOUT ERROR
+
+Example:
+
+```text
+10 ON ERROR GOTO 1000
+20 PRINT "Starting"
+30 X = 1 / 0
+40 PRINT "After error"
+50 END
+1000 REM Error handler
+1010 PRINT "Error"; ERR; "at line"; ERL
+1020 RESUME NEXT
+```
+
+Output:
+```text
+Starting
+Error11at line30
+After error
+Program ended
+```
+
+Notes:
+- Using `RESUME` outside an error handler raises `?RESUME WITHOUT ERROR`
+- Error handlers remain active until disabled with `ON ERROR GOTO 0`
+- Errors within error handlers are not caught and will stop the program
+
 ## Multiple Statements on One Line
 
 Top-level statement chaining is supported using `:` for non-IF lines:
