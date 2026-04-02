@@ -451,6 +451,14 @@ parse_line_statement(Trimmed) ->
                 [{capture, [1, 2, 3, 4, 5], list}]) of
         {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} -> 
             {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch -> parse_lineto_statement(Trimmed)
+    end.
+
+parse_lineto_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^LINETO\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", 
+                [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, ColorExpr]} -> 
+            {lineto, XExpr, YExpr, ColorExpr};
         nomatch -> parse_rect_statement(Trimmed)
     end.
 

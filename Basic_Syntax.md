@@ -273,7 +273,24 @@ Notes:
 - Coordinates are 0-based.
 - Color values 0–15 use the EGA/VGA palette.
 - Only works in graphics mode (after `HGR`).
-- On telnet/TCP sessions, `LINE` is silently ignored.
+- Sets the graphics pen position to the endpoint (x2, y2) for use with `LINETO`.
+
+### LINETO
+
+Draws a line from the previous graphics endpoint to (x, y) in the specified color.
+
+```text
+LINETO (50, 100), 12
+LINETO (X, Y), C
+```
+
+Notes:
+- Requires a previous `LINE` or `LINETO` command to establish the starting point.
+- Raises `?NO PREVIOUS LINE` error if no previous line has been drawn since `HGR`.
+- Coordinates are 0-based.
+- Color values 0–15 use the EGA/VGA palette.
+- Only works in graphics mode (after `HGR`).
+- Sets the graphics pen position to the endpoint (x, y) for subsequent `LINETO` commands.
 
 ### RECT
 

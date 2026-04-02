@@ -14,5 +14,6 @@
     error_resume_pc = undefined, % PC where error occurred (for RESUME)
     error_code = 0,             % ERR - last error code
     error_line = 0,             % ERL - line number where error occurred
-    graphics_mode = false       % True when in HGR mode (WebSocket only)
+    graphics_mode = false,      % True when in HGR mode (WebSocket only)
+    graphics_pen = undefined    % {X, Y} - last graphics endpoint (for LINETO)
 }).

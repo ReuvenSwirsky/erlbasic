@@ -1,10 +1,10 @@
 10 REM GRAPHICS DEMO - DRAW SOME SHAPES
 20 HGR
-30 REM Draw a white rectangle border
+30 REM Draw a white rectangle border using LINE and LINETO
 40 LINE (50, 50)-(590, 50), 15
-50 LINE (590, 50)-(590, 430), 15
-60 LINE (590, 430)-(50, 430), 15
-70 LINE (50, 430)-(50, 50), 15
+50 LINETO (590, 430), 15
+60 LINETO (50, 430), 15
+70 LINETO (50, 50), 15
 80 REM Draw colorful circles
 90 FOR I = 0 TO 7
 100 LET C = I + 1

@@ -178,6 +178,8 @@ format_runtime_error(graphics_not_supported_on_tty) ->
     "?GRAPHICS NOT SUPPORTED ON TTY\r\n";
 format_runtime_error(no_graphics_mode) ->
     "?NO GRAPHICS MODE\r\n";
+format_runtime_error(no_previous_line) ->
+    "?NO PREVIOUS LINE\r\n";
 format_runtime_error(program_not_found) ->
     "?PROGRAM NOT FOUND\r\n";
 format_runtime_error(syntax_error) ->
@@ -200,6 +202,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         tty_no_cursor_movement -> "TTY DOESN'T SUPPORT CURSOR MOVEMENT";
         graphics_not_supported_on_tty -> "GRAPHICS NOT SUPPORTED ON TTY";
         no_graphics_mode -> "NO GRAPHICS MODE";
+        no_previous_line -> "NO PREVIOUS LINE";
         program_not_found -> "PROGRAM NOT FOUND";
         syntax_error -> "SYNTAX ERROR";
         _ -> "SYNTAX ERROR"
@@ -221,6 +224,7 @@ error_code(resume_without_error) -> 20;
 error_code(tty_no_cursor_movement) -> 71;
 error_code(graphics_not_supported_on_tty) -> 71;
 error_code(no_graphics_mode) -> 71;
+error_code(no_previous_line) -> 71;
 error_code(syntax_error) -> 2;
 error_code(_) -> 255.  % Unknown error
 

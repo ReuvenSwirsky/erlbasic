@@ -5,7 +5,7 @@
          collect_program_data/1, apply_read_vars/2, eval_locate/4,
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
-         hgr_output/0, text_output/0, eval_pset/4, eval_line/6, eval_rect/6, eval_circle/5]).
+         hgr_output/0, text_output/0, eval_pset/4, eval_line/6, eval_lineto/6, eval_lineto/7, eval_rect/6, eval_circle/5]).
 
 -define(FLUSH_OUTPUT_EVERY, 50).
 
@@ -347,14 +347,14 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
         {hgr} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State#state{graphics_mode = true}, LoopStack, CallStack, hgr_output()};
+                    {continue, State#state{graphics_mode = true, graphics_pen = undefined}, LoopStack, CallStack, hgr_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {text} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State#state{graphics_mode = false}, LoopStack, CallStack, text_output()};
+                    {continue, State#state{graphics_mode = false, graphics_pen = undefined}, LoopStack, CallStack, text_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -374,10 +374,27 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
             case State#state.graphics_mode of
                 true ->
                     case eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
-                        {ok, Vars1, Output} ->
-                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {ok, Vars1, Output, X2, Y2} ->
+                            {continue, State#state{vars = Vars1, graphics_pen = {X2, Y2}}, LoopStack, CallStack, Output};
                         {error, Reason, _Vars1} ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {lineto, XExpr, YExpr, ColorExpr} ->
+            case State#state.graphics_mode of
+                true ->
+                    case State#state.graphics_pen of
+                        {X1, Y1} ->
+                            case eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, State#state.vars, State#state.funcs) of
+                                {ok, Vars1, Output, X2, Y2} ->
+                                    {continue, State#state{vars = Vars1, graphics_pen = {X2, Y2}}, LoopStack, CallStack, Output};
+                                {error, Reason, _Vars1} ->
+                                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                            end;
+                        undefined ->
+                            handle_runtime_error(no_previous_line, LineNumber, State, Pc, LoopStack, CallStack)
                     end;
                 false ->
                     handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
@@ -897,7 +914,7 @@ eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars, Funcs) ->
                 websocket -> [io_lib:format("\x02GFX:LINE:~B:~B:~B:~B:~B", [IX1, IY1, IX2, IY2, IC])];
                 _ -> []
             end,
-            {ok, Vars5, Output};
+            {ok, Vars5, Output, IX2, IY2};
         {{error, Reason, VarsErr}, _, _, _, _} ->
             {error, Reason, VarsErr};
         {_, {error, Reason, VarsErr}, _, _, _} ->
@@ -907,6 +924,32 @@ eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars, Funcs) ->
         {_, _, _, {error, Reason, VarsErr}, _} ->
             {error, Reason, VarsErr};
         {_, _, _, _, {error, Reason, VarsErr}} ->
+            {error, Reason, VarsErr}
+    end.
+
+eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, Vars) ->
+    eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, Vars, #{}).
+
+eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, Vars, Funcs) ->
+    case {erlbasic_eval:eval_expr_result(XExpr, Vars, Funcs),
+          erlbasic_eval:eval_expr_result(YExpr, Vars, Funcs),
+          erlbasic_eval:eval_expr_result(ColorExpr, Vars, Funcs)} of
+        {{ok, X2, _Vars1}, {ok, Y2, _Vars2}, {ok, C, Vars3}} ->
+            IX1 = X1,  % Already normalized
+            IY1 = Y1,  % Already normalized
+            IX2 = erlbasic_eval:normalize_int(X2),
+            IY2 = erlbasic_eval:normalize_int(Y2),
+            IC = erlbasic_eval:normalize_int(C) band 15,
+            Output = case erlang:get(erlbasic_conn_type) of
+                websocket -> [io_lib:format("\x02GFX:LINE:~B:~B:~B:~B:~B", [IX1, IY1, IX2, IY2, IC])];
+                _ -> []
+            end,
+            {ok, Vars3, Output, IX2, IY2};
+        {{error, Reason, VarsErr}, _, _} ->
+            {error, Reason, VarsErr};
+        {_, {error, Reason, VarsErr}, _} ->
+            {error, Reason, VarsErr};
+        {_, _, {error, Reason, VarsErr}} ->
             {error, Reason, VarsErr}
     end.
 
