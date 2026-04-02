@@ -51,6 +51,8 @@ run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
     case erlang:get(interrupted) of
         true ->
             erlang:erase(interrupted),
+            %% Drain any additional interrupt messages that queued up
+            drain_interrupt_messages(),
             flush_output(NewAcc),
             BreakState = State#state{continue_ctx = {Pc, LoopStack, CallStack}},
             {BreakState, ["\r\n^C\r\nBREAK\r\n"]};
@@ -759,6 +761,13 @@ get_line_number(Program, Pc) when Pc >= 1, Pc =< length(Program) ->
     LineNumber;
 get_line_number(_Program, _Pc) ->
     undefined.
+
+drain_interrupt_messages() ->
+    receive
+        interrupt -> drain_interrupt_messages()
+    after 0 ->
+        ok
+    end.
 
 should_flush_output() ->
     case erlang:get(output_socket) of
