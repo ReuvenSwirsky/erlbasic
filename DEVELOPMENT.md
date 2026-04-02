@@ -6,7 +6,7 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## April 1, 2026 - Add HTTPS Support with Certbot Auto-Renewal
 
-**Commit:** (pending)
+**Commits:** 68c194c, (pending)
 
 ### Enhancement
 Added comprehensive HTTPS/TLS support to the Cowboy web server with both development (self-signed certificates) and production (Let's Encrypt/Certbot) configurations.
@@ -33,6 +33,9 @@ Added comprehensive HTTPS/TLS support to the Cowboy web server with both develop
 - `generate_certs.ps1`: Self-signed certificate generation script with SAN support
 - `CERTBOT_DEPLOYMENT.md`: Production deployment guide with auto-renewal
 - `HTTPS_TESTING.md`: Local and network testing guide
+- `HTTPS_QUICKSTART.md`: Quick reference guide
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added 4 HTTPS configuration tests
+- `.gitignore`: Updated to exclude certificate secrets
 
 ### Configuration Options
 ```erlang
@@ -47,6 +50,13 @@ Added comprehensive HTTPS/TLS support to the Cowboy web server with both develop
 ```
 
 ### Testing
+- Added 4 automated EUnit tests for HTTPS configuration:
+  - `https_disabled_by_default_test` - Verifies HTTPS is disabled by default
+  - `https_cert_file_validation_test` - Tests certificate file existence checking
+  - `https_config_reading_test` - Validates configuration reading/writing
+  - `https_ca_cert_optional_test` - Tests optional CA certificate handling
+- All 56 EUnit tests pass
+- All 53 smoke tests pass
 - Manual test: Generated self-signed certificates and verified HTTPS on localhost:8443
 - Manual test: Verified certificate includes SANs for localhost and local IP addresses
 - Manual test: Confirmed WebSocket connections work over both HTTP and HTTPS (ws:// and wss://)

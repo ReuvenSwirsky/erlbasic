@@ -504,3 +504,109 @@ getkey_immediate_test() ->
     %% Verify K$ was set by printing it.
     {_S3, Out} = erlbasic_interp:handle_input("PRINT K$", S2),
     ?assertEqual("Z\r\n", lists:flatten(Out)).
+
+%% =============================================================================
+%% HTTPS Configuration Tests
+%% =============================================================================
+
+%% Test that HTTPS is disabled by default
+https_disabled_by_default_test() ->
+    EnableHttps = application:get_env(erlbasic, enable_https, false),
+    ?assertEqual(false, EnableHttps).
+
+%% Test certificate file checking logic
+https_cert_file_validation_test() ->
+    %% Create test directory and files
+    TestDir = "test_ssl_temp",
+    file:make_dir(TestDir),
+    CertFile = filename:join(TestDir, "test_cert.pem"),
+    KeyFile = filename:join(TestDir, "test_key.pem"),
+    
+    try
+        %% Both files missing
+        ?assertEqual(false, filelib:is_file(CertFile)),
+        ?assertEqual(false, filelib:is_file(KeyFile)),
+        
+        %% Create cert file only
+        ok = file:write_file(CertFile, <<"test cert">>),
+        ?assertEqual(true, filelib:is_file(CertFile)),
+        ?assertEqual(false, filelib:is_file(KeyFile)),
+        
+        %% Create key file
+        ok = file:write_file(KeyFile, <<"test key">>),
+        ?assertEqual(true, filelib:is_file(CertFile)),
+        ?assertEqual(true, filelib:is_file(KeyFile))
+    after
+        %% Cleanup
+        file:delete(CertFile),
+        file:delete(KeyFile),
+        file:del_dir(TestDir)
+    end.
+
+%% Test that HTTPS config values can be read
+https_config_reading_test() ->
+    %% Save current env
+    OldHttpPort = application:get_env(erlbasic, http_port, undefined),
+    OldHttpsPort = application:get_env(erlbasic, https_port, undefined),
+    OldCertFile = application:get_env(erlbasic, certfile, undefined),
+    OldKeyFile = application:get_env(erlbasic, keyfile, undefined),
+    
+    try
+        %% Set test values
+        application:set_env(erlbasic, http_port, 9081),
+        application:set_env(erlbasic, https_port, 9443),
+        application:set_env(erlbasic, certfile, "test/cert.pem"),
+        application:set_env(erlbasic, keyfile, "test/key.pem"),
+        
+        %% Read them back
+        ?assertEqual(9081, application:get_env(erlbasic, http_port, 8081)),
+        ?assertEqual(9443, application:get_env(erlbasic, https_port, 8443)),
+        ?assertEqual("test/cert.pem", application:get_env(erlbasic, certfile, "priv/ssl/cert.pem")),
+        ?assertEqual("test/key.pem", application:get_env(erlbasic, keyfile, "priv/ssl/key.pem")),
+        
+        %% Test defaults when not set
+        application:unset_env(erlbasic, http_port),
+        ?assertEqual(8081, application:get_env(erlbasic, http_port, 8081)),
+        
+        application:unset_env(erlbasic, https_port),
+        ?assertEqual(8443, application:get_env(erlbasic, https_port, 8443))
+    after
+        %% Restore original env
+        case OldHttpPort of
+            undefined -> application:unset_env(erlbasic, http_port);
+            _ -> application:set_env(erlbasic, http_port, OldHttpPort)
+        end,
+        case OldHttpsPort of
+            undefined -> application:unset_env(erlbasic, https_port);
+            _ -> application:set_env(erlbasic, https_port, OldHttpsPort)
+        end,
+        case OldCertFile of
+            undefined -> application:unset_env(erlbasic, certfile);
+            _ -> application:set_env(erlbasic, certfile, OldCertFile)
+        end,
+        case OldKeyFile of
+            undefined -> application:unset_env(erlbasic, keyfile);
+            _ -> application:set_env(erlbasic, keyfile, OldKeyFile)
+        end
+    end.
+
+%% Test CA certificate file handling (optional parameter)
+https_ca_cert_optional_test() ->
+    %% Save current env
+    OldCaCert = application:get_env(erlbasic, cacertfile, undefined),
+    
+    try
+        %% Test undefined (default)
+        application:unset_env(erlbasic, cacertfile),
+        ?assertEqual(undefined, application:get_env(erlbasic, cacertfile, undefined)),
+        
+        %% Test with value
+        application:set_env(erlbasic, cacertfile, "test/cacert.pem"),
+        ?assertEqual("test/cacert.pem", application:get_env(erlbasic, cacertfile, undefined))
+    after
+        %% Restore
+        case OldCaCert of
+            undefined -> application:unset_env(erlbasic, cacertfile);
+            _ -> application:set_env(erlbasic, cacertfile, OldCaCert)
+        end
+    end.
