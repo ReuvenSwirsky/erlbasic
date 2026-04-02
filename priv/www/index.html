@@ -244,6 +244,8 @@
         term.write('^C');
         ws.send('\x03');
         inputBuffer = '';
+        // Exit graphics mode if active
+        document.getElementById('terminal-container').classList.remove('graphics-mode');
         return;
       }
 
