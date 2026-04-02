@@ -653,6 +653,20 @@ validate_statement(Stmt) ->
                     end;
                 error -> error
             end;
+        {lineto, XExpr, YExpr, ColorExpr} ->
+            case validate_expr_pair(XExpr, YExpr) of
+                ok -> validate_expr_syntax(ColorExpr);
+                error -> error
+            end;
+        {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
+            case validate_expr_pair(X1Expr, Y1Expr) of
+                ok ->
+                    case validate_expr_pair(X2Expr, Y2Expr) of
+                        ok -> validate_expr_syntax(ColorExpr);
+                        error -> error
+                    end;
+                error -> error
+            end;
         {circle, XExpr, YExpr, RadiusExpr, ColorExpr} ->
             case validate_expr_pair(XExpr, YExpr) of
                 ok ->
