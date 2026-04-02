@@ -19,6 +19,7 @@
   ]},
   
   {kernel, [
-    {logger_level, info}
+    %% Reduced logging to avoid verbose SSL output
+    {logger_level, error}
   ]}
 ].
