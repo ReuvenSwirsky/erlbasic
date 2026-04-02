@@ -935,9 +935,6 @@ eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars, Funcs) ->
             {error, Reason, VarsErr}
     end.
 
-eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, Vars) ->
-    eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, Vars, #{}).
-
 eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, Vars, Funcs) ->
     case eval_exprs([XExpr, YExpr, ColorExpr], Vars, Funcs) of
         {ok, [{X2, _}, {Y2, _}, {C, Vars3}]} ->
