@@ -37,6 +37,9 @@
 370     NEXT X
 380   NEXT Y
 390   REM
+400   REM Pause briefly to watch evolution
+410   SLEEP 0.1
+420   REM
 430   REM Calculate next generation
 440   FOR Y = 1 TO H
 450     FOR X = 1 TO W
