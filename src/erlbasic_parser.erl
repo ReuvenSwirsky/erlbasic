@@ -225,6 +225,22 @@ parse_if_statement(Trimmed) ->
     end.
 
 parse_jump_statement(Trimmed) ->
+    %% Check for ON...GOSUB / ON...GOTO first (computed jump)
+    case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1,2], list}]) of
+        {match, [Expr, Targets]} ->
+            TargetList = parse_comma_separated_list(Targets),
+            {on_gosub, Expr, TargetList};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1,2], list}]) of
+                {match, [Expr, Targets]} ->
+                    TargetList = parse_comma_separated_list(Targets),
+                    {on_goto, Expr, TargetList};
+                nomatch ->
+                    parse_simple_jump_statement(Trimmed)
+            end
+    end.
+
+parse_simple_jump_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^GOTO\\s+(.+)$", [{capture, [1], list}]) of
         {match, [LineExpr]} ->
             {goto, LineExpr};
@@ -236,6 +252,10 @@ parse_jump_statement(Trimmed) ->
                     parse_loop_statement(Trimmed)
             end
     end.
+
+parse_comma_separated_list(Str) ->
+    Parts = string:split(string:trim(Str), ",", all),
+    [string:trim(P) || P <- Parts].
 
 parse_loop_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^FOR\\s+" ++ ?LOOP_VAR_PATTERN ++ "\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
@@ -507,6 +527,16 @@ validate_statement(Stmt) ->
             validate_expr_syntax(LineExpr);
         {gosub, LineExpr} ->
             validate_expr_syntax(LineExpr);
+        {on_goto, Expr, Targets} ->
+            case validate_expr_syntax(Expr) of
+                ok -> validate_line_targets(Targets);
+                error -> error
+            end;
+        {on_gosub, Expr, Targets} ->
+            case validate_expr_syntax(Expr) of
+                ok -> validate_line_targets(Targets);
+                error -> error
+            end;
         {for_loop, _Var, StartExpr, EndExpr, undefined} ->
             validate_expr_pair(StartExpr, EndExpr);
         {for_loop, _Var, StartExpr, EndExpr, StepExpr} ->
@@ -610,6 +640,14 @@ validate_condition_syntax(CondExpr) ->
     case erlbasic_eval:eval_condition_result(CondExpr, #{}, #{}) of
         {error, syntax_error} -> error;
         _ -> ok
+    end.
+
+validate_line_targets([]) ->
+    ok;
+validate_line_targets([Target | Rest]) ->
+    case validate_expr_syntax(Target) of
+        ok -> validate_line_targets(Rest);
+        error -> error
     end.
 
 has_balanced_quotes(Text) ->

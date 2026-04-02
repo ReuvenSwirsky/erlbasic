@@ -1,0 +1,8 @@
+Testing ON...GOSUB:
+Called subroutine 1
+Called subroutine 2
+Called subroutine 3
+
+Testing ON...GOTO:
+Jumped to line 600
+Program ended

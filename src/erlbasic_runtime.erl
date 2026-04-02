@@ -209,6 +209,10 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
             execute_goto(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {gosub, LineExpr} ->
             execute_gosub(LineExpr, Program, State, Pc, LoopStack, CallStack);
+        {on_goto, Expr, Targets} ->
+            execute_on_goto(Expr, Targets, Program, State, Pc, LoopStack, CallStack);
+        {on_gosub, Expr, Targets} ->
+            execute_on_gosub(Expr, Targets, Program, State, Pc, LoopStack, CallStack);
         {'return'} ->
             execute_return(Program, State, Pc, LoopStack, CallStack);
         {input, Targets} ->
@@ -401,6 +405,40 @@ execute_gosub(LineExpr, Program, State, Pc, LoopStack, CallStack) ->
             {jump, TargetPc, State, LoopStack, [Pc + 1 | CallStack], []};
         missing ->
             {stop, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]}
+    end.
+
+execute_on_goto(Expr, Targets, Program, State, Pc, LoopStack, CallStack) ->
+    LineNumber = get_line_number(Program, Pc),
+    case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
+        {error, Reason, _} ->
+            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]};
+        {ok, IndexValue, _} ->
+            Index = erlbasic_eval:normalize_int(IndexValue),
+            if
+                Index < 1 orelse Index > length(Targets) ->
+                    %% Out of range: continue to next statement
+                    {continue, State, LoopStack, CallStack, []};
+                true ->
+                    TargetExpr = lists:nth(Index, Targets),
+                    execute_goto(TargetExpr, Program, State, Pc, LoopStack, CallStack)
+            end
+    end.
+
+execute_on_gosub(Expr, Targets, Program, State, Pc, LoopStack, CallStack) ->
+    LineNumber = get_line_number(Program, Pc),
+    case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
+        {error, Reason, _} ->
+            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]};
+        {ok, IndexValue, _} ->
+            Index = erlbasic_eval:normalize_int(IndexValue),
+            if
+                Index < 1 orelse Index > length(Targets) ->
+                    %% Out of range: continue to next statement
+                    {continue, State, LoopStack, CallStack, []};
+                true ->
+                    TargetExpr = lists:nth(Index, Targets),
+                    execute_gosub(TargetExpr, Program, State, Pc, LoopStack, CallStack)
+            end
     end.
 
 resolve_target_pc(LineExpr, Program, Vars, Funcs) ->

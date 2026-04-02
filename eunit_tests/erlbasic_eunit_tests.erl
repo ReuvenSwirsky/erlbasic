@@ -610,3 +610,74 @@ https_ca_cert_optional_test() ->
             _ -> application:set_env(erlbasic, cacertfile, OldCaCert)
         end
     end.
+%% =============================================================================
+%% ON...GOSUB and ON...GOTO Tests
+%% =============================================================================
+
+%% Test ON...GOSUB with valid index
+on_gosub_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 2", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 ON X GOSUB 100, 200, 300", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"BACK\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("100 PRINT \"SUB1\" : RETURN", S4),
+    {S6, _} = erlbasic_interp:handle_input("200 PRINT \"SUB2\" : RETURN", S5),
+    {S7, _} = erlbasic_interp:handle_input("300 PRINT \"SUB3\" : RETURN", S6),
+    {_S8, Output} = erlbasic_interp:handle_input("RUN", S7),
+    Text = lists:flatten(Output),
+    %% Should call SUB2 (index 2), then continue to line 30
+    ?assertEqual(match, re:run(Text, "SUB2", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "BACK", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SUB1", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SUB3", [{capture, none}])).
+
+%% Test ON...GOSUB with out-of-range index (should continue)
+on_gosub_out_of_range_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 5", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 ON X GOSUB 100, 200", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"CONTINUE\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("100 PRINT \"SUB1\" : RETURN", S4),
+    {S6, _} = erlbasic_interp:handle_input("200 PRINT \"SUB2\" : RETURN", S5),
+    {_S7, Output} = erlbasic_interp:handle_input("RUN", S6),
+    Text = lists:flatten(Output),
+    %% Index 5 is out of range, should skip and continue to line 30
+    ?assertEqual(match, re:run(Text, "CONTINUE", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SUB1", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SUB2", [{capture, none}])).
+
+%% Test ON...GOTO with valid index
+on_goto_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 3", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 ON X GOTO 100, 200, 300", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"SKIP\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("100 PRINT \"LINE1\" : END", S4),
+    {S6, _} = erlbasic_interp:handle_input("200 PRINT \"LINE2\" : END", S5),
+    {S7, _} = erlbasic_interp:handle_input("300 PRINT \"LINE3\" : END", S6),
+    {_S8, Output} = erlbasic_interp:handle_input("RUN", S7),
+    Text = lists:flatten(Output),
+    %% Should jump to line 300 (index 3)
+    ?assertEqual(match, re:run(Text, "LINE3", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "LINE1", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "LINE2", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SKIP", [{capture, none}])).
+
+%% Test ON...GOTO with zero index (should continue)
+on_goto_zero_index_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 0", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 ON X GOTO 100, 200", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"ZERO\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, _} = erlbasic_interp:handle_input("100 PRINT \"LINE1\" : END", S4),
+    {S6, _} = erlbasic_interp:handle_input("200 PRINT \"LINE2\" : END", S5),
+    {_S7, Output} = erlbasic_interp:handle_input("RUN", S6),
+    Text = lists:flatten(Output),
+    %% Index 0 is out of range, should continue to line 30
+    ?assertEqual(match, re:run(Text, "ZERO", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "LINE1", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "LINE2", [{capture, none}])).

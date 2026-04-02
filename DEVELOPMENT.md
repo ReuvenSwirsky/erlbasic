@@ -4,6 +4,48 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 1, 2026 - Add ON...GOSUB and ON...GOTO Computed Jump Statements
+
+**Commits:** (pending)
+
+### Enhancement
+Added support for computed GOSUB and GOTO statements that select a target from a list based on an integer index expression.
+
+### Implementation
+- **Parser Support**: Extended `erlbasic_parser.erl` to recognize `ON <expr> GOSUB/GOTO` syntax with comma-separated target lists
+- **Runtime Execution**: Added `execute_on_gosub/7` and `execute_on_goto/7` functions to `erlbasic_runtime.erl` that evaluate the index and jump to the nth target (1-based indexing)
+- **Out-of-Range Handling**: When the index is ≤ 0 or > number of targets, execution continues with the next statement (no error)
+- **Documentation**: Updated `Basic_Syntax.md` with comprehensive examples and notes on behavior
+
+**Syntax:**
+```basic
+ON <expr> GOSUB line1, line2, line3, ...
+ON <expr> GOTO line1, line2, line3, ...
+```
+
+**Example:**
+```basic
+10 LET X = 2
+20 ON X GOSUB 100, 200, 300  ' Calls line 200
+30 PRINT "BACK"
+```
+
+**Files Changed:**
+- `src/erlbasic_parser.erl`: Added `parse_jump_statement/1`, `parse_comma_separated_list/1`, `validate_line_targets/1`
+- `src/erlbasic_runtime.erl`: Added `execute_on_gosub/7` and `execute_on_goto/7`
+- `eunit_tests/erlbasic_eunit_tests.erl`: Added 4 new tests (60 total, up from 56)
+- `smoke_tests/on_gosub.bas` and `on_gosub.out`: New smoke test (54 total, up from 53)
+- `Basic_Syntax.md`: Added documentation for ON...GOSUB / ON...GOTO
+
+**Test Coverage:**
+- Valid index selection (1, 2, 3)
+- Out-of-range indices (0, 4+ when only 2-3 targets)
+- Return stack management for ON...GOSUB
+- All 60 EUnit tests pass
+- All 54 smoke tests pass
+
+---
+
 ## April 1, 2026 - Add HTTPS Support with Certbot Auto-Renewal
 
 **Commits:** 68c194c, (pending)

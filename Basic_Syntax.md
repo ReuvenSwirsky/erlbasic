@@ -430,6 +430,51 @@ Calls a subroutine line and returns to the line after `GOSUB`.
 Notes:
 - Executing `RETURN` without an active `GOSUB` stack raises `?RETURN WITHOUT GOSUB ERROR`.
 
+### ON...GOSUB / ON...GOTO
+
+Computed jump statements that select a target from a list based on an index expression.
+
+```text
+ON <expr> GOSUB line1, line2, line3, ...
+ON <expr> GOTO line1, line2, line3, ...
+```
+
+The expression is evaluated and used as a 1-based index into the list of target line numbers:
+- If the value is 1, jump to the first target
+- If the value is 2, jump to the second target
+- And so on...
+
+If the index is less than 1 or greater than the number of targets, the statement is ignored and execution continues with the next statement.
+
+Examples:
+
+```text
+10 LET X = 2
+20 ON X GOSUB 100, 200, 300
+30 PRINT "BACK"
+40 END
+100 PRINT "SUB1" : RETURN
+200 PRINT "SUB2" : RETURN
+300 PRINT "SUB3" : RETURN
+REM Output: SUB2, BACK
+```
+
+```text
+10 LET CHOICE = 3
+20 ON CHOICE GOTO 100, 200, 300
+30 PRINT "SKIP"
+100 PRINT "FIRST" : END
+200 PRINT "SECOND" : END
+300 PRINT "THIRD" : END
+REM Output: THIRD
+```
+
+Notes:
+- `ON...GOSUB` pushes a return address onto the call stack, just like `GOSUB`
+- `ON...GOTO` performs an unconditional jump, just like `GOTO`
+- Out-of-range indices (≤ 0 or > number of targets) continue to the next statement
+- The index expression is evaluated as an integer (fractional parts are truncated)
+
 ### NEXT [var]
 
 Advances the active FOR loop.
