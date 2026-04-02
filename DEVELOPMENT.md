@@ -6,7 +6,7 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ## April 1, 2026 - Add ON...GOSUB and ON...GOTO Computed Jump Statements
 
-**Commits:** (pending)
+**Commits:** 11b1012
 
 ### Enhancement
 Added support for computed GOSUB and GOTO statements that select a target from a list based on an integer index expression.
