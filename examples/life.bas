@@ -24,7 +24,7 @@
 240 HGR
 250 REM
 260 REM Main simulation loop
-270 FOR GEN = 1 TO 200
+270 FOR GEN = 1 TO 50
 280   REM Draw current generation
 290   FOR Y = 1 TO H
 300     FOR X = 1 TO W
@@ -37,8 +37,8 @@
 370     NEXT X
 380   NEXT Y
 390   REM
-400   REM Pause briefly to watch evolution
-410   SLEEP 0.1
+400   REM Pause to watch evolution (0.5 seconds between generations)
+410   SLEEP 0.5
 420   REM
 430   REM Calculate next generation
 440   FOR Y = 1 TO H
