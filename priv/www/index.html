@@ -69,7 +69,7 @@
     #terminal-container.graphics-mode #graphics-canvas {
       z-index: 3;
       opacity: 1;
-      pointer-events: auto;
+      /* Keep pointer-events: none so keyboard events pass through to terminal */
     }
     #status {
       margin-top: 0.5rem;
