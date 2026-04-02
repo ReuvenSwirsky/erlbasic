@@ -11,21 +11,27 @@
 110 LET X = 100 + I * 60
 120 CIRCLE (X, 120), 30, C
 130 NEXT I
-140 REM Draw a gradient of lines
-150 FOR I = 0 TO 15
-160 LET X = 100 + I * 30
-170 LINE (X, 200)-(X, 400), I
-180 NEXT I
-190 REM Draw random pixels
-200 FOR I = 1 TO 500
-210 LET X = INT(RND(1) * 640)
-220 LET Y = INT(RND(1) * 480)
-230 LET C = INT(RND(1) * 16)
-240 PSET (X, Y), C
-250 NEXT I
-260 REM Wait 5 seconds
-270 SLEEP 5
-280 REM Return to text mode
-290 TEXT
-300 PRINT "GRAPHICS DEMO COMPLETE"
-310 END
+140 REM Draw filled color rectangles
+150 FOR I = 0 TO 7
+160 LET C = I + 8
+170 LET X = 100 + I * 60
+180 RECT (X - 20, 160)-(X + 20, 180), C
+190 NEXT I
+200 REM Draw a gradient of lines
+210 FOR I = 0 TO 15
+220 LET X = 100 + I * 30
+230 LINE (X, 200)-(X, 400), I
+240 NEXT I
+250 REM Draw random pixels
+260 FOR I = 1 TO 500
+270 LET X = INT(RND(1) * 640)
+280 LET Y = INT(RND(1) * 480)
+290 LET C = INT(RND(1) * 16)
+300 PSET (X, Y), C
+310 NEXT I
+320 REM Wait 5 seconds
+330 SLEEP 5
+340 REM Return to text mode
+350 TEXT
+360 PRINT "GRAPHICS DEMO COMPLETE"
+370 END

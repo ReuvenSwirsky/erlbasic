@@ -5,7 +5,7 @@
          collect_program_data/1, apply_read_vars/2, eval_locate/4,
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
-         hgr_output/0, text_output/0, eval_pset/4, eval_line/6, eval_circle/5]).
+         hgr_output/0, text_output/0, eval_pset/4, eval_line/6, eval_rect/6, eval_circle/5]).
 
 -define(FLUSH_OUTPUT_EVERY, 50).
 
@@ -357,6 +357,13 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
             end;
         {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
             case eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                {error, Reason, _Vars1} ->
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
+            case eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                 {error, Reason, _Vars1} ->
@@ -858,6 +865,38 @@ eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars, Funcs) ->
             IC = erlbasic_eval:normalize_int(C) band 15,
             Output = case erlang:get(erlbasic_conn_type) of
                 websocket -> [io_lib:format("\x02GFX:LINE:~B:~B:~B:~B:~B", [IX1, IY1, IX2, IY2, IC])];
+                _ -> []
+            end,
+            {ok, Vars5, Output};
+        {{error, Reason, VarsErr}, _, _, _, _} ->
+            {error, Reason, VarsErr};
+        {_, {error, Reason, VarsErr}, _, _, _} ->
+            {error, Reason, VarsErr};
+        {_, _, {error, Reason, VarsErr}, _, _} ->
+            {error, Reason, VarsErr};
+        {_, _, _, {error, Reason, VarsErr}, _} ->
+            {error, Reason, VarsErr};
+        {_, _, _, _, {error, Reason, VarsErr}} ->
+            {error, Reason, VarsErr}
+    end.
+
+eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars) ->
+    eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars, #{}).
+
+eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, Vars, Funcs) ->
+    case {erlbasic_eval:eval_expr_result(X1Expr, Vars, Funcs),
+          erlbasic_eval:eval_expr_result(Y1Expr, Vars, Funcs),
+          erlbasic_eval:eval_expr_result(X2Expr, Vars, Funcs),
+          erlbasic_eval:eval_expr_result(Y2Expr, Vars, Funcs),
+          erlbasic_eval:eval_expr_result(ColorExpr, Vars, Funcs)} of
+        {{ok, X1, _Vars1}, {ok, Y1, _Vars2}, {ok, X2, _Vars3}, {ok, Y2, _Vars4}, {ok, C, Vars5}} ->
+            IX1 = erlbasic_eval:normalize_int(X1),
+            IY1 = erlbasic_eval:normalize_int(Y1),
+            IX2 = erlbasic_eval:normalize_int(X2),
+            IY2 = erlbasic_eval:normalize_int(Y2),
+            IC = erlbasic_eval:normalize_int(C) band 15,
+            Output = case erlang:get(erlbasic_conn_type) of
+                websocket -> [io_lib:format("\x02GFX:RECT:~B:~B:~B:~B:~B", [IX1, IY1, IX2, IY2, IC])];
                 _ -> []
             end,
             {ok, Vars5, Output};

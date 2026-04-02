@@ -184,6 +184,16 @@
           ctx.stroke();
           break;
           
+        case 'RECT':
+          const rx1 = parseInt(parts[1]);
+          const ry1 = parseInt(parts[2]);
+          const rx2 = parseInt(parts[3]);
+          const ry2 = parseInt(parts[4]);
+          const rc = parseInt(parts[5]) & 15;
+          ctx.fillStyle = palette[rc];
+          ctx.fillRect(rx1, ry1, rx2 - rx1 + 1, ry2 - ry1 + 1);
+          break;
+          
         case 'CIRCLE':
           const cx = parseInt(parts[1]);
           const cy = parseInt(parts[2]);

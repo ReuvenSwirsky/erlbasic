@@ -451,6 +451,14 @@ parse_line_statement(Trimmed) ->
                 [{capture, [1, 2, 3, 4, 5], list}]) of
         {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} -> 
             {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch -> parse_rect_statement(Trimmed)
+    end.
+
+parse_rect_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^RECT\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", 
+                [{capture, [1, 2, 3, 4, 5], list}]) of
+        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} -> 
+            {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
         nomatch -> parse_circle_statement(Trimmed)
     end.
 

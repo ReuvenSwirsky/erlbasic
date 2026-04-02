@@ -275,6 +275,22 @@ Notes:
 - Only works in graphics mode (after `HGR`).
 - On telnet/TCP sessions, `LINE` is silently ignored.
 
+### RECT
+
+Draws a filled rectangle from (x1, y1) to (x2, y2) in the specified color.
+
+```text
+RECT (10, 10)-(100, 100), 15
+RECT (X1, Y1)-(X2, Y2), C
+```
+
+Notes:
+- Coordinates are 0-based and inclusive.
+- Color values 0–15 use the EGA/VGA palette.
+- Only works in graphics mode (after `HGR`).
+- On telnet/TCP sessions, `RECT` is silently ignored.
+- Much faster than drawing multiple lines for filled areas.
+
 ### CIRCLE
 
 Draws a circle centered at (x, y) with the specified radius and color.

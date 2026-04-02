@@ -200,6 +200,10 @@ handle_load_command(State, RawName) ->
             case load_program_file(FileName) of
                 {ok, Program} ->
                     {State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+                {syntax_error, LineNumber, PartialProgram} when is_integer(LineNumber) ->
+                    %% Load the partial program so user can LIST and see the error
+                    NewState = State#state{prog = PartialProgram, data_items = [], data_index = 1, continue_ctx = undefined},
+                    {NewState, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]};
                 {syntax_error, LineNumber} when is_integer(LineNumber) ->
                     {State, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]};
                 syntax_error ->
@@ -229,9 +233,10 @@ load_program_file(FileName) ->
     %% 1. Try the shared examples directory first.
     ExamplePath = filename:join(examples_program_dir(), FileName),
     case read_program_file(ExamplePath) of
-        {ok, _} = Ok          -> Ok;
-        {syntax_error, _} = E -> E;
-        syntax_error           -> syntax_error;
+        {ok, _} = Ok                         -> Ok;
+        {syntax_error, _, _} = E             -> E;
+        {syntax_error, _} = E                -> E;
+        syntax_error                         -> syntax_error;
         {error, enoent} ->
             %% 2. Fall back to the user's own storage area.
             case erlbasic_storage:read_program(FileName) of
@@ -256,6 +261,8 @@ parse_bin_as_program(Bin) ->
     case parse_program_text(binary_to_list(Bin)) of
         {ok, Program} ->
             {ok, Program};
+        {error, {syntax_error, LineNumber, PartialProgram}} when is_integer(LineNumber) ->
+            {syntax_error, LineNumber, PartialProgram};
         {error, {syntax_error, LineNumber}} when is_integer(LineNumber) ->
             {syntax_error, LineNumber};
         error ->
@@ -281,7 +288,9 @@ parse_program_lines([Line | Rest], Acc) ->
                 ok ->
                     parse_program_lines(Rest, [{Num, Code} | lists:keydelete(Num, 1, Acc)]);
                 error ->
-                    {error, {syntax_error, Num}}
+                    %% Include the bad line in the partial program so it can be listed
+                    PartialProgram = lists:keysort(1, [{Num, Code} | lists:keydelete(Num, 1, Acc)]),
+                    {error, {syntax_error, Num, PartialProgram}}
             end;
         immediate ->
             error

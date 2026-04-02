@@ -452,6 +452,13 @@ execute_statement_single(Command, State) ->
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
+        {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
+            case erlbasic_runtime:eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {circle, XExpr, YExpr, RadiusExpr, ColorExpr} ->
             case erlbasic_runtime:eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
