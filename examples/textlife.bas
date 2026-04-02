@@ -5,7 +5,7 @@
 50 LET W = 60
 60 LET H = 20
 70 DIM GRID(60, 20)
-80 DIM NEXT(60, 20)
+80 DIM NEXTGRID(60, 20)
 90 REM
 100 REM Initialize with random pattern (30% alive)
 110 PRINT "Seeding random pattern..."
@@ -47,16 +47,16 @@
 470       NEXT NY
 480       REM
 490       REM Apply Life rules
-500       IF N = 3 THEN NEXT(X, Y) = 1
-510       IF N = 2 THEN NEXT(X, Y) = GRID(X, Y)
-520       IF N < 2 OR N > 3 THEN NEXT(X, Y) = 0
+500       IF N = 3 THEN NEXTGRID(X, Y) = 1
+510       IF N = 2 THEN NEXTGRID(X, Y) = GRID(X, Y)
+520       IF N < 2 OR N > 3 THEN NEXTGRID(X, Y) = 0
 530     NEXT X
 540   NEXT Y
 550   REM
 560   REM Copy next to current
 570   FOR Y = 1 TO H
 580     FOR X = 1 TO W
-590       GRID(X, Y) = NEXT(X, Y)
+590       GRID(X, Y) = NEXTGRID(X, Y)
 600     NEXT X
 610   NEXT Y
 620   REM Small delay

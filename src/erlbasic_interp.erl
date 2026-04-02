@@ -548,7 +548,28 @@ ensure_data_loaded(State) ->
 
 execute_statement_sequence(StatementText, State) ->
     Statements = erlbasic_parser:split_statements(StatementText),
-    finalize_statement_list(execute_statement_list(Statements, State, [])).
+    %% Check if this sequence contains a FOR loop - if so, execute as a temp program
+    case contains_for_loop(Statements) of
+        true ->
+            %% Execute as temporary program (like immediate FOR buffer)
+            %% Each statement becomes its own line so FOR loops work correctly
+            TempProgram = build_temp_program(Statements),
+            TempState = State#state{prog = TempProgram},
+            {RanState, Output} = erlbasic_runtime:run_program(TempState),
+            {RanState#state{prog = State#state.prog}, Output};
+        false ->
+            finalize_statement_list(execute_statement_list(Statements, State, []))
+    end.
+
+contains_for_loop([]) ->
+    false;
+contains_for_loop([Stmt | Rest]) ->
+    case erlbasic_parser:parse_statement(Stmt) of
+        {for_loop, _Var, _StartExpr, _EndExpr, _StepExpr} ->
+            true;
+        _ ->
+            contains_for_loop(Rest)
+    end.
 
 finalize_statement_list({continue, State, OutputAcc}) ->
     {State, OutputAcc};

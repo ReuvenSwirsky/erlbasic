@@ -26,7 +26,9 @@ websocket_handle(_Frame, State) ->
 
 %% Messages from the interpreter process (output to send to browser).
 websocket_info({output, Text}, State) ->
-    {reply, {text, list_to_binary(Text)}, State};
+    %% WebSocket text frames must be valid UTF-8. Convert iodata/chars safely.
+    Utf8 = unicode:characters_to_binary(Text),
+    {reply, {text, Utf8}, State};
 websocket_info(close, State) ->
     {stop, State};
 websocket_info(_Info, State) ->

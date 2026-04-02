@@ -766,3 +766,37 @@ resume_without_error_test() ->
     {_S3, Output} = erlbasic_interp:handle_input("RUN", S2),
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "RESUME WITHOUT ERROR", [{capture, none}])).
+
+%% Test loading textlife.bas from examples
+textlife_load_test() ->
+    %% Read textlife.bas and enter each line
+    {ok, Content} = file:read_file("examples/textlife.bas"),
+    Lines = binary:split(Content, <<"\n">>, [global, trim_all]),
+    
+    State0 = erlbasic_interp:new_state(),
+    
+    %% Enter all lines from the file
+    FinalState = lists:foldl(fun(Line, StateAcc) ->
+        LineStr = unicode:characters_to_list(Line),
+        case string:trim(LineStr) of
+            "" -> StateAcc;  %% Skip empty lines
+            NonEmpty ->
+                {NewState, Output} = erlbasic_interp:handle_input(NonEmpty, StateAcc),
+                %% Check for syntax error during program entry
+                OutText = lists:flatten(Output),
+                case re:run(OutText, "SYNTAX ERROR|ERROR", [{capture, none}]) of
+                    match ->
+                        io:format("~nError entering line: ~s~n", [NonEmpty]),
+                        io:format("Output: ~s~n", [OutText]),
+                        error({syntax_error_during_load, NonEmpty, OutText});
+                    nomatch ->
+                        NewState
+                end
+        end
+    end, State0, Lines),
+    
+    %% Verify the program loaded
+    {_FinalState, _ListOutput} = erlbasic_interp:handle_input("LIST 10", FinalState),
+    
+    %% Success - program loaded without syntax errors
+    ok.
