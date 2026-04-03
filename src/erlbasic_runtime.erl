@@ -16,14 +16,18 @@ run_program(State = #state{prog = Program}) ->
     DataItems = collect_program_data(Program),
     RunState = State#state{data_items = DataItems, data_index = 1, continue_ctx = undefined},
     erlang:put(line_exec_count, 0),
+    erlang:put(stmt_parse_cache, #{}),
     Result = run_program_lines(Program, 1, RunState, [], [], []),
     erlang:erase(line_exec_count),
+    erlang:erase(stmt_parse_cache),
     Result.
 
 continue_program(State = #state{prog = Program}, Pc, LoopStack, CallStack) ->
     erlang:put(line_exec_count, 0),
+    erlang:put(stmt_parse_cache, #{}),
     Result = run_program_lines(Program, Pc, State, LoopStack, CallStack, []),
     erlang:erase(line_exec_count),
+    erlang:erase(stmt_parse_cache),
     Result.
 
 run_program_lines([], _Pc, State, _LoopStack, _CallStack, Acc) ->
@@ -67,36 +71,48 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ Acc,
-            %% Flush if we have an output target
-            NewAcc = case should_flush_output() of
-                true ->
-                    flush_output(CombinedOutput),
-                    [];
-                false ->
-                    CombinedOutput
-            end,
+            NewAcc =
+                case should_flush_output() andalso output_contains_newline(Output) of
+                    true ->
+                        flush_output(CombinedOutput),
+                        [];
+                    false ->
+                        CombinedOutput
+                end,
             case NextState#state.pending_input of
                 undefined ->
                     run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc);
                 _ ->
-                    {NextState, lists:reverse(NewAcc)}
+                    case should_flush_output() of
+                        true ->
+                            flush_output(NewAcc),
+                            {NextState, []};
+                        false ->
+                            {NextState, lists:reverse(NewAcc)}
+                    end
             end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ Acc,
-            %% Flush if we have an output target
-            NewAcc = case should_flush_output() of
-                true ->
-                    flush_output(CombinedOutput),
-                    [];
-                false ->
-                    CombinedOutput
-            end,
+            NewAcc =
+                case should_flush_output() andalso output_contains_newline(Output) of
+                    true ->
+                        flush_output(CombinedOutput),
+                        [];
+                    false ->
+                        CombinedOutput
+                end,
             case NextState#state.pending_input of
                 undefined ->
                     run_program_lines(Program, TargetPc, NextState, NextLoopStack, NextCallStack, NewAcc);
                 _ ->
-                    {NextState, lists:reverse(NewAcc)}
+                    case should_flush_output() of
+                        true ->
+                            flush_output(NewAcc),
+                            {NextState, []};
+                        false ->
+                            {NextState, lists:reverse(NewAcc)}
+                    end
             end;
         {'end', Output} ->
             %% Flush final output
@@ -148,7 +164,7 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
 
 execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack) ->
     LineNumber = get_line_number(Program, Pc),
-    ParsedStmt = erlbasic_parser:parse_statement(Command),
+    ParsedStmt = parse_statement_cached(Command),
     case ParsedStmt of
         {for_loop, Var, StartExpr, EndExpr, StepExpr} ->
             case erlbasic_eval:eval_expr_result(StartExpr, State#state.vars, State#state.funcs) of
@@ -768,6 +784,21 @@ get_line_number(Program, Pc) when Pc >= 1, Pc =< length(Program) ->
 get_line_number(_Program, _Pc) ->
     undefined.
 
+parse_statement_cached(Command) ->
+    Cache0 =
+        case erlang:get(stmt_parse_cache) of
+            undefined -> #{};
+            Cache when is_map(Cache) -> Cache
+        end,
+    case maps:find(Command, Cache0) of
+        {ok, Parsed} ->
+            Parsed;
+        error ->
+            Parsed = erlbasic_parser:parse_statement(Command),
+            erlang:put(stmt_parse_cache, maps:put(Command, Parsed, Cache0)),
+            Parsed
+    end.
+
 drain_interrupt_messages() ->
     receive
         interrupt -> drain_interrupt_messages()
@@ -781,6 +812,16 @@ should_flush_output() ->
             erlang:get(output_pid) =/= undefined;
         _ ->
             true
+    end.
+
+output_contains_newline(OutputParts) ->
+    lists:any(fun part_contains_newline/1, OutputParts).
+
+part_contains_newline(Part) ->
+    Bin = iolist_to_binary(Part),
+    case binary:match(Bin, [<<"\n">>, <<"\r">>]) of
+        nomatch -> false;
+        _ -> true
     end.
 
 %% Helper to generate graphics command output for WebSocket connections
