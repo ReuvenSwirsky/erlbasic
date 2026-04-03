@@ -38,7 +38,7 @@ keyword_consistency_union_reserved_test() ->
 all_keywords_reserved_variable_names_test() ->
     ReservedNames = [
         "AND", "MOD", "PRINT", "INPUT", "TIMER",
-        "ON", "ERROR", "RESUME", "HGR", "PSET", "STRING$"
+        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$"
     ],
     lists:foreach(fun(Name) ->
         ?assertEqual({error, reserved_word},
@@ -67,6 +67,55 @@ immediate_print_test() ->
         State2 = erlbasic_interp:new_state(),
         {_State3, ClsOutput} = erlbasic_interp:handle_input("CLS", State2),     
         ?assertEqual("\e[0m\e[2J\e[H", lists:flatten(ClsOutput))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
+
+sound_parse_and_validate_test() ->
+    ?assertEqual({sound, "0", "120", "10", "8"},
+        erlbasic_parser:parse_statement("SOUND 0,120,10,8")),
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("SOUND 0,120,10,8")).
+
+sound_immediate_requires_websocket_test() ->
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, tcp),
+    try
+        State0 = erlbasic_interp:new_state(),
+        {_State1, Output} = erlbasic_interp:handle_input("SOUND 0,120,10,8", State0),
+        ?assertEqual("?SOUND NOT SUPPORTED ON TTY\r\n", lists:flatten(Output))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
+
+sound_immediate_websocket_emits_control_frame_test() ->
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        State0 = erlbasic_interp:new_state(),
+        {_State1, Output} = erlbasic_interp:handle_input("SOUND 1,90,10,12", State0),
+        ?assertEqual("\x02SND:1:90:10:12", lists:flatten(Output))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
+
+sound_run_requires_websocket_with_line_number_test() ->
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, tcp),
+    try
+        State0 = erlbasic_interp:new_state(),
+        {State1, _} = erlbasic_interp:handle_input("10 SOUND 0,120,10,8", State0),
+        {State2, _} = erlbasic_interp:handle_input("20 END", State1),
+        {_State3, Output} = erlbasic_interp:handle_input("RUN", State2),
+        ?assertEqual("?SOUND NOT SUPPORTED ON TTY IN 10\r\n", lists:flatten(Output))
     after
         case PrevConnType of
             undefined -> erlang:erase(erlbasic_conn_type);
@@ -839,6 +888,22 @@ textlife_load_test() ->
 
     %% Success - program loaded without syntax errors
     ok.
+
+    %% Test loading stripesfx.bas from examples via LOAD command
+    stripesfx_load_test() ->
+        State0 = erlbasic_interp:new_state(),
+        {State1, LoadOutput} = erlbasic_interp:handle_input("LOAD stripesfx", State0),
+        ?assertEqual("OK\r\n", lists:flatten(LoadOutput)),
+
+        %% Verify representative lines from the loaded program are present.
+        {_State2, ListOutput} = erlbasic_interp:handle_input("LIST 3010", State1),
+        ListText = lists:flatten(ListOutput),
+        ?assertEqual(match, re:run(ListText, "SOUND CH, 0, 0, 0", [{capture, none}])),
+
+        {_State3, ListOutput2} = erlbasic_interp:handle_input("LIST 9020", State1),
+        ListText2 = lists:flatten(ListOutput2),
+        ?assertEqual(match, re:run(ListText2, "READ N, L", [{capture, none}])),
+        ok.
 
 load_program_keeps_bad_lines_test() ->
     ProgramText =

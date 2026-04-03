@@ -126,6 +126,7 @@
     };
 
     ws.onclose = () => {
+      stopAllSoundChannels();
       statusEl.textContent = 'Disconnected — reload to reconnect';
       statusEl.className = 'disconnected';
       term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
@@ -211,6 +212,118 @@
           break;
       }
     }
+
+    // SOUND setup (4 Atari-like channels with pitch/distortion/volume)
+    const soundChannels = [null, null, null, null];
+    let audioCtx = null;
+    let audioUnlockAttempted = false;
+
+    function getAudioCtx() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) {
+          return null;
+        }
+        audioCtx = new Ctx();
+      }
+      return audioCtx;
+    }
+
+    function unlockAudioFromGesture() {
+      if (audioUnlockAttempted) {
+        return;
+      }
+      audioUnlockAttempted = true;
+      const ctx = getAudioCtx();
+      if (!ctx) {
+        return;
+      }
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {
+          audioUnlockAttempted = false;
+        });
+      }
+    }
+
+    function stopSoundChannel(channel) {
+      const node = soundChannels[channel];
+      if (!node) {
+        return;
+      }
+      try { node.osc.stop(); } catch (_) {}
+      try { node.osc.disconnect(); } catch (_) {}
+      try { node.gain.disconnect(); } catch (_) {}
+      soundChannels[channel] = null;
+    }
+
+    function stopAllSoundChannels() {
+      for (let i = 0; i < soundChannels.length; i += 1) {
+        stopSoundChannel(i);
+      }
+    }
+
+    function mapDistortionToWave(distortion) {
+      switch (distortion & 15) {
+        case 10:
+        case 12:
+          return 'square';
+        case 8:
+          return 'triangle';
+        case 14:
+          return 'sawtooth';
+        default:
+          return 'sine';
+      }
+    }
+
+    function atariPitchToHz(pitch) {
+      const p = Math.max(0, Math.min(255, pitch));
+      // SOUND pitch is a divisor: larger values mean lower notes.
+      const hz = 36000 / (p + 2);
+      return Math.max(32, Math.min(2500, hz));
+    }
+
+    function handleSoundCommand(cmd) {
+      if (cmd === 'STOPALL') {
+        stopAllSoundChannels();
+        return;
+      }
+      const parts = cmd.split(':');
+      if (parts.length !== 4) {
+        return;
+      }
+      const channel = Math.max(0, Math.min(3, parseInt(parts[0], 10) || 0));
+      const pitch = Math.max(0, Math.min(255, parseInt(parts[1], 10) || 0));
+      const distortion = Math.max(0, Math.min(15, parseInt(parts[2], 10) || 0));
+      const volume = Math.max(0, Math.min(15, parseInt(parts[3], 10) || 0));
+
+      stopSoundChannel(channel);
+      if (volume <= 0) {
+        return;
+      }
+
+      const ctx = getAudioCtx();
+      if (!ctx) {
+        return;
+      }
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = mapDistortionToWave(distortion);
+      osc.frequency.value = atariPitchToHz(pitch);
+      gain.gain.value = (volume / 15) * 0.08;
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+
+      soundChannels[channel] = { osc, gain };
+    }
     
     // Output from the server → display in terminal
     ws.onmessage = (evt) => {
@@ -223,6 +336,7 @@
         if (cmd === 'CHAR_MODE_ON')  { charMode = true; }
         if (cmd === 'CHAR_MODE_OFF') { charMode = false; inputBuffer = ''; }
         if (cmd.startsWith('GFX:')) { handleGraphicsCommand(cmd.slice(4)); }
+        if (cmd.startsWith('SND:')) { handleSoundCommand(cmd.slice(4)); }
         return;
       }
       // Normalise \r\n from BASIC to what xterm expects
@@ -239,10 +353,14 @@
     term.onKey(({ key, domEvent }) => {
       const code = domEvent.keyCode;
 
+      // Browsers may block Web Audio until a user gesture.
+      unlockAudioFromGesture();
+
       // Ctrl-C to interrupt (always)
       if (domEvent.ctrlKey && code === 67) {
         term.write('^C');
         ws.send('\x03');
+        stopAllSoundChannels();
         inputBuffer = '';
         // Exit graphics mode if active
         document.getElementById('terminal-container').classList.remove('graphics-mode');
@@ -271,6 +389,10 @@
         term.write(passwordMode ? '*' : key);
       }
     });
+
+    // Also unlock on pointer/touch interaction in case keyboard isn't used first.
+    window.addEventListener('pointerdown', unlockAudioFromGesture, { passive: true });
+    window.addEventListener('touchstart', unlockAudioFromGesture, { passive: true });
   </script>
 </body>
 </html>

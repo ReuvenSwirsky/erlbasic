@@ -6,7 +6,8 @@
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
          hgr_output/0, text_output/0,
-         eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5]).
+         eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
+         eval_sound/6]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
 
@@ -60,7 +61,7 @@ run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
             drain_interrupt_messages(),
             flush_output(NewAcc),
             BreakState = State#state{continue_ctx = {Pc, LoopStack, CallStack}},
-            {BreakState, ["\r\n^C\r\nBREAK\r\n"]};
+            {BreakState, sound_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
             run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, NewAcc)
     end.
@@ -72,7 +73,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ Acc,
             NewAcc =
-                case should_flush_output() andalso output_contains_newline(Output) of
+                case should_flush_output() andalso (output_contains_newline(Output) orelse output_contains_control_frame(Output)) of
                     true ->
                         flush_output(CombinedOutput),
                         [];
@@ -95,7 +96,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ Acc,
             NewAcc =
-                case should_flush_output() andalso output_contains_newline(Output) of
+                case should_flush_output() andalso (output_contains_newline(Output) orelse output_contains_control_frame(Output)) of
                     true ->
                         flush_output(CombinedOutput),
                         [];
@@ -116,12 +117,13 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
             end;
         {'end', Output} ->
             %% Flush final output
-            flush_output(lists:reverse(Output) ++ Acc),
+            FinalOutput = sound_stop_output() ++ lists:reverse(Output) ++ Acc,
+            flush_output(FinalOutput),
             case should_flush_output() of
                 true ->
                     {State, ["Program ended\r\n"]};
                 false ->
-                    {State, lists:reverse(["Program ended\r\n" | lists:reverse(Output) ++ Acc])}
+                    {State, lists:reverse(["Program ended\r\n" | FinalOutput])}
             end;
         {stop, Output} ->
             CombinedOutput = lists:reverse(Output) ++ Acc,
@@ -453,6 +455,13 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, []};
                 {ok, _Value, _Vars1} ->
                     handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
+                {error, Reason, _Vars1} ->
+                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->
+            case eval_sound(VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                 {error, Reason, _Vars1} ->
                     handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -817,6 +826,9 @@ should_flush_output() ->
 output_contains_newline(OutputParts) ->
     lists:any(fun part_contains_newline/1, OutputParts).
 
+output_contains_control_frame(OutputParts) ->
+    lists:any(fun part_is_control_frame/1, OutputParts).
+
 part_contains_newline(Part) ->
     Bin = iolist_to_binary(Part),
     case binary:match(Bin, [<<"\n">>, <<"\r">>]) of
@@ -824,10 +836,23 @@ part_contains_newline(Part) ->
         _ -> true
     end.
 
+part_is_control_frame(Part) ->
+    Bin = iolist_to_binary(Part),
+    case Bin of
+        <<2, _/binary>> -> true;
+        _ -> false
+    end.
+
 %% Helper to generate graphics command output for WebSocket connections
 graphics_output(Command, Args) ->
     case erlang:get(erlbasic_conn_type) of
         websocket -> [io_lib:format("\x02GFX:" ++ Command, Args)];
+        _ -> []
+    end.
+
+sound_stop_output() ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> ["\x02SND:STOPALL"];
         _ -> []
     end.
 
@@ -948,6 +973,30 @@ text_output() ->
         websocket -> ["\x02GFX:TEXT"];
         _ -> []
     end.
+
+eval_sound(VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr, Vars, Funcs) ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket ->
+            case eval_exprs([VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr], Vars, Funcs) of
+                {ok, [{Voice, _}, {Pitch, _}, {Distortion, _}, {Volume, Vars4}]} ->
+                    Ch = clamp(erlbasic_eval:normalize_int(Voice), 0, 3),
+                    Pch = clamp(erlbasic_eval:normalize_int(Pitch), 0, 255),
+                    Dist = clamp(erlbasic_eval:normalize_int(Distortion), 0, 15),
+                    Vol = clamp(erlbasic_eval:normalize_int(Volume), 0, 15),
+                    {ok, Vars4, [io_lib:format("\x02SND:~B:~B:~B:~B", [Ch, Pch, Dist, Vol])]};
+                {error, Reason, VarsErr} ->
+                    {error, Reason, VarsErr}
+            end;
+        _ ->
+            {error, sound_not_supported_on_tty, Vars}
+    end.
+
+clamp(Value, Min, _Max) when Value < Min ->
+    Min;
+clamp(Value, _Min, Max) when Value > Max ->
+    Max;
+clamp(Value, _Min, _Max) ->
+    Value.
 
 eval_pset(XExpr, YExpr, ColorExpr, Vars) ->
     eval_pset(XExpr, YExpr, ColorExpr, Vars, #{}).

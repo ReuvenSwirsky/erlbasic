@@ -520,7 +520,15 @@ parse_circle_statement(Trimmed) ->
 parse_sleep_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^SLEEP\\s+(.+)$", [{capture, [1], list}]) of
         {match, [Expr]} -> {sleep, Expr};
-        nomatch         -> parse_color_statement(Trimmed)
+        nomatch         -> parse_sound_statement(Trimmed)
+    end.
+
+parse_sound_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^SOUND\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+        {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
+            {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr};
+        nomatch ->
+            parse_color_statement(Trimmed)
     end.
 
 parse_color_statement(Trimmed) ->
@@ -719,6 +727,11 @@ validate_statement(Stmt) ->
             end;
         {sleep, Expr} ->
             validate_expr_syntax(Expr);
+        {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->
+            case validate_expr_pair(VoiceExpr, PitchExpr) of
+                ok -> validate_expr_pair(DistortionExpr, VolumeExpr);
+                error -> error
+            end;
         {color, FgExpr, undefined} ->
             validate_expr_syntax(FgExpr);
         {color, FgExpr, BgExpr} ->

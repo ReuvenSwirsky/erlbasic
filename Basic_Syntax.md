@@ -462,6 +462,22 @@ Notes:
 - The Erlang scheduler is yielded during the sleep; other connections continue unaffected.
 - Passing a string raises `?TYPE MISMATCH ERROR`.
 
+### SOUND
+
+Atari BASIC-style sound control.
+
+```text
+SOUND channel, pitch, distortion, volume
+```
+
+Notes:
+- `channel` is clamped to `0..3`.
+- `pitch` is clamped to `0..255`.
+- `distortion` is clamped to `0..15`.
+- `volume` is clamped to `0..15` (`0` silences the channel).
+- `SOUND` is only supported on the browser WebSocket client.
+- On non-WebSocket terminals, `SOUND` raises `?SOUND NOT SUPPORTED ON TTY`.
+
 ### END
 
 Stops execution of a running stored program.

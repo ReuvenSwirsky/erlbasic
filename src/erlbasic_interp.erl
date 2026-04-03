@@ -528,6 +528,13 @@ execute_statement_single(Command, State) ->
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
+        {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->
+            case erlbasic_runtime:eval_sound(VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {color, FgExpr, BgExpr} ->
             case erlbasic_runtime:eval_color(FgExpr, BgExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->

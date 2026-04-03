@@ -176,6 +176,8 @@ format_runtime_error(tty_no_cursor_movement) ->
     "?TTY DOESN'T SUPPORT CURSOR MOVEMENT\r\n";
 format_runtime_error(graphics_not_supported_on_tty) ->
     "?GRAPHICS NOT SUPPORTED ON TTY\r\n";
+format_runtime_error(sound_not_supported_on_tty) ->
+    "?SOUND NOT SUPPORTED ON TTY\r\n";
 format_runtime_error(no_graphics_mode) ->
     "?NO GRAPHICS MODE\r\n";
 format_runtime_error(no_previous_line) ->
@@ -203,6 +205,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         resume_without_error -> "RESUME WITHOUT ERROR";
         tty_no_cursor_movement -> "TTY DOESN'T SUPPORT CURSOR MOVEMENT";
         graphics_not_supported_on_tty -> "GRAPHICS NOT SUPPORTED ON TTY";
+        sound_not_supported_on_tty -> "SOUND NOT SUPPORTED ON TTY";
         no_graphics_mode -> "NO GRAPHICS MODE";
         no_previous_line -> "NO PREVIOUS LINE";
         program_not_found -> "PROGRAM NOT FOUND";
@@ -226,6 +229,7 @@ error_code(next_without_for) -> 1;
 error_code(resume_without_error) -> 20;
 error_code(tty_no_cursor_movement) -> 71;
 error_code(graphics_not_supported_on_tty) -> 71;
+error_code(sound_not_supported_on_tty) -> 71;
 error_code(no_graphics_mode) -> 71;
 error_code(no_previous_line) -> 71;
 error_code(reserved_word) -> 2;
