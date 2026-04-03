@@ -2,13 +2,6 @@
 
 -export([tokenize_expr/1]).
 
--define(EXPR_KEYWORDS, [
-    "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-    "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "MOD",
-    "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "DATE$", "TIME$", "TERM$",
-    "AND", "OR", "NOT", "XOR"
-]).
-
 tokenize_expr(Text) ->
     tokenize_expr(Text, []).
 
@@ -66,7 +59,7 @@ tokenize_expr(_, _Acc) ->
 
 keyword_or_var_token(NameChars) ->
     Upper = string:to_upper(NameChars),
-    case lists:member(Upper, ?EXPR_KEYWORDS) of
+    case erlbasic_keywords:is_expr_keyword(Upper) of
         true -> {kw, Upper};
         false -> {var, NameChars}
     end.

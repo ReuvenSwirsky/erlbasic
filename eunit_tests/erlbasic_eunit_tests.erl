@@ -15,6 +15,39 @@ reserved_word_variable_name_test() ->
     {_State1, Output} = erlbasic_interp:handle_input("LET FOR = 1", State0),
     ?assertEqual("?RESERVED WORD ERROR\r\n", lists:flatten(Output)).
 
+keyword_category_intent_test() ->
+    ?assert(erlbasic_keywords:is_expr_keyword("AND")),
+    ?assert(erlbasic_keywords:is_expr_keyword("LEFT$")),
+    ?assert(erlbasic_keywords:is_expr_keyword("TIMER")),
+    ?assert(erlbasic_keywords:is_expr_keyword("STRING$")),
+    ?assertNot(erlbasic_keywords:is_expr_keyword("PRINT")),
+    ?assert(erlbasic_keywords:is_list_keyword("PRINT")),
+    ?assert(erlbasic_keywords:is_list_keyword("INPUT")),
+    ?assertNot(erlbasic_keywords:is_list_keyword("LEFT$")),
+    ?assert(erlbasic_keywords:is_builtin_function_keyword("TIMER")),
+    ?assert(erlbasic_keywords:is_builtin_function_keyword("STRING$")).
+
+keyword_consistency_union_reserved_test() ->
+    ExprWords = erlbasic_keywords:expr_keywords(),
+    ListWords = erlbasic_keywords:list_keywords(),
+    ReservedOnlyWords = erlbasic_keywords:reserved_only_keywords(),
+    lists:foreach(fun(Word) ->
+        ?assert(erlbasic_keywords:is_reserved_variable_name(Word))
+    end, ExprWords ++ ListWords ++ ReservedOnlyWords).
+
+all_keywords_reserved_variable_names_test() ->
+    ReservedNames = [
+        "AND", "MOD", "PRINT", "INPUT", "TIMER",
+        "ON", "ERROR", "RESUME", "HGR", "PSET", "STRING$"
+    ],
+    lists:foreach(fun(Name) ->
+        ?assertEqual({error, reserved_word},
+            erlbasic_parser:validate_program_line("LET " ++ Name ++ " = 1"))
+    end, ReservedNames),
+    ?assertEqual({error, reserved_word},
+        erlbasic_parser:validate_program_line("LET PRINT$ = \"X\"")),
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("LET HELLO = 1")).
+
 builtin_chr_test() ->
     ?assertEqual({ok, "A"}, erlbasic_eval_builtins:apply_math_function("CHR$", [65])).
 

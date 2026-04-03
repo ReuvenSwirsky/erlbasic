@@ -133,6 +133,7 @@ RUN
 
 - Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`).
 - `TIMER` returns seconds since midnight as a float (GW-BASIC compatible).
+- Variable names are case-insensitive and cannot use reserved language keywords (statement keywords, expression operators, and builtin function names).
 - `REM` starts a comment statement. Any `:` after `REM` is treated as comment text, not a statement separator.
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
@@ -162,16 +163,16 @@ See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported synt
 
 EUnit tests live under `eunit_tests/`.
 
-Run EUnit from the repo root with:
+Run the full functional suite (compile + EUnit + smoke) from repo root with:
 
 ```powershell
-escript $env:USERPROFILE\rebar3 eunit
+./run_tests.ps1
 ```
 
-If `rebar3` is already on your PATH, this also works:
+For compile-only checks:
 
 ```powershell
-rebar3 eunit
+escript $env:USERPROFILE\rebar3 compile
 ```
 
 ## Smoke Tests
@@ -198,6 +199,10 @@ The perf runner executes in WebSocket mode with reduced generation counts for CI
 - `examples/textlife.bas` stays under its budget
 - `examples/textlife_fast.bas` stays under its budget
 - `examples/textlife_fast.bas` is faster than `examples/textlife.bas` (hard fail otherwise)
+
+Note:
+
+- Run `./run_tests.ps1` and `./run_perf_tests.ps1` sequentially (not in parallel) so both use consistent build artifacts.
 
 Optional budget overrides:
 

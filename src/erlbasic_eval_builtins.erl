@@ -3,12 +3,7 @@
 -export([apply_math_function/2, is_builtin_function/1]).
 
 is_builtin_function(Name) ->
-    lists:member(Name, [
-        "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "STRING$", "DATE$", "TIME$", "TERM$",
-        "TIMER"
-    ]).
+    erlbasic_keywords:is_builtin_function_keyword(Name).
 
 apply_math_function("ABS", [X]) ->
     {ok, abs(X)};

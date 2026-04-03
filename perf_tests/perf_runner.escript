@@ -103,6 +103,11 @@ tune_program("life.bas", Lines) ->
         case string:trim(Line) of
             "50 LET W = 64" -> "50 LET W = 16";
             "60 LET H = 48" -> "60 LET H = 12";
+            "90 DIM NEXT(65, 49)" -> "90 DIM NXT(65, 49)";
+            "470       IF N = 3 THEN NEXT(X, Y) = 1" -> "470       IF N = 3 THEN NXT(X, Y) = 1";
+            "480       IF N = 2 THEN NEXT(X, Y) = GRID(X, Y)" -> "480       IF N = 2 THEN NXT(X, Y) = GRID(X, Y)";
+            "490       IF N < 2 OR N > 3 THEN NEXT(X, Y) = 0" -> "490       IF N < 2 OR N > 3 THEN NXT(X, Y) = 0";
+            "560       GRID(X, Y) = NEXT(X, Y)" -> "560       GRID(X, Y) = NXT(X, Y)";
             "240 FOR GEN = 1 TO 200" -> "240 FOR GEN = 1 TO 3";
             Other -> Other
         end

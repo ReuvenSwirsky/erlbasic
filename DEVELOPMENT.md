@@ -4,6 +4,58 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 3, 2026 - Keyword Architecture Refactor and Consistency Enforcement
+
+### Refactoring
+Completed a keyword-handling refactor to eliminate duplicated keyword lists across parser, expression lexer, LIST formatting, and builtin function checks.
+
+### Implementation
+- Added centralized keyword registry in `src/erlbasic_keywords.erl` with explicit category APIs:
+  - `expr_keywords/0`
+  - `list_keywords/0`
+  - `builtin_function_keywords/0`
+  - `reserved_only_keywords/0`
+  - predicate helpers (`is_expr_keyword/1`, `is_list_keyword/1`, `is_builtin_function_keyword/1`, `is_reserved_variable_name/1`)
+- Rewired consumers to use centralized policy:
+  - `src/erlbasic_eval_lexer.erl` now uses `is_expr_keyword/1`
+  - `src/erlbasic_commands.erl` LIST normalization now uses `is_list_keyword/1`
+  - `src/erlbasic_parser.erl` variable-name reservation checks now use `is_reserved_variable_name/1`
+  - `src/erlbasic_eval_builtins.erl` builtin membership now delegates to `is_builtin_function_keyword/1`
+- Finalized keyword policy:
+  - Variable names reserve all language keywords (not just a small parser subset)
+  - `TIMER` and `STRING$` are explicit expression builtins
+- Added automated consistency coverage in `eunit_tests/erlbasic_eunit_tests.erl`:
+  - category intent tests
+  - union/coverage tests to prevent keyword drift
+
+### Bug Fixes During Refactor
+- Normalized parser error shape handling for reserved-word parse failures in validation paths.
+- Restored/implemented byte variable helpers in `src/erlbasic_eval_arrays.erl`:
+  - `is_byte_var/1`
+  - `normalize_byte_value/1`
+- Ensured array bounds violations continue returning `?SUBSCRIPT OUT OF RANGE`.
+- Updated perf runner tuning for `examples/life.bas` to avoid reserved keyword array name collisions under strict policy.
+
+### Files Changed
+- `src/erlbasic_keywords.erl`
+- `src/erlbasic_eval_lexer.erl`
+- `src/erlbasic_commands.erl`
+- `src/erlbasic_parser.erl`
+- `src/erlbasic_eval_builtins.erl`
+- `src/erlbasic_eval_arrays.erl`
+- `eunit_tests/erlbasic_eunit_tests.erl`
+- `perf_tests/perf_runner.escript`
+
+### Testing
+- `escript $env:USERPROFILE/rebar3 compile`: PASS
+- `./run_tests.ps1`: PASS (all EUnit + smoke tests)
+- `./run_perf_tests.ps1`: PASS
+
+### Rationale
+Before this refactor, keyword knowledge was duplicated in multiple modules, which made behavior inconsistent and fragile when adding language features. Centralizing keyword policy keeps parser, lexer, builtin dispatch, and LIST formatting aligned while still preserving modular boundaries via focused category APIs.
+
+---
+
 ## April 2, 2026 - Performance Work: Life/TextLife Speedups and Perf Gating
 
 ### Enhancement
@@ -258,7 +310,6 @@ Added `SCRATCH` command to delete saved programs and improved `DIR` output with 
 
 ### Rationale
 DEC BASIC's SCRATCH command allowed users to delete unwanted saved programs, essential for managing disk space and organizing saved work. The columnar DIR format matches RSTS/E conventions and provides better readability than the previous simple list. The 16-character filename limit matches historical DEC BASIC conventions and prevents excessively long filenames that could cause display issues.
-
 ---
 
 ## March 31, 2026 - Refactor: Split Interpreter into Commands/State Modules

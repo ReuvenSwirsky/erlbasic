@@ -86,6 +86,7 @@ Variable rules:
 - Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names, `%` for integer-style names, or `&` for byte-style names
 - Byte variables (`&` suffix) store integers clamped to 0-255 range
 - Variable lookup is case-insensitive (`X`, and `x` refer to the same variable).
+- Reserved language keywords cannot be used as variable names (for example `PRINT`, `FOR`, `MOD`, `TIMER`, `STRING$`).
 
 Examples:
 
@@ -99,6 +100,9 @@ PRINT B&
 LET B& = 300
 PRINT B&
 REM Prints 255 (clamped to byte range)
+
+LET PRINT = 1
+REM Raises ?RESERVED WORD ERROR
 ```
 
 ### REM

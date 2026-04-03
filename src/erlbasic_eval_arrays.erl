@@ -76,13 +76,14 @@ write_array_meta(ArrayMeta, Name, Indices, Value) ->
     Dims = maps:get(dims, ArrayMeta),
     case validate_indices(Dims, Indices) of
         ok ->
-            NormalizedValue = case is_byte_var(Name) of
-                true -> normalize_byte_value(Value);
-                false -> Value
-            end,
+            StoredValue =
+                case is_byte_var(Name) of
+                    true -> normalize_byte_value(Value);
+                    false -> Value
+                end,
             Values0 = maps:get(values, ArrayMeta, #{}),
             Key = indices_key(Indices),
-            Values1 = maps:put(Key, NormalizedValue, Values0),
+            Values1 = maps:put(Key, StoredValue, Values0),
             {ok, maps:put(values, Values1, ArrayMeta)};
         error ->
             {error, subscript_out_of_range}
@@ -136,22 +137,19 @@ is_string_var(Name) when is_list(Name) ->
 is_byte_var(Name) when is_list(Name) ->
     Name =/= [] andalso lists:last(Name) =:= $&.
 
-%% Normalize a value for byte variable storage (clamp to 0-255)
 normalize_byte_value(Value) when is_integer(Value) ->
-    if
-        Value < 0 -> 0;
-        Value > 255 -> 255;
-        true -> Value
-    end;
+    clamp_byte(Value);
 normalize_byte_value(Value) when is_float(Value) ->
-    IntValue = erlang:trunc(Value),
-    if
-        IntValue < 0 -> 0;
-        IntValue > 255 -> 255;
-        true -> IntValue
-    end;
-normalize_byte_value(_) ->
-    0.
+    clamp_byte(trunc(Value));
+normalize_byte_value(Value) ->
+    Value.
+
+clamp_byte(N) when N < 0 ->
+    0;
+clamp_byte(N) when N > 255 ->
+    255;
+clamp_byte(N) ->
+    N.
 
 normalize_dims(Dims) ->
     normalize_dims(Dims, []).

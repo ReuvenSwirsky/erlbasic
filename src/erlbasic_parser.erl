@@ -173,6 +173,7 @@ parse_dim_statement(Trimmed) ->
         {match, [DeclText]} ->
             case parse_dim_decls(DeclText) of
                 {ok, Decls} -> {dim, Decls};
+                {error, Reason} -> {parse_error, Reason};
                 error -> unknown
             end;
         nomatch ->
@@ -726,6 +727,8 @@ validate_statement(Stmt) ->
             ok;
         {'end'} ->
             ok;
+        {error, Reason} ->
+            {error, Reason};
         {parse_error, Reason} ->
             {error, Reason};
         unknown ->
@@ -733,19 +736,7 @@ validate_statement(Stmt) ->
     end.
 
 is_reserved_variable_name(Name) ->
-    Upper = string:to_upper(strip_var_sigil(Name)),
-    lists:member(Upper, ["IF", "THEN", "FOR"]).
-
-strip_var_sigil([]) ->
-    [];
-strip_var_sigil(Name) ->
-    Last = lists:last(Name),
-    case Last of
-        $$ -> lists:sublist(Name, length(Name) - 1);
-        $% -> lists:sublist(Name, length(Name) - 1);
-        $& -> lists:sublist(Name, length(Name) - 1);
-        _ -> Name
-    end.
+    erlbasic_keywords:is_reserved_variable_name(Name).
 
 validate_optional_statement_sequence(undefined) ->
     ok;

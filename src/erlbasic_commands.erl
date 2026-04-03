@@ -535,14 +535,7 @@ flush_word([]) ->
     [];
 flush_word(CurrentRev) ->
     Word = lists:reverse(CurrentRev),
-    case is_basic_keyword(Word) of
+    case erlbasic_keywords:is_list_keyword(Word) of
         true -> string:to_upper(Word);
         false -> Word
     end.
-
-is_basic_keyword(Word) ->
-    Upper = string:to_upper(Word),
-    lists:member(Upper, [
-    "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
-        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "SLEEP", "TIMER"
-    ]).
