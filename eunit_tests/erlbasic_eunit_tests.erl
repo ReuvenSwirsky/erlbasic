@@ -839,3 +839,14 @@ textlife_load_test() ->
 
     %% Success - program loaded without syntax errors
     ok.
+
+load_program_keeps_bad_lines_test() ->
+    ProgramText =
+        "10 PRINT \"OK\"\n"
+        "20 DIM NEXT(1)\n"
+        "30 LET X =\n"
+        "40 END\n",
+    {syntax_errors, Program, ErrorLines} = erlbasic_commands:parse_bin_as_program(list_to_binary(ProgramText)),
+    ?assertEqual([20, 30], ErrorLines),
+    ?assertEqual("DIM NEXT(1)", proplists:get_value(20, Program)),
+    ?assertEqual("LET X =", proplists:get_value(30, Program)).

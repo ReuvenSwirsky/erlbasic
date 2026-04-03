@@ -6,7 +6,7 @@
 60 LET H = 48
 70 LET CELLSIZE = 10
 80 DIM GRID(65, 49)
-90 DIM NEXT(65, 49)
+90 DIM NEXTGRID(65, 49)
 100 REM
 110 REM Initialize with random pattern (30% alive)
 120 PRINT "Seeding random pattern..."
@@ -40,16 +40,16 @@
 400       LET N = N + GRID(X - 1, Y + 1) + GRID(X, Y + 1) + GRID(X + 1, Y + 1)
 450       REM
 460       REM Apply Life rules: born with 3, survive with 2-3
-470       IF N = 3 THEN NEXT(X, Y) = 1
-480       IF N = 2 THEN NEXT(X, Y) = GRID(X, Y)
-490       IF N < 2 OR N > 3 THEN NEXT(X, Y) = 0
+470       IF N = 3 THEN NEXTGRID(X, Y) = 1
+480       IF N = 2 THEN NEXTGRID(X, Y) = GRID(X, Y)
+490       IF N < 2 OR N > 3 THEN NEXTGRID(X, Y) = 0
 500     NEXT X
 510   NEXT Y
 520   REM
 530   REM Copy next to current
 540   FOR Y = 1 TO H
 550     FOR X = 1 TO W
-560       GRID(X, Y) = NEXT(X, Y)
+560       GRID(X, Y) = NEXTGRID(X, Y)
 570     NEXT X
 580   NEXT Y
 590 NEXT GEN

@@ -200,6 +200,10 @@ handle_load_command(State, RawName) ->
             case load_program_file(FileName) of
                 {ok, Program} ->
                     {State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+                {syntax_errors, Program, ErrorLines} when is_list(ErrorLines) ->
+                    NewState = State#state{prog = Program, data_items = [], data_index = 1, continue_ctx = undefined},
+                    Messages = [erlbasic_eval:format_runtime_error(syntax_error, Line) || Line <- ErrorLines],
+                    {NewState, Messages};
                 {syntax_error, LineNumber, PartialProgram} when is_integer(LineNumber) ->
                     %% Load the partial program so user can LIST and see the error
                     NewState = State#state{prog = PartialProgram, data_items = [], data_index = 1, continue_ctx = undefined},
@@ -261,6 +265,8 @@ parse_bin_as_program(Bin) ->
     case parse_program_text(binary_to_list(Bin)) of
         {ok, Program} ->
             {ok, Program};
+        {syntax_errors, Program, ErrorLines} when is_list(ErrorLines) ->
+            {syntax_errors, Program, ErrorLines};
         {error, {syntax_error, LineNumber, PartialProgram}} when is_integer(LineNumber) ->
             {syntax_error, LineNumber, PartialProgram};
         {error, {syntax_error, LineNumber}} when is_integer(LineNumber) ->
@@ -275,26 +281,27 @@ serialize_program(Program) ->
 
 parse_program_text(Text) ->
     Lines = [string:trim(Line) || Line <- string:split(Text, "\n", all)],
-    parse_program_lines(Lines, []).
+    parse_program_lines(Lines, [], []).
 
-parse_program_lines([], Acc) ->
+parse_program_lines([], Acc, []) ->
     {ok, lists:keysort(1, Acc)};
-parse_program_lines(["" | Rest], Acc) ->
-    parse_program_lines(Rest, Acc);
-parse_program_lines([Line | Rest], Acc) ->
+parse_program_lines([], Acc, ErrorLines) ->
+    {syntax_errors, lists:keysort(1, Acc), lists:usort(ErrorLines)};
+parse_program_lines(["" | Rest], Acc, ErrorLines) ->
+    parse_program_lines(Rest, Acc, ErrorLines);
+parse_program_lines([Line | Rest], Acc, ErrorLines) ->
     case parse_program_line(Line) of
         {program_line, Num, Code} ->
+            NextAcc = [{Num, Code} | lists:keydelete(Num, 1, Acc)],
             case erlbasic_parser:validate_program_line(Code) of
                 ok ->
-                    parse_program_lines(Rest, [{Num, Code} | lists:keydelete(Num, 1, Acc)]);
+                    parse_program_lines(Rest, NextAcc, ErrorLines);
                 {error, _Reason} ->
-                    %% Keep parse_program_text API stable; report line as syntax_error.
-                    PartialProgram = lists:keysort(1, [{Num, Code} | lists:keydelete(Num, 1, Acc)]),
-                    {error, {syntax_error, Num, PartialProgram}};
+                    %% Keep loading so users can LIST and fix all bad lines.
+                    parse_program_lines(Rest, NextAcc, [Num | ErrorLines]);
                 error ->
-                    %% Include the bad line in the partial program so it can be listed
-                    PartialProgram = lists:keysort(1, [{Num, Code} | lists:keydelete(Num, 1, Acc)]),
-                    {error, {syntax_error, Num, PartialProgram}}
+                    %% Include the bad line in the loaded program and keep going.
+                    parse_program_lines(Rest, NextAcc, [Num | ErrorLines])
             end;
         immediate ->
             error
