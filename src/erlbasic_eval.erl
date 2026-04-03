@@ -182,6 +182,8 @@ format_runtime_error(no_previous_line) ->
     "?NO PREVIOUS LINE\r\n";
 format_runtime_error(program_not_found) ->
     "?PROGRAM NOT FOUND\r\n";
+format_runtime_error(reserved_word) ->
+    "?RESERVED WORD ERROR\r\n";
 format_runtime_error(syntax_error) ->
     "?SYNTAX ERROR\r\n";
 format_runtime_error(_) ->
@@ -204,6 +206,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         no_graphics_mode -> "NO GRAPHICS MODE";
         no_previous_line -> "NO PREVIOUS LINE";
         program_not_found -> "PROGRAM NOT FOUND";
+        reserved_word -> "RESERVED WORD ERROR";
         syntax_error -> "SYNTAX ERROR";
         _ -> "SYNTAX ERROR"
     end,
@@ -225,6 +228,7 @@ error_code(tty_no_cursor_movement) -> 71;
 error_code(graphics_not_supported_on_tty) -> 71;
 error_code(no_graphics_mode) -> 71;
 error_code(no_previous_line) -> 71;
+error_code(reserved_word) -> 2;
 error_code(syntax_error) -> 2;
 error_code(_) -> 255.  % Unknown error
 

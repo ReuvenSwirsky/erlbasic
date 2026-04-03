@@ -154,6 +154,9 @@ See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported synt
 - [examples/flag.bas](examples/flag.bas) - colorized American flag using loops, `COLOR`, and `STRING$`.
 - [examples/enterprise.bas](examples/enterprise.bas) - Starship Enterprise side-view with animated twinkling starfield, using `LOCATE`, `COLOR`, `SLEEP`, and `TIMER`.
 - [examples/graphics.bas](examples/graphics.bas) - Graphics demo using `HGR`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, and `TEXT` to draw shapes and pixels on a 640×480 canvas (WebSocket only).
+- [examples/life.bas](examples/life.bas) - Graphics-mode Conway's Life with optimized neighbor summation.
+- [examples/textlife.bas](examples/textlife.bas) - Text-mode Conway's Life using `#` for occupied cells.
+- [examples/textlife_fast.bas](examples/textlife_fast.bas) - Faster text-mode Life renderer with reduced cursor movement and lightweight per-cell drawing.
 
 ## EUnit Tests
 
@@ -180,4 +183,25 @@ Run them with:
 ```powershell
 .\run_tests.ps1
 ```
+
+## Performance Tests (Life)
+
+To benchmark Life programs in a repeatable runner:
+
+```powershell
+.\run_perf_tests.ps1
+```
+
+The perf runner executes in WebSocket mode with reduced generation counts for CI-friendly runtime and verifies:
+
+- `examples/life.bas` stays under its budget
+- `examples/textlife.bas` stays under its budget
+- `examples/textlife_fast.bas` stays under its budget
+- `examples/textlife_fast.bas` is faster than `examples/textlife.bas` (hard fail otherwise)
+
+Optional budget overrides:
+
+- `ERLBASIC_PERF_MAX_LIFE_MS`
+- `ERLBASIC_PERF_MAX_TEXTLIFE_MS`
+- `ERLBASIC_PERF_MAX_TEXTLIFE_FAST_MS`
 

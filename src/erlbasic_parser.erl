@@ -107,6 +107,7 @@ parse_input_statement(Trimmed) ->
         {match, [TargetText]} ->
             case parse_assignment_target(string:trim(TargetText)) of
                 {ok, Target} -> {input_line, Target};
+                {error, Reason} -> {parse_error, Reason};
                 error -> unknown
             end;
         nomatch ->
@@ -114,6 +115,7 @@ parse_input_statement(Trimmed) ->
                 {match, [TargetsText]} ->
                     case parse_input_target_list(split_commas_top_level(TargetsText), []) of
                         {ok, Targets} -> {input, Targets};
+                        {error, Reason} -> {parse_error, Reason};
                         error -> unknown
                     end;
                 nomatch ->
@@ -127,6 +129,7 @@ parse_get_statement(Trimmed) ->
         {match, [TargetText]} ->
             case parse_assignment_target(string:trim(TargetText)) of
                 {ok, Target} -> {getkey, Target};
+                {error, Reason} -> {parse_error, Reason};
                 error -> unknown
             end;
         nomatch ->
@@ -134,6 +137,7 @@ parse_get_statement(Trimmed) ->
                 {match, [TargetText]} ->
                     case parse_assignment_target(string:trim(TargetText)) of
                         {ok, Target} -> {get, Target};
+                        {error, Reason} -> {parse_error, Reason};
                         error -> unknown
                     end;
                 nomatch ->
@@ -148,6 +152,7 @@ parse_input_target_list([], Acc) ->
 parse_input_target_list([Part | Rest], Acc) ->
     case parse_assignment_target(string:trim(Part)) of
         {ok, Target} -> parse_input_target_list(Rest, [Target | Acc]);
+        {error, Reason} -> {error, Reason};
         error -> error
     end.
 
@@ -156,6 +161,7 @@ parse_let_statement(Trimmed) ->
         {match, [TargetText, Expr]} ->
             case parse_assignment_target(TargetText) of
                 {ok, Target} -> {'let', Target, Expr};
+                {error, Reason} -> {parse_error, Reason};
                 error -> unknown
             end;
         nomatch ->
@@ -184,6 +190,7 @@ parse_dim_decls([], Acc) ->
 parse_dim_decls([Part | Rest], Acc) ->
     case parse_dim_decl(Part) of
         {ok, Decl} -> parse_dim_decls(Rest, [Decl | Acc]);
+        {error, Reason} -> {error, Reason};
         error -> error
     end.
 
@@ -191,11 +198,16 @@ parse_dim_decl(Text) ->
     Trimmed = string:trim(Text),
     case re:run(Trimmed, "^" ++ ?VAR_BASE_PATTERN ++ "\\s*\\((.*)\\)$", [{capture, [1, 2], list}]) of
         {match, [Var, DimText]} ->
-            case parse_index_exprs(DimText) of
-                {ok, Dims} when length(Dims) =:= 1; length(Dims) =:= 2; length(Dims) =:= 3 ->
-                    {ok, {string:to_upper(Var), Dims}};
-                _ ->
-                    error
+            case is_reserved_variable_name(Var) of
+                true ->
+                    {error, reserved_word};
+                false ->
+                    case parse_index_exprs(DimText) of
+                        {ok, Dims} when length(Dims) =:= 1; length(Dims) =:= 2; length(Dims) =:= 3 ->
+                            {ok, {string:to_upper(Var), Dims}};
+                        _ ->
+                            error
+                    end
             end;
         nomatch ->
             error
@@ -209,7 +221,12 @@ parse_def_fn_statement(Trimmed) ->
         {match, [FnSuffix, Expr]} ->
             {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, Expr};
         {match, [FnSuffix, ArgVar, Expr]} ->
-            {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), Expr};
+            case is_reserved_variable_name(ArgVar) of
+                true ->
+                    {parse_error, reserved_word};
+                false ->
+                    {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), Expr}
+            end;
         nomatch ->
             parse_if_statement(Trimmed)
     end.
@@ -291,9 +308,15 @@ parse_comma_separated_list(Str) ->
 parse_loop_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^FOR\\s+" ++ ?LOOP_VAR_PATTERN ++ "\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
         {match, [Var, StartExpr, EndExpr]} ->
-            {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined};
+            case is_reserved_variable_name(Var) of
+                true -> {parse_error, reserved_word};
+                false -> {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined}
+            end;
         {match, [Var, StartExpr, EndExpr, StepExpr]} ->
-            {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr};
+            case is_reserved_variable_name(Var) of
+                true -> {parse_error, reserved_word};
+                false -> {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr}
+            end;
         nomatch ->
             parse_next_statement(Trimmed)
     end.
@@ -303,7 +326,10 @@ parse_next_statement(Trimmed) ->
         {match, []} ->
             {next_loop, undefined};
         {match, [Var]} ->
-            {next_loop, string:to_upper(Var)};
+            case is_reserved_variable_name(Var) of
+                true -> {parse_error, reserved_word};
+                false -> {next_loop, string:to_upper(Var)}
+            end;
         nomatch ->
             parse_locate_statement(Trimmed)
     end.
@@ -348,6 +374,8 @@ parse_read_vars([Part | Rest], Acc) ->
     case parse_assignment_target(Part) of
         {ok, Target} ->
             parse_read_vars(Rest, [Target | Acc]);
+        {error, Reason} ->
+            {error, Reason};
         error ->
             error
     end.
@@ -382,13 +410,23 @@ parse_assignment_target(Text) ->
     Trimmed = string:trim(Text),
     case re:run(Trimmed, "^" ++ ?VAR_BASE_PATTERN ++ "(?:\\((.*)\\))?$", [{capture, all_but_first, list}]) of
         {match, [Var]} ->
-            {ok, {var_target, string:to_upper(Var)}};
+            case is_reserved_variable_name(Var) of
+                true ->
+                    {error, reserved_word};
+                false ->
+                    {ok, {var_target, string:to_upper(Var)}}
+            end;
         {match, [Var, IndexText]} ->
-            case parse_index_exprs(IndexText) of
-                {ok, IndexExprs} when length(IndexExprs) =:= 1; length(IndexExprs) =:= 2; length(IndexExprs) =:= 3 ->
-                    {ok, {array_target, string:to_upper(Var), IndexExprs}};
-                _ ->
-                    error
+            case is_reserved_variable_name(Var) of
+                true ->
+                    {error, reserved_word};
+                false ->
+                    case parse_index_exprs(IndexText) of
+                        {ok, IndexExprs} when length(IndexExprs) =:= 1; length(IndexExprs) =:= 2; length(IndexExprs) =:= 3 ->
+                            {ok, {array_target, string:to_upper(Var), IndexExprs}};
+                        _ ->
+                            error
+                    end
             end;
         nomatch ->
             error
@@ -499,6 +537,7 @@ parse_implicit_let_statement(Trimmed) ->
         {match, [TargetText, Expr]} ->
             case parse_assignment_target(TargetText) of
                 {ok, Target} -> {'let', Target, Expr};
+                {error, Reason} -> {parse_error, Reason};
                 error -> unknown
             end;
         nomatch ->
@@ -555,6 +594,7 @@ validate_statements([]) ->
 validate_statements([Stmt | Rest]) ->
     case validate_statement(Stmt) of
         ok -> validate_statements(Rest);
+        {error, Reason} -> {error, Reason};
         error -> error
     end.
 
@@ -686,8 +726,25 @@ validate_statement(Stmt) ->
             ok;
         {'end'} ->
             ok;
+        {parse_error, Reason} ->
+            {error, Reason};
         unknown ->
             error
+    end.
+
+is_reserved_variable_name(Name) ->
+    Upper = string:to_upper(strip_var_sigil(Name)),
+    lists:member(Upper, ["IF", "THEN", "FOR"]).
+
+strip_var_sigil([]) ->
+    [];
+strip_var_sigil(Name) ->
+    Last = lists:last(Name),
+    case Last of
+        $$ -> lists:sublist(Name, length(Name) - 1);
+        $% -> lists:sublist(Name, length(Name) - 1);
+        $& -> lists:sublist(Name, length(Name) - 1);
+        _ -> Name
     end.
 
 validate_optional_statement_sequence(undefined) ->

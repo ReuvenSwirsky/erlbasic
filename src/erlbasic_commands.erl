@@ -287,6 +287,10 @@ parse_program_lines([Line | Rest], Acc) ->
             case erlbasic_parser:validate_program_line(Code) of
                 ok ->
                     parse_program_lines(Rest, [{Num, Code} | lists:keydelete(Num, 1, Acc)]);
+                {error, _Reason} ->
+                    %% Keep parse_program_text API stable; report line as syntax_error.
+                    PartialProgram = lists:keysort(1, [{Num, Code} | lists:keydelete(Num, 1, Acc)]),
+                    {error, {syntax_error, Num, PartialProgram}};
                 error ->
                     %% Include the bad line in the partial program so it can be listed
                     PartialProgram = lists:keysort(1, [{Num, Code} | lists:keydelete(Num, 1, Acc)]),

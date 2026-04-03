@@ -4,8 +4,8 @@
 40 PRINT "Initializing Text Life..."
 50 LET W = 60
 60 LET H = 20
-70 DIM GRID(60, 20)
-80 DIM NEXTGRID(60, 20)
+70 DIM GRID(61, 21)
+80 DIM NEXTGRID(61, 21)
 90 REM
 100 REM Initialize with random pattern (30% alive)
 110 PRINT "Seeding random pattern..."
@@ -18,8 +18,6 @@
 180 REM Start simulation
 190 PRINT "Starting simulation..."
 200 PRINT "Press CTRL-C to stop"
-210 FOR I = 1 TO 1000
-220 NEXT I
 230 CLS
 240 REM
 250 REM Main simulation loop
@@ -31,20 +29,16 @@
 310   FOR Y = 1 TO H
 320     LOCATE Y + 1, 1
 330     FOR X = 1 TO W
-340       IF GRID(X, Y) = 1 THEN PRINT CHR$(219); ELSE PRINT " ";
+340       IF GRID(X, Y) = 1 THEN PRINT "#"; ELSE PRINT " ";
 350     NEXT X
 360   NEXT Y
 370   REM
 380   REM Calculate next generation
 390   FOR Y = 1 TO H
 400     FOR X = 1 TO W
-410       LET N = 0
-420       REM Count neighbors
-430       FOR NY = Y - 1 TO Y + 1
-440         FOR NX = X - 1 TO X + 1
-450           IF NX >= 1 AND NX <= W AND NY >= 1 AND NY <= H THEN GOSUB 650
-460         NEXT NX
-470       NEXT NY
+410       LET N = GRID(X - 1, Y - 1) + GRID(X, Y - 1) + GRID(X + 1, Y - 1)
+420       LET N = N + GRID(X - 1, Y) + GRID(X + 1, Y)
+430       LET N = N + GRID(X - 1, Y + 1) + GRID(X, Y + 1) + GRID(X + 1, Y + 1)
 480       REM
 490       REM Apply Life rules
 500       IF N = 3 THEN NEXTGRID(X, Y) = 1
@@ -59,13 +53,8 @@
 590       GRID(X, Y) = NEXTGRID(X, Y)
 600     NEXT X
 610   NEXT Y
-620   REM Small delay
-630   SLEEP 0.05
+620   REM No delay for faster simulation
 640 NEXT GEN
-650 REM Subroutine: count neighbor at NX, NY
-660 IF NX = X AND NY = Y THEN RETURN
-670 IF GRID(NX, NY) = 1 THEN N = N + 1
-680 RETURN
 690 REM
 700 REM End simulation
 710 LOCATE 23, 1

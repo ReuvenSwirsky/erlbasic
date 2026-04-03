@@ -148,7 +148,8 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
 
 execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack) ->
     LineNumber = get_line_number(Program, Pc),
-    case erlbasic_parser:parse_statement(Command) of
+    ParsedStmt = erlbasic_parser:parse_statement(Command),
+    case ParsedStmt of
         {for_loop, Var, StartExpr, EndExpr, StepExpr} ->
             case erlbasic_eval:eval_expr_result(StartExpr, State#state.vars, State#state.funcs) of
                 {error, Reason, _} ->
@@ -255,14 +256,16 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
             end;
         {'end'} ->
             {'end', []};
+        {parse_error, Reason} ->
+            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack);
         _ ->
-            execute_basic_statement(Command, State, Pc, LoopStack, CallStack)
+            execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack)
     end.
 
-execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
+execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
     Program = State#state.prog,
     LineNumber = get_line_number(Program, Pc),
-    case erlbasic_parser:parse_statement(Command) of
+    case ParsedStmt of
         {data, _Items} ->
             {continue, State, LoopStack, CallStack, []};
         {read_data, Targets} ->
@@ -456,6 +459,8 @@ execute_basic_statement(Command, State, Pc, LoopStack, CallStack) ->
             execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {'end'} ->
             {'end', []};
+        {parse_error, Reason} ->
+            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack);
         _ ->
             handle_runtime_error(syntax_error, LineNumber, State, Pc, LoopStack, CallStack)
     end.

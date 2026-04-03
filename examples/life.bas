@@ -5,8 +5,8 @@
 50 LET W = 64
 60 LET H = 48
 70 LET CELLSIZE = 10
-80 DIM GRID(64, 48)
-90 DIM NEXT(64, 48)
+80 DIM GRID(65, 49)
+90 DIM NEXT(65, 49)
 100 REM
 110 REM Initialize with random pattern (30% alive)
 120 PRINT "Seeding random pattern..."
@@ -35,13 +35,9 @@
 350   REM Calculate next generation
 360   FOR Y = 1 TO H
 370     FOR X = 1 TO W
-380       LET N = 0
-390       REM Count neighbors
-400       FOR NY = Y - 1 TO Y + 1
-410         FOR NX = X - 1 TO X + 1
-420           IF NX >= 1 AND NX <= W AND NY >= 1 AND NY <= H THEN GOSUB 600
-430         NEXT NX
-440       NEXT NY
+380       LET N = GRID(X - 1, Y - 1) + GRID(X, Y - 1) + GRID(X + 1, Y - 1)
+390       LET N = N + GRID(X - 1, Y) + GRID(X + 1, Y)
+400       LET N = N + GRID(X - 1, Y + 1) + GRID(X, Y + 1) + GRID(X + 1, Y + 1)
 450       REM
 460       REM Apply Life rules: born with 3, survive with 2-3
 470       IF N = 3 THEN NEXT(X, Y) = 1
@@ -57,10 +53,6 @@
 570     NEXT X
 580   NEXT Y
 590 NEXT GEN
-600 REM Subroutine: count neighbor at NX, NY
-610 IF NX = X AND NY = Y THEN RETURN
-620 IF GRID(NX, NY) = 1 THEN N = N + 1
-630 RETURN
 640 REM
 650 REM End simulation
 660 TEXT

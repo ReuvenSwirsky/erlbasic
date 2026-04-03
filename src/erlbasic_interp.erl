@@ -48,6 +48,8 @@ handle_program_line(LineNumber, Code, State) ->
         ok ->
             NextProgram = update_program(State#state.prog, LineNumber, Code),
             {State#state{prog = NextProgram, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+        {error, Reason} ->
+            {State, [erlbasic_eval:format_runtime_error(Reason)]};
         error ->
             {State, ["?SYNTAX ERROR\r\n"]}
     end.
@@ -426,6 +428,8 @@ execute_statement_single(Command, State) ->
             end;
         {'end'} ->
             stop;
+        {parse_error, Reason} ->
+            {State, [erlbasic_eval:format_runtime_error(Reason)]};
         unknown ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {for_loop, _Var, _StartExpr, _EndExpr, _StepExpr} ->
