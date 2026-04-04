@@ -23,3 +23,7 @@ priv/ssl/
 # Debug/scratch escripts
 dump_accounts.escript
 test_auth.escript
+
+# Test output files
+test_output.txt
+*.test.log
