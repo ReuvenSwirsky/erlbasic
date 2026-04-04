@@ -915,3 +915,90 @@ load_program_keeps_bad_lines_test() ->
     ?assertEqual([20, 30], ErrorLines),
     ?assertEqual("DIM NEXT(1)", proplists:get_value(20, Program)),
     ?assertEqual("LET X =", proplists:get_value(30, Program)).
+
+%% =============================================================================
+%% INPUT Statement Tests (GW-BASIC Compatibility)
+%% =============================================================================
+
+%% Test single INPUT with string variable
+input_single_string_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT N$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT N$", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, Output1} = erlbasic_interp:handle_input("RUN", S3),
+    ?assertEqual(match, re:run(lists:flatten(Output1), "\\?\\s", [{capture, none}])),
+    {_S5, Output2} = erlbasic_interp:handle_input("hello", S4),
+    Text = lists:flatten(Output2),
+    ?assertEqual(match, re:run(Text, "hello", [{capture, none}])).
+
+%% Test single INPUT with integer variable
+input_single_integer_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT X%", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT X% + 1", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, Output1} = erlbasic_interp:handle_input("RUN", S3),
+    ?assertEqual(match, re:run(lists:flatten(Output1), "\\?\\s", [{capture, none}])),
+    {_S5, Output2} = erlbasic_interp:handle_input("41", S4),
+    Text = lists:flatten(Output2),
+    ?assertEqual(match, re:run(Text, "42", [{capture, none}])).
+
+%% Test sequential INPUT statements (multiple INPUTs in program)
+input_sequential_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT A$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 INPUT B%", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT A$ ; \":\" ; B%", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {S5, Output1} = erlbasic_interp:handle_input("RUN", S4),
+    ?assertEqual(match, re:run(lists:flatten(Output1), "\\?\\s", [{capture, none}])),
+    {S6, Output2} = erlbasic_interp:handle_input("test", S5),
+    ?assertEqual(match, re:run(lists:flatten(Output2), "\\?\\s", [{capture, none}])),
+    {_S7, Output3} = erlbasic_interp:handle_input("99", S6),
+    Text = lists:flatten(Output3),
+    ?assertEqual(match, re:run(Text, "test:99", [{capture, none}])).
+
+%% Test INPUT with string containing spaces (quoted)
+input_string_with_spaces_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT S$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT S$", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("\"hello world\"", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "hello world", [{capture, none}])).
+
+%% Test INPUT with integer that gets stored in float variable
+input_integer_to_float_conversion_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT X", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT X + 0.5", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("10", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "10.5", [{capture, none}])).
+
+%% Test INPUT with byte variable
+input_byte_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT B&", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT B&", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("200", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "200", [{capture, none}])).
+
+%% Test INPUT followed by computation
+input_with_arithmetic_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT N%", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT N% * 2 + 3", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("5", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "13", [{capture, none}])).
