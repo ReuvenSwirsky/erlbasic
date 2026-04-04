@@ -1,0 +1,3 @@
+10 PRINT "STEP 1"
+20 PRINT "STEP 2"
+30 CHAIN "chain_helper"

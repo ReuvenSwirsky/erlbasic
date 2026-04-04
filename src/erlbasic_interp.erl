@@ -155,6 +155,13 @@ exec_immediate_other(Upper, Command, State) ->
                     erlbasic_commands:handle_save_command(State, FileName);
                 {load, FileName} ->
                     erlbasic_commands:handle_load_command(State, FileName);
+                {run, FileName} ->
+                    case erlbasic_commands:handle_load_command(State, FileName) of
+                        {NewState, ["OK\r\n"]} ->
+                            run_program(NewState);
+                        LoadResult ->
+                            LoadResult
+                    end;
                 {scratch, FileName} ->
                     erlbasic_commands:handle_scratch_command(State, FileName);
                 nomatch ->

@@ -528,7 +528,13 @@ parse_sound_statement(Trimmed) ->
         {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
             {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr};
         nomatch ->
-            parse_color_statement(Trimmed)
+            parse_chain_statement(Trimmed)
+    end.
+
+parse_chain_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^CHAIN\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [FileExpr]} -> {chain, string:trim(FileExpr)};
+        nomatch             -> parse_color_statement(Trimmed)
     end.
 
 parse_color_statement(Trimmed) ->
@@ -727,6 +733,8 @@ validate_statement(Stmt) ->
             end;
         {sleep, Expr} ->
             validate_expr_syntax(Expr);
+        {chain, FileExpr} ->
+            validate_expr_syntax(FileExpr);
         {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->
             case validate_expr_pair(VoiceExpr, PitchExpr) of
                 ok -> validate_expr_pair(DistortionExpr, VolumeExpr);

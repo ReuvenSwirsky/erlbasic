@@ -105,11 +105,21 @@ parse_file_command(Command) ->
                 {match, [Name]} ->
                     {load, string:trim(Name)};
                 nomatch ->
-                    case re:run(Trimmed, "(?i)^SCRATCH\\s+(.+)$", [{capture, [1], list}]) of
+                    case re:run(Trimmed, "(?i)^RUN\\s+(.+)$", [{capture, [1], list}]) of
                         {match, [Name]} ->
-                            {scratch, string:trim(Name)};
+                            {run, string:trim(Name)};
                         nomatch ->
-                            nomatch
+                            case re:run(Trimmed, "(?i)^CHAIN\\s+(.+)$", [{capture, [1], list}]) of
+                                {match, [Name]} ->
+                                    {chain, string:trim(Name)};
+                                nomatch ->
+                                    case re:run(Trimmed, "(?i)^SCRATCH\\s+(.+)$", [{capture, [1], list}]) of
+                                        {match, [Name]} ->
+                                            {scratch, string:trim(Name)};
+                                        nomatch ->
+                                            nomatch
+                                    end
+                            end
                     end
             end
     end.

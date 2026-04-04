@@ -125,6 +125,18 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
                 false ->
                     {State, lists:reverse(["Program ended\r\n" | FinalOutput])}
             end;
+        {chain, NewState, Output} ->
+            CombinedOutput = lists:reverse(Output) ++ Acc,
+            NewAcc =
+                case should_flush_output() of
+                    true ->
+                        flush_output(CombinedOutput),
+                        [];
+                    false ->
+                        CombinedOutput
+                end,
+            %% Start executing the new program from line 1
+            run_program_lines(NewState#state.prog, 1, NewState, [], [], NewAcc);
         {stop, Output} ->
             CombinedOutput = lists:reverse(Output) ++ Acc,
             flush_output(CombinedOutput),
@@ -160,6 +172,8 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
             {jump, TargetPc, NextState, NextLoopStack, NextCallStack, OutputAcc ++ Output};
         {'end', Output} ->
             {'end', OutputAcc ++ Output};
+        {chain, NewState, Output} ->
+            {chain, NewState, OutputAcc ++ Output};
         {stop, Output} ->
             {stop, OutputAcc ++ Output}
     end.
@@ -482,6 +496,8 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             execute_resume_next(State, Pc, LoopStack, CallStack);
         {resume_line, LineExpr} ->
             execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
+        {chain, FileExpr} ->
+            execute_chain(FileExpr, LineNumber, State);
         {'end'} ->
             {'end', []};
         {parse_error, Reason} ->
@@ -786,6 +802,21 @@ line_to_pc([_ | Rest], LineNumber, Index) ->
     line_to_pc(Rest, LineNumber, Index + 1);
 line_to_pc([], _LineNumber, _Index) ->
     error.
+
+execute_chain(FileExpr, LineNumber, State) ->
+    case erlbasic_eval:eval_expr_result(FileExpr, State#state.vars, State#state.funcs) of
+        {error, Reason, _} ->
+            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]};
+        {ok, FileValue, _} when is_list(FileValue) ->
+            case erlbasic_commands:handle_load_command(State, FileValue) of
+                {NewState, ["OK\r\n"]} ->
+                    {chain, NewState, []};
+                {_LoadState, ErrorOutput} ->
+                    {stop, ErrorOutput}
+            end;
+        {ok, _Other, _} ->
+            {stop, [erlbasic_eval:format_runtime_error(type_mismatch, LineNumber)]}
+    end.
 
 get_line_number(Program, Pc) when Pc >= 1, Pc =< length(Program) ->
     {LineNumber, _Code} = lists:nth(Pc, Program),
