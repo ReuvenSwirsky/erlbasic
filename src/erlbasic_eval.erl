@@ -142,7 +142,7 @@ declare_array(Name, Dims, Vars) when is_list(Dims) ->
     case erlbasic_eval_arrays:normalize_dims(Dims) of
         {ok, Normalized} ->
             Arrays0 = erlbasic_eval_arrays:get_arrays(Vars),
-            ArrayMeta = #{dims => Normalized, values => #{}},
+            ArrayMeta = erlbasic_eval_arrays:new_array_meta(Name, Normalized),
             Arrays1 = maps:put(Name, ArrayMeta, Arrays0),
             {ok, erlbasic_eval_arrays:put_arrays(Vars, Arrays1)};
         error ->

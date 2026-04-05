@@ -3,6 +3,7 @@
 -export([
     get_arrays/1,
     put_arrays/2,
+    new_array_meta/2,
     get_array_value/3,
     put_array_value/4,
     normalize_dims/1,
@@ -19,6 +20,15 @@ get_arrays(Vars) ->
 
 put_arrays(Vars, Arrays) ->
     maps:put(?ARRAYS_KEY, Arrays, Vars).
+
+new_array_meta(Name, Dims) ->
+    Extents = [Dim + 1 || Dim <- Dims],
+    Size = lists:foldl(fun(Extent, Acc) -> Extent * Acc end, 1, Extents),
+    #{
+        dims => Dims,
+        strides => compute_strides(Extents),
+        data => array:new(Size, {default, default_scalar_value(Name)})
+    }.
 
 get_array_value(Name, Indices, Vars) ->
     Arrays = get_arrays(Vars),
@@ -48,7 +58,7 @@ put_array_value(Name, Indices, Value, Vars) ->
         error ->
             case auto_array_dims(Indices) of
                 {ok, Dims} ->
-                    NewMeta = #{dims => Dims, values => #{}},
+                    NewMeta = new_array_meta(Name, Dims),
                     case write_array_meta(NewMeta, Name, Indices, Value) of
                         {ok, NextMeta} ->
                             Arrays1 = maps:put(Name, NextMeta, Arrays0),
@@ -61,30 +71,30 @@ put_array_value(Name, Indices, Value, Vars) ->
             end
     end.
 
-read_array_meta(ArrayMeta, Name, Indices) ->
+read_array_meta(ArrayMeta, _Name, Indices) ->
     Dims = maps:get(dims, ArrayMeta),
-    case validate_indices(Dims, Indices) of
-        ok ->
-            Values = maps:get(values, ArrayMeta, #{}),
-            Key = indices_key(Indices),
-            {ok, maps:get(Key, Values, default_scalar_value(Name))};
+    Strides = maps:get(strides, ArrayMeta),
+    case flat_index(Dims, Strides, Indices) of
+        {ok, Index} ->
+            Data = maps:get(data, ArrayMeta),
+            {ok, array:get(Index, Data)};
         error ->
             {error, subscript_out_of_range}
     end.
 
 write_array_meta(ArrayMeta, Name, Indices, Value) ->
     Dims = maps:get(dims, ArrayMeta),
-    case validate_indices(Dims, Indices) of
-        ok ->
+    Strides = maps:get(strides, ArrayMeta),
+    case flat_index(Dims, Strides, Indices) of
+        {ok, Index} ->
             StoredValue =
                 case is_byte_var(Name) of
                     true -> normalize_byte_value(Value);
                     false -> Value
                 end,
-            Values0 = maps:get(values, ArrayMeta, #{}),
-            Key = indices_key(Indices),
-            Values1 = maps:put(Key, StoredValue, Values0),
-            {ok, maps:put(values, Values1, ArrayMeta)};
+            Data0 = maps:get(data, ArrayMeta),
+            Data1 = array:set(Index, StoredValue, Data0),
+            {ok, maps:put(data, Data1, ArrayMeta)};
         error ->
             {error, subscript_out_of_range}
     end.
@@ -98,32 +108,24 @@ auto_array_dims([_, _, _]) ->
 auto_array_dims(_) ->
     error.
 
-validate_indices([Max], [I]) ->
-    validate_index(I, Max);
-validate_indices([Max1, Max2], [I, J]) ->
-    case {validate_index(I, Max1), validate_index(J, Max2)} of
-        {ok, ok} -> ok;
-        _ -> error
-    end;
-validate_indices([Max1, Max2, Max3], [I, J, K]) ->
-    case {validate_index(I, Max1), validate_index(J, Max2), validate_index(K, Max3)} of
-        {ok, ok, ok} -> ok;
-        _ -> error
-    end;
-validate_indices(_, _) ->
-    error.
+compute_strides(Extents) ->
+    compute_strides_rev(lists:reverse(Extents), 1, []).
 
-validate_index(Index, Max) when is_integer(Index), is_integer(Max), Index >= 0, Index =< Max ->
-    ok;
-validate_index(_, _) ->
-    error.
+compute_strides_rev([], _Stride, Acc) ->
+    Acc;
+compute_strides_rev([Extent | Rest], Stride, Acc) ->
+    compute_strides_rev(Rest, Stride * Extent, [Stride | Acc]).
 
-indices_key([I]) ->
-    I;
-indices_key([I, J]) ->
-    {I, J};
-indices_key([I, J, K]) ->
-    {I, J, K}.
+flat_index(Dims, Strides, Indices) ->
+    flat_index(Dims, Strides, Indices, 0).
+
+flat_index([], [], [], Acc) ->
+    {ok, Acc};
+flat_index([Max | RestDims], [Stride | RestStrides], [Index | RestIndices], Acc)
+    when is_integer(Index), Index >= 0, Index =< Max ->
+    flat_index(RestDims, RestStrides, RestIndices, Acc + Index * Stride);
+flat_index(_, _, _, _) ->
+    error.
 
 default_scalar_value(Name) ->
     case is_string_var(Name) of

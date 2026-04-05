@@ -193,6 +193,16 @@ To benchmark Life programs in a repeatable runner:
 .\run_perf_tests.ps1
 ```
 
+To measure text-mode Life performance specifically, using `examples/asciilife.bas` tuned to exactly 100 generations:
+
+```powershell
+.\run_textlife_benchmark.ps1
+```
+
+The benchmark reports per-run elapsed times plus average/min/max. By default it runs 5 times; override with:
+
+- `ERLBASIC_TEXTLIFE_BENCH_RUNS`
+
 The perf runner executes in WebSocket mode with reduced generation counts for CI-friendly runtime and verifies:
 
 - `examples/life.bas` stays under its budget

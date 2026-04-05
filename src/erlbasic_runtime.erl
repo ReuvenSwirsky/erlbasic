@@ -18,17 +18,21 @@ run_program(State = #state{prog = Program}) ->
     RunState = State#state{data_items = DataItems, data_index = 1, continue_ctx = undefined},
     erlang:put(line_exec_count, 0),
     erlang:put(stmt_parse_cache, #{}),
+    erlang:put(expr_parse_cache, #{}),
     Result = run_program_lines(Program, 1, RunState, [], [], []),
     erlang:erase(line_exec_count),
     erlang:erase(stmt_parse_cache),
+    erlang:erase(expr_parse_cache),
     Result.
 
 continue_program(State = #state{prog = Program}, Pc, LoopStack, CallStack) ->
     erlang:put(line_exec_count, 0),
     erlang:put(stmt_parse_cache, #{}),
+    erlang:put(expr_parse_cache, #{}),
     Result = run_program_lines(Program, Pc, State, LoopStack, CallStack, []),
     erlang:erase(line_exec_count),
     erlang:erase(stmt_parse_cache),
+    erlang:erase(expr_parse_cache),
     Result.
 
 run_program_lines([], _Pc, State, _LoopStack, _CallStack, Acc) ->
