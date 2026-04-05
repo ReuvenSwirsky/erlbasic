@@ -321,21 +321,6 @@ parse_program_lines([Line | Rest], Acc, ErrorLines) ->
 %% Per-user file I/O is handled by erlbasic_storage.  Only shared
 %% example files are accessed directly here.
 
-list_regular_files(Dir) ->
-    case file:list_dir(Dir) of
-        {ok, Names} ->
-            {ok, lists:sort([N || N <- Names, is_regular_file(Dir, N)])};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-is_regular_file(Dir, Name) ->
-    Path = filename:join(Dir, Name),
-    case file:read_file_info(Path) of
-        {ok, #file_info{type = regular}} -> true;
-        _ -> false
-    end.
-
 list_files_with_info(Dir) ->
     case file:list_dir(Dir) of
         {ok, Names} ->
@@ -378,17 +363,6 @@ keep_safe_chars(Text) ->
     case Safe of
         [] -> "";
         _ -> Safe
-    end.
-
-list_example_files() ->
-    Dir = examples_program_dir(),
-    case file:list_dir(Dir) of
-        {ok, _} ->
-            list_regular_files(Dir);
-        {error, enoent} ->
-            {ok, []};
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 list_example_files_with_info() ->

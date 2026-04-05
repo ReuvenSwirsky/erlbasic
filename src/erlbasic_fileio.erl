@@ -57,7 +57,7 @@ close_file(_Other, State) ->
 
 print_file(ChannelValue, Items, EndWithNewline, Vars, Funcs, State, PrintCol) ->
     case get_open_file(ChannelValue, State) of
-        {ok, Channel, Entry} ->
+        {ok, _Channel, Entry} ->
             case allow_write_mode(Entry) of
                 false ->
                     {error, illegal_function_call, Vars, State, PrintCol};
