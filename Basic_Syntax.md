@@ -478,6 +478,21 @@ Notes:
 - `SOUND` is only supported on the browser WebSocket client.
 - On non-WebSocket terminals, `SOUND` raises `?SOUND NOT SUPPORTED ON TTY`.
 
+### TRON / TROFF
+
+Enables or disables line tracing during `RUN`.
+
+```text
+TRON
+TROFF
+```
+
+Notes:
+- `TRON` turns on trace mode.
+- While trace mode is on, each executed program line emits a trace marker like `[120]` before that line runs.
+- `TROFF` turns trace mode off.
+- Works in immediate mode and in stored programs.
+
 ### END
 
 Stops execution of a running stored program.
@@ -745,11 +760,14 @@ Supported expression forms:
 	- `LEFT$(text, n)`
 	- `RIGHT$(text, n)`
 	- `MID$(text, start[, n])` (1-based start index)
+	- `INSTR([start,] text, pattern)` (1-based position, `0` if not found)
 	- `LEN(text)`
 	- `ASC(text)`
 	- `CHR$(code)`
 	- `STR$(number)`
+	- `SPACE$(n)`
 	- `STRING$(n, code_or_text)`
+	- `POS([expr])` (current print column, 1-based)
 	- `DATE$()` (local date in `MM-DD-YYYY`)
 	- `TIME$()` (local time in `HH:MM:SS`)
 	- `TERM$()` (`"XTERM"` for WebSocket terminal sessions, `"TELNET"` for TCP/telnet sessions)
@@ -764,11 +782,21 @@ PRINT SIN(PI() / 2)
 PRINT SQRT(16)
 PRINT LEFT$("HELLO", 2)
 PRINT MID$("HELLO", 2, 3)
+PRINT INSTR("ABCDE", "CD")
+PRINT SPACE$(5) + "X"
+PRINT POS(0)
 PRINT STRING$(5, 42)
 PRINT DATE$()
 PRINT TIME$()
 PRINT TERM$()
 ```
+
+Function behavior notes:
+- `INSTR(text, pattern)` searches from position 1.
+- `INSTR(start, text, pattern)` starts search at 1-based `start`.
+- `INSTR` returns `0` when no match is found.
+- `SPACE$(n)` returns a string of `n` spaces.
+- `POS([expr])` returns the current `PRINT` column (1-based). The argument is accepted for GW-BASIC compatibility and ignored.
 
 Undefined variables evaluate to `0`.
 

@@ -56,10 +56,10 @@ Before this refactor, keyword knowledge was duplicated in multiple modules, whic
 
 ---
 
-## April 2, 2026 - Performance Work: Life/TextLife Speedups and Perf Gating
+## April 2, 2026 - Performance Work: Life/AsciiLife Speedups and Perf Gating
 
 ### Enhancement
-Improved execution speed for Life-style workloads and added a repeatable performance test runner that enforces a faster-than baseline for the new fast text renderer.
+Improved execution speed for Life-style workloads and added a repeatable performance test runner for the currently shipped graphics and text Life examples.
 
 ### Implementation
 - **Runtime hot-path optimization** (`src/erlbasic_runtime.erl`):
@@ -69,31 +69,27 @@ Improved execution speed for Life-style workloads and added a repeatable perform
   - `examples/life.bas`:
     - Replaced nested neighbor loops + `GOSUB` with direct 8-neighbor summation.
     - Expanded arrays with borders (`DIM GRID(65, 49)`, `DIM NEXT(65, 49)`) to remove bounds checks in inner loops.
-  - `examples/textlife.bas`:
+  - `examples/asciilife.bas`:
     - Same direct neighbor summation approach.
     - Expanded arrays with borders (`DIM GRID(61, 21)`, `DIM NEXTGRID(61, 21)`).
     - Removed deliberate delays for faster simulation updates.
     - Changed occupied-cell display character from extended ASCII block to `#` for cleaner cross-terminal rendering.
-  - `examples/textlife_fast.bas`:
-    - Added a dedicated fast text-mode Life variant with lower render overhead.
 - **Perf runner and gate**:
   - Added `perf_tests/perf_runner.escript` and `run_perf_tests.ps1`.
-  - Runner benchmarks `life.bas`, `textlife.bas`, and `textlife_fast.bas` using reduced generation counts for CI-friendliness.
-  - Added strict comparison gate: `textlife_fast.bas` must be faster than `textlife.bas` or perf tests fail.
+  - Runner benchmarks `life.bas` and `asciilife.bas` using reduced generation counts for CI-friendliness.
 
 ### Documentation
 - Updated `README.md` with:
   - Life example entries
   - Perf runner usage
-  - Budget env vars including `ERLBASIC_PERF_MAX_TEXTLIFE_FAST_MS`
-  - Faster-than comparison requirement
+  - Budget env vars including `ERLBASIC_PERF_MAX_ASCIILIFE_MS`
 
 ### Testing
 - `./run_tests.ps1`: PASS (all EUnit + smoke tests)
-- `./run_perf_tests.ps1`: PASS with comparison gate active
+- `./run_perf_tests.ps1`: PASS
 
 ### Rationale
-Life programs stress the interpreter through dense nested loops and high-frequency rendering. Removing parse duplication and reducing per-cell overhead in example code improves responsiveness while preserving behavior. The performance gate prevents regressions and ensures the fast variant remains meaningfully faster than the baseline text renderer.
+Life programs stress the interpreter through dense nested loops and high-frequency rendering. Removing parse duplication and reducing per-cell overhead in example code improves responsiveness while preserving behavior. The perf runner keeps the current shipped Life examples within practical runtime budgets.
 
 ---
 

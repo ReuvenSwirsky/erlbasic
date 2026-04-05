@@ -56,6 +56,22 @@ builtin_chr_test() ->
 builtin_len_test() ->
     ?assertEqual({ok, 5}, erlbasic_eval_builtins:apply_math_function("LEN", ["HELLO"])).
 
+builtin_instr_space_pos_test() ->
+    ?assertEqual({ok, 2}, erlbasic_eval_builtins:apply_math_function("INSTR", ["ABCDE", "BC"])),
+    ?assertEqual({ok, 4}, erlbasic_eval_builtins:apply_math_function("INSTR", [3, "ABCDE", "DE"])),
+    ?assertEqual({ok, 0}, erlbasic_eval_builtins:apply_math_function("INSTR", ["ABCDE", "ZZ"])),
+    ?assertEqual({ok, "   "}, erlbasic_eval_builtins:apply_math_function("SPACE$", [3])),
+    PrevCol = erlang:get(erlbasic_print_col),
+    erlang:put(erlbasic_print_col, 5),
+    try
+        ?assertEqual({ok, 6}, erlbasic_eval_builtins:apply_math_function("POS", [0]))
+    after
+        case PrevCol of
+            undefined -> erlang:erase(erlbasic_print_col);
+            _ -> erlang:put(erlbasic_print_col, PrevCol)
+        end
+    end.
+
 immediate_print_test() ->
     State0 = erlbasic_interp:new_state(),
     {_State1, Output} = erlbasic_interp:handle_input("PRINT 1+1", State0),      
@@ -1036,3 +1052,10 @@ tron_troff_immediate_toggle_test() ->
     Text2 = lists:flatten(Output2),
     ?assertEqual(nomatch, re:run(Text2, "\\[10\\]", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text2, "\\[20\\]", [{capture, none}])).
+
+pos_immediate_print_column_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, Out1} = erlbasic_interp:handle_input("PRINT POS(0);", S0),
+    ?assertEqual("1", lists:flatten(Out1)),
+    {_S2, Out2} = erlbasic_interp:handle_input("PRINT POS(0)", S1),
+    ?assertEqual("2\r\n", lists:flatten(Out2)).

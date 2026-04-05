@@ -8,9 +8,9 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client
 - One interpreter instance per connection
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
-- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `GET`, `GETKEY`, `SLEEP`, `END`
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
 - Graphics mode (WebSocket only): `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE` with 640×480 resolution and 16 colors
-- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
+- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 
 ## Build
 
@@ -131,13 +131,14 @@ RUN
 
 ## Notes
 
-- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `LEN`, `ASC`, `CHR$`, `STR$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`).
+- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`) plus `POS` for print-column queries.
 - `TIMER` returns seconds since midnight as a float (GW-BASIC compatible).
 - Variable names are case-insensitive and cannot use reserved language keywords (statement keywords, expression operators, and builtin function names).
 - `REM` starts a comment statement. Any `:` after `REM` is treated as comment text, not a statement separator.
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line like `20` deletes that line from the program.
 - Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point when continuation context exists.
+- `TRON`/`TROFF` toggle runtime line tracing (`[line]` markers during `RUN`).
 - Runtime errors include `?TYPE MISMATCH ERROR`, `?CAN'T CONTINUE ERROR`, and `?RETURN WITHOUT GOSUB ERROR`.
 - `LOCATE row, col` moves the cursor for WebSocket/xterm clients. Telnet/TCP sessions report `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
 - `COLOR fg[, bg]` sets text color (0–15 foreground, 0–7 background). No-op on telnet/TCP.
@@ -156,8 +157,7 @@ See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported synt
 - [examples/enterprise.bas](examples/enterprise.bas) - Starship Enterprise side-view with animated twinkling starfield, using `LOCATE`, `COLOR`, `SLEEP`, and `TIMER`.
 - [examples/graphics.bas](examples/graphics.bas) - Graphics demo using `HGR`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, and `TEXT` to draw shapes and pixels on a 640×480 canvas (WebSocket only).
 - [examples/life.bas](examples/life.bas) - Graphics-mode Conway's Life with optimized neighbor summation.
-- [examples/textlife.bas](examples/textlife.bas) - Text-mode Conway's Life using `#` for occupied cells.
-- [examples/textlife_fast.bas](examples/textlife_fast.bas) - Faster text-mode Life renderer with reduced cursor movement and lightweight per-cell drawing.
+- [examples/asciilife.bas](examples/asciilife.bas) - Text-mode Conway's Life using `#` for occupied cells.
 
 ## EUnit Tests
 
@@ -196,9 +196,7 @@ To benchmark Life programs in a repeatable runner:
 The perf runner executes in WebSocket mode with reduced generation counts for CI-friendly runtime and verifies:
 
 - `examples/life.bas` stays under its budget
-- `examples/textlife.bas` stays under its budget
-- `examples/textlife_fast.bas` stays under its budget
-- `examples/textlife_fast.bas` is faster than `examples/textlife.bas` (hard fail otherwise)
+- `examples/asciilife.bas` stays under its budget
 
 Note:
 
@@ -207,6 +205,5 @@ Note:
 Optional budget overrides:
 
 - `ERLBASIC_PERF_MAX_LIFE_MS`
-- `ERLBASIC_PERF_MAX_TEXTLIFE_MS`
-- `ERLBASIC_PERF_MAX_TEXTLIFE_FAST_MS`
+- `ERLBASIC_PERF_MAX_ASCIILIFE_MS`
 

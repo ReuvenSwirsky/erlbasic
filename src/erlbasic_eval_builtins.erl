@@ -82,12 +82,22 @@ apply_math_function("MID$", [Text, Start, Count]) ->
     apply_mid(Text, Start, Count);
 apply_math_function("LEN", [Text]) ->
     apply_len(Text);
+apply_math_function("INSTR", [Text, Pattern]) ->
+    apply_instr(1, Text, Pattern);
+apply_math_function("INSTR", [Start, Text, Pattern]) ->
+    apply_instr(Start, Text, Pattern);
 apply_math_function("ASC", [Text]) ->
     apply_asc(Text);
 apply_math_function("CHR$", [Code]) ->
     apply_chr(Code);
 apply_math_function("STR$", [Value]) ->
     apply_str(Value);
+apply_math_function("SPACE$", [Count]) ->
+    apply_space(Count);
+apply_math_function("POS", []) ->
+    {ok, current_pos()};
+apply_math_function("POS", [Arg]) when is_number(Arg) ->
+    {ok, current_pos()};
 apply_math_function("STRING$", [Count, Code]) when is_number(Count), is_number(Code) ->
     N = trunc(Count),
     C = trunc(Code),
@@ -239,6 +249,63 @@ apply_mid(Text, Start, Count) ->
 
 apply_len(Text) ->
     {ok, length(to_basic_string(Text))}.
+
+apply_instr(Start, Text, Pattern) ->
+    case normalize_int_arg(Start) of
+        {ok, StartPos} when StartPos > 0 ->
+            Str = to_basic_string(Text),
+            Pat = to_basic_string(Pattern),
+            case Pat of
+                [] ->
+                    Len = length(Str),
+                    if
+                        StartPos =< Len + 1 -> {ok, StartPos};
+                        true -> {ok, 0}
+                    end;
+                _ ->
+                    {ok, instr_find(Str, Pat, StartPos)}
+            end;
+        _ ->
+            {error, illegal_function_call}
+    end.
+
+instr_find(Str, Pat, StartPos) ->
+    Len = length(Str),
+    if
+        StartPos > Len ->
+            0;
+        true ->
+            Tail = lists:nthtail(StartPos - 1, Str),
+            instr_find_from_tail(Tail, Pat, StartPos)
+    end.
+
+instr_find_from_tail([], _Pat, _Pos) ->
+    0;
+instr_find_from_tail(Tail, Pat, Pos) ->
+    case lists:prefix(Pat, Tail) of
+        true ->
+            Pos;
+        false ->
+            case Tail of
+                [_ | Rest] -> instr_find_from_tail(Rest, Pat, Pos + 1);
+                [] -> 0
+            end
+    end.
+
+apply_space(Count) ->
+    case normalize_int_arg(Count) of
+        {ok, N} when N >= 0 ->
+            {ok, lists:duplicate(N, $\s)};
+        _ ->
+            {error, illegal_function_call}
+    end.
+
+current_pos() ->
+    Col = case erlang:get(erlbasic_print_col) of
+        N when is_integer(N), N >= 0 -> N;
+        _ -> 0
+    end,
+    Col + 1.
 
 apply_asc(Text) ->
     Str = to_basic_string(Text),

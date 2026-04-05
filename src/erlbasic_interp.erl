@@ -302,6 +302,7 @@ execute_statement(Command, State) ->
     end.
 
 execute_statement_single(Command, State) ->
+    put(erlbasic_print_col, State#state.print_col),
     case erlbasic_parser:parse_statement(Command) of
         {print, Items, EndWithNewline} ->
             case erlbasic_runtime:render_print_items(Items, State#state.vars, State#state.funcs, State#state.print_col) of

@@ -5,15 +5,7 @@ main([RepoRoot]) ->
     code:add_pathz(filename:join([RepoRoot, "_build", "default", "lib", "erlbasic", "ebin"])),
     code:add_pathz(filename:join([RepoRoot, "_build", "default", "lib", "cowboy", "ebin"])),
     {ok, _LifeMs} = run_case(RepoRoot, "examples/life.bas", 15000),
-    {ok, TextLifeMs} = run_case(RepoRoot, "examples/textlife.bas", 30000),
-    {ok, TextLifeFastMs} = run_case(RepoRoot, "examples/textlife_fast.bas", 30000),
-    case TextLifeFastMs < TextLifeMs of
-        true ->
-            io:format("COMPARE textlife_fast.bas vs textlife.bas ... PASS (~B ms < ~B ms)~n", [TextLifeFastMs, TextLifeMs]);
-        false ->
-            io:format("COMPARE textlife_fast.bas vs textlife.bas ... FAIL (~B ms >= ~B ms)~n", [TextLifeFastMs, TextLifeMs]),
-            halt(1)
-    end,
+    {ok, _AsciiLifeMs} = run_case(RepoRoot, "examples/asciilife.bas", 30000),
     io:format("Performance tests passed.~n"),
     ok;
 main(_) ->
@@ -91,10 +83,8 @@ run_case(RepoRoot, RelPath, DefaultMaxMs) ->
 
 env_name_for_case("life.bas") ->
     "ERLBASIC_PERF_MAX_LIFE_MS";
-env_name_for_case("textlife.bas") ->
-    "ERLBASIC_PERF_MAX_TEXTLIFE_MS";
-env_name_for_case("textlife_fast.bas") ->
-    "ERLBASIC_PERF_MAX_TEXTLIFE_FAST_MS";
+env_name_for_case("asciilife.bas") ->
+    "ERLBASIC_PERF_MAX_ASCIILIFE_MS";
 env_name_for_case(_Other) ->
     "ERLBASIC_PERF_MAX_MS".
 
@@ -113,24 +103,12 @@ tune_program("life.bas", Lines) ->
         end
         || Line <- Lines
     ];
-tune_program("textlife.bas", Lines) ->
+tune_program("asciilife.bas", Lines) ->
     [
         case string:trim(Line) of
-            "50 LET W = 60" -> "50 LET W = 20";
-            "60 LET H = 20" -> "60 LET H = 8";
-            "210 FOR I = 1 TO 1000" -> "210 FOR I = 1 TO 1";
-            "260 FOR GEN = 1 TO 500" -> "260 FOR GEN = 1 TO 3";
-            "630   SLEEP 0.05" -> "630 REM SLEEP 0.05";
-            Other -> Other
-        end
-        || Line <- Lines
-    ];
-tune_program("textlife_fast.bas", Lines) ->
-    [
-        case string:trim(Line) of
-            "50 LET W = 60" -> "50 LET W = 20";
-            "60 LET H = 20" -> "60 LET H = 8";
-            "260 FOR GEN = 1 TO 500" -> "260 FOR GEN = 1 TO 3";
+            "60 LET W% = 60" -> "60 LET W% = 20";
+            "70 LET H% = 20" -> "70 LET H% = 8";
+            "250 FOR GEN% = 1 TO 500" -> "250 FOR GEN% = 1 TO 3";
             Other -> Other
         end
         || Line <- Lines

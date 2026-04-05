@@ -19,8 +19,8 @@ expr_keywords() ->
 builtin_function_keywords() ->
     [
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL",
-        "LEFT$", "RIGHT$", "MID$", "LEN", "ASC", "CHR$", "STR$", "STRING$", "DATE$", "TIME$", "TERM$",
+        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "POS",
+        "LEFT$", "RIGHT$", "MID$", "LEN", "INSTR", "ASC", "CHR$", "STR$", "SPACE$", "STRING$", "DATE$", "TIME$", "TERM$",
         "TIMER"
     ].
 

@@ -12,7 +12,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "Running Life/TextLife perf tests..." -ForegroundColor Yellow
+Write-Host "Running Life/AsciiLife perf tests..." -ForegroundColor Yellow
 escript perf_tests/perf_runner.escript $PSScriptRoot
 if ($LASTEXITCODE -ne 0) {
     throw "Performance tests failed with exit code $LASTEXITCODE"

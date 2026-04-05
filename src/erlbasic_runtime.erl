@@ -198,6 +198,7 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
     end.
 
 execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack) ->
+    put(erlbasic_print_col, State#state.print_col),
     LineNumber = get_line_number(Program, Pc),
     ParsedStmt = parse_statement_cached(Command),
     case ParsedStmt of
@@ -950,6 +951,7 @@ render_print_items(Items, Vars, Funcs, StartCol) ->
 render_print_items([], Vars, _Funcs, _StartCol, Acc, Col) ->
     {ok, Vars, lists:flatten(lists:reverse(Acc)), Col};
 render_print_items([{Expr, Sep} | Rest], Vars, Funcs, StartCol, Acc, Col) ->
+    put(erlbasic_print_col, Col),
     case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
         {ok, Value, Vars1} ->
             Text = erlbasic_eval:format_print_value(Value),
@@ -1135,6 +1137,7 @@ render_print_using_items(Items, FormatText, Vars, Funcs, StartCol) ->
 render_print_using_items([], _FormatText, Vars, _Funcs, _StartCol, Acc, Col) ->
     {ok, Vars, lists:flatten(lists:reverse(Acc)), Col};
 render_print_using_items([{Expr, Sep} | Rest], FormatText, Vars, Funcs, StartCol, Acc, Col) ->
+    put(erlbasic_print_col, Col),
     case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
         {ok, Value, Vars1} ->
             case erlbasic_print_using:format_item(FormatText, Value) of
