@@ -420,7 +420,17 @@ normalize_record_len(_Value) ->
     error.
 
 normalize_path(Path) when is_list(Path) ->
-    {ok, Path};
+    case filename:pathtype(Path) of
+        absolute ->
+            {ok, Path};
+        _ ->
+            case erlbasic_storage:ensure_user_dir() of
+                {ok, UserDir} ->
+                    {ok, filename:join(UserDir, Path)};
+                {error, _Reason} ->
+                    error
+            end
+    end;
 normalize_path(_Other) ->
     error.
 
