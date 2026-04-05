@@ -474,6 +474,8 @@ parse_keyword_statement(Trimmed) ->
         "CLS" -> {cls};
         "HGR" -> {hgr};
         "TEXT" -> {text};
+        "TRON" -> {tron};
+        "TROFF" -> {troff};
         "RETURN" -> {'return'};
         "END" -> {'end'};
         _ -> parse_pset_statement(Trimmed)
@@ -693,6 +695,10 @@ validate_statement(Stmt) ->
         {hgr} ->
             ok;
         {text} ->
+            ok;
+        {tron} ->
+            ok;
+        {troff} ->
             ok;
         {pset, XExpr, YExpr, ColorExpr} ->
             case validate_expr_pair(XExpr, YExpr) of

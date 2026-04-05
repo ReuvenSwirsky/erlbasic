@@ -67,11 +67,12 @@ run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
     end.
 
 run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
+    TraceAcc = prepend_trace_output(State, Program, Pc, Acc),
     {_LineNumber, Code} = lists:nth(Pc, Program),
     case execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) of
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
             %% Accumulate output
-            CombinedOutput = lists:reverse(Output) ++ Acc,
+            CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
                 case should_flush_output() andalso (output_contains_newline(Output) orelse output_contains_control_frame(Output)) of
                     true ->
@@ -94,7 +95,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
             end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
             %% Accumulate output
-            CombinedOutput = lists:reverse(Output) ++ Acc,
+            CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
                 case should_flush_output() andalso (output_contains_newline(Output) orelse output_contains_control_frame(Output)) of
                     true ->
@@ -117,7 +118,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
             end;
         {'end', Output} ->
             %% Flush final output
-            FinalOutput = sound_stop_output() ++ lists:reverse(Output) ++ Acc,
+            FinalOutput = sound_stop_output() ++ lists:reverse(Output) ++ TraceAcc,
             flush_output(FinalOutput),
             case should_flush_output() of
                 true ->
@@ -126,7 +127,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
                     {State, lists:reverse(["Program ended\r\n" | FinalOutput])}
             end;
         {chain, NewState, Output} ->
-            CombinedOutput = lists:reverse(Output) ++ Acc,
+            CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
                 case should_flush_output() of
                     true ->
@@ -138,7 +139,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
             %% Start executing the new program from line 1
             run_program_lines(NewState#state.prog, 1, NewState, [], [], NewAcc);
         {stop, Output} ->
-            CombinedOutput = lists:reverse(Output) ++ Acc,
+            CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             flush_output(CombinedOutput),
             case should_flush_output() of
                 true ->
@@ -146,6 +147,24 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
                 false ->
                     {State, lists:reverse(CombinedOutput)}
             end
+    end.
+
+prepend_trace_output(State, Program, Pc, Acc) ->
+    case trace_line_output(State, Program, Pc) of
+        [] ->
+            Acc;
+        Trace ->
+            lists:reverse(Trace) ++ Acc
+    end.
+
+trace_line_output(#state{trace_enabled = false}, _Program, _Pc) ->
+    [];
+trace_line_output(#state{trace_enabled = true}, Program, Pc) ->
+    case get_line_number(Program, Pc) of
+        undefined ->
+            [];
+        LineNumber ->
+            [io_lib:format("[~B]\r\n", [LineNumber])]
     end.
 
 execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) ->
@@ -488,6 +507,10 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                 {error, Reason, _Vars1} ->
                     handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
+        {tron} ->
+            {continue, State#state{trace_enabled = true}, LoopStack, CallStack, []};
+        {troff} ->
+            {continue, State#state{trace_enabled = false}, LoopStack, CallStack, []};
         {on_error_goto, TargetExpr} ->
             execute_on_error_goto(TargetExpr, Program, State, Pc, LoopStack, CallStack);
         {resume} ->

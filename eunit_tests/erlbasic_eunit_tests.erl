@@ -23,6 +23,8 @@ keyword_category_intent_test() ->
     ?assertNot(erlbasic_keywords:is_expr_keyword("PRINT")),
     ?assert(erlbasic_keywords:is_list_keyword("PRINT")),
     ?assert(erlbasic_keywords:is_list_keyword("INPUT")),
+    ?assert(erlbasic_keywords:is_list_keyword("TRON")),
+    ?assert(erlbasic_keywords:is_list_keyword("TROFF")),
     ?assertNot(erlbasic_keywords:is_list_keyword("LEFT$")),
     ?assert(erlbasic_keywords:is_builtin_function_keyword("TIMER")),
     ?assert(erlbasic_keywords:is_builtin_function_keyword("STRING$")).
@@ -38,7 +40,7 @@ keyword_consistency_union_reserved_test() ->
 all_keywords_reserved_variable_names_test() ->
     ReservedNames = [
         "AND", "MOD", "PRINT", "INPUT", "TIMER",
-        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$"
+        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$", "TRON", "TROFF"
     ],
     lists:foreach(fun(Name) ->
         ?assertEqual({error, reserved_word},
@@ -855,10 +857,10 @@ resume_without_error_test() ->
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "RESUME WITHOUT ERROR", [{capture, none}])).
 
-%% Test loading textlife.bas from examples
-textlife_load_test() ->
-    %% Read textlife.bas and enter each line
-    {ok, Content} = file:read_file("examples/textlife.bas"),
+%% Test loading asciilife.bas from examples
+asciilife_load_test() ->
+    %% Read asciilife.bas and enter each line
+    {ok, Content} = file:read_file("examples/asciilife.bas"),
     Lines = binary:split(Content, <<"\n">>, [global, trim_all]),
 
     State0 = erlbasic_interp:new_state(),
@@ -1002,3 +1004,35 @@ input_with_arithmetic_test() ->
     {_S5, Output} = erlbasic_interp:handle_input("5", S4),
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "13", [{capture, none}])).
+
+tron_troff_trace_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 TRON", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT \"A\"", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 TROFF", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 PRINT \"B\"", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 END", S4),
+    {_S6, Output} = erlbasic_interp:handle_input("RUN", S5),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "\\[20\\]", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "\\[30\\]", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "\\[40\\]", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "A", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "B", [{capture, none}])).
+
+tron_troff_immediate_toggle_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 PRINT \"X\"", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 END", S1),
+
+    {S3, _} = erlbasic_interp:handle_input("TRON", S2),
+    {S4, Output1} = erlbasic_interp:handle_input("RUN", S3),
+    Text1 = lists:flatten(Output1),
+    ?assertEqual(match, re:run(Text1, "\\[10\\]", [{capture, none}])),
+    ?assertEqual(match, re:run(Text1, "\\[20\\]", [{capture, none}])),
+
+    {S5, _} = erlbasic_interp:handle_input("TROFF", S4),
+    {_S6, Output2} = erlbasic_interp:handle_input("RUN", S5),
+    Text2 = lists:flatten(Output2),
+    ?assertEqual(nomatch, re:run(Text2, "\\[10\\]", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text2, "\\[20\\]", [{capture, none}])).

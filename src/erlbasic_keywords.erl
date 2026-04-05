@@ -27,7 +27,8 @@ builtin_function_keywords() ->
 list_keywords() ->
     [
         "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
-        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "SLEEP", "SOUND", "TIMER", "CHAIN"
+        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "SLEEP", "SOUND", "TIMER", "CHAIN",
+        "TRON", "TROFF"
     ].
 
 reserved_only_keywords() ->

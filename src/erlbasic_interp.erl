@@ -549,6 +549,10 @@ execute_statement_single(Command, State) ->
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
+        {tron} ->
+            {State#state{trace_enabled = true}, []};
+        {troff} ->
+            {State#state{trace_enabled = false}, []};
         {remark} ->
             {State, []};
         {goto, _LineExpr} ->
