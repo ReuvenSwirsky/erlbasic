@@ -98,6 +98,12 @@ apply_math_function("POS", []) ->
     {ok, current_pos()};
 apply_math_function("POS", [Arg]) when is_number(Arg) ->
     {ok, current_pos()};
+apply_math_function("EOF", [Channel]) ->
+    erlbasic_fileio:eof(Channel);
+apply_math_function("LOF", [Channel]) ->
+    erlbasic_fileio:lof(Channel);
+apply_math_function("SEEK", [Channel]) ->
+    erlbasic_fileio:seek(Channel);
 apply_math_function("STRING$", [Count, Code]) when is_number(Count), is_number(Code) ->
     N = trunc(Count),
     C = trunc(Code),

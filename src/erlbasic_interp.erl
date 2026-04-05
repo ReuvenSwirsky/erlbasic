@@ -303,6 +303,7 @@ execute_statement(Command, State) ->
 
 execute_statement_single(Command, State) ->
     put(erlbasic_print_col, State#state.print_col),
+    put(erlbasic_open_files, State#state.open_files),
     case erlbasic_parser:parse_statement(Command) of
         {print, Items, EndWithNewline} ->
             case erlbasic_runtime:render_print_items(Items, State#state.vars, State#state.funcs, State#state.print_col) of
@@ -376,6 +377,101 @@ execute_statement_single(Command, State) ->
                     {NextState, ["OK\r\n"]};
                 {error, Reason} ->
                     {DataState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_open, PathExpr, Mode, ChannelExpr, RecLenExpr} ->
+            case erlbasic_runtime:eval_file_open_args(PathExpr, ChannelExpr, RecLenExpr, State#state.vars, State#state.funcs) of
+                {ok, PathValue, ChannelValue, RecLenValue, Vars1} ->
+                    case erlbasic_fileio:open_file(PathValue, Mode, ChannelValue, RecLenValue, Vars1, State#state{vars = Vars1}) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2} -> {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_close, all} ->
+            case erlbasic_fileio:close_file(all, State) of
+                {ok, NextState} -> {NextState, ["OK\r\n"]};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_close, ChannelExprs} ->
+            case erlbasic_runtime:eval_file_close_channels(ChannelExprs, State#state.vars, State#state.funcs, []) of
+                {ok, Channels, Vars1} ->
+                    case erlbasic_fileio:close_file(Channels, State#state{vars = Vars1}) of
+                        {ok, NextState} -> {NextState#state{vars = Vars1}, ["OK\r\n"]};
+                        {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_print, ChannelExpr, Items, EndWithNewline} ->
+            case erlbasic_eval:eval_expr_result(ChannelExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, Vars1} ->
+                    case erlbasic_fileio:print_file(ChannelValue, Items, EndWithNewline, Vars1, State#state.funcs, State#state{vars = Vars1}, State#state.print_col) of
+                        {ok, Vars2, NextState, _} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2, _NextState, _} -> {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_write, ChannelExpr, Exprs} ->
+            case erlbasic_eval:eval_expr_result(ChannelExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, Vars1} ->
+                    case erlbasic_fileio:write_file(ChannelValue, Exprs, Vars1, State#state.funcs, State#state{vars = Vars1}, State#state.print_col) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2, _NextState} -> {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_input, ChannelExpr, Targets} ->
+            case erlbasic_eval:eval_expr_result(ChannelExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, Vars1} ->
+                    case erlbasic_fileio:input_file(ChannelValue, Targets, Vars1, State#state.funcs, State#state{vars = Vars1}, State#state.print_col) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2, NextState} -> {NextState#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_line_input, ChannelExpr, Target} ->
+            case erlbasic_eval:eval_expr_result(ChannelExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, Vars1} ->
+                    case erlbasic_fileio:line_input_file(ChannelValue, Target, Vars1, State#state.funcs, State#state{vars = Vars1}, State#state.print_col) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2, NextState} -> {NextState#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_field, ChannelExpr, Specs} ->
+            case erlbasic_eval:eval_expr_result(ChannelExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, Vars1} ->
+                    case erlbasic_fileio:field_file(ChannelValue, Specs, Vars1, State#state.funcs, State#state{vars = Vars1}) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2} -> {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_put_record, ChannelExpr, RecordExpr} ->
+            case erlbasic_runtime:eval_channel_record(ChannelExpr, RecordExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, RecordValue, Vars1} ->
+                    case erlbasic_fileio:put_record(ChannelValue, RecordValue, Vars1, State#state.funcs, State#state{vars = Vars1}) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2} -> {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {file_get_record, ChannelExpr, RecordExpr} ->
+            case erlbasic_runtime:eval_channel_record(ChannelExpr, RecordExpr, State#state.vars, State#state.funcs) of
+                {ok, ChannelValue, RecordValue, Vars1} ->
+                    case erlbasic_fileio:get_record(ChannelValue, RecordValue, Vars1, State#state.funcs, State#state{vars = Vars1}, State#state.print_col) of
+                        {ok, Vars2, NextState} -> {NextState#state{vars = Vars2}, ["OK\r\n"]};
+                        {error, Reason, Vars2, NextState} -> {NextState#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {input, Targets} ->
             {State#state{pending_input = {Targets, {immediate, []}}}, [erlbasic_runtime:format_input_prompt(Targets)]};

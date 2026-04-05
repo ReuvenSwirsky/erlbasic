@@ -19,7 +19,7 @@ expr_keywords() ->
 builtin_function_keywords() ->
     [
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
-        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "POS",
+        "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "POS", "EOF", "LOF", "SEEK",
         "LEFT$", "RIGHT$", "MID$", "LEN", "INSTR", "ASC", "CHR$", "STR$", "SPACE$", "STRING$", "DATE$", "TIME$", "TERM$",
         "TIMER"
     ].
@@ -28,6 +28,7 @@ list_keywords() ->
     [
         "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
         "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "SLEEP", "SOUND", "TIMER", "CHAIN",
+        "OPEN", "CLOSE", "WRITE", "FIELD", "PUT", "AS", "APPEND", "RANDOM", "OUTPUT",
         "TRON", "TROFF"
     ].
 

@@ -72,6 +72,35 @@ builtin_instr_space_pos_test() ->
         end
     end.
 
+file_io_parser_and_builtins_test() ->
+    ?assertEqual(
+        {file_open, "\"tmp.dat\"", "RANDOM", "1", "32"},
+        erlbasic_parser:parse_statement("OPEN \"tmp.dat\" FOR RANDOM AS #1 LEN = 32")),
+    ?assertEqual(
+        {file_print, "1", [{"A$", comma}, {"B$", semicolon}], false},
+        erlbasic_parser:parse_statement("PRINT #1, A$, B$;")),
+    ?assertEqual(
+        {file_write, "1", ["A", "B$", "C"]},
+        erlbasic_parser:parse_statement("WRITE #1, A, B$, C")),
+    ?assertEqual(
+        {file_input, "1", [{var_target, "A"}, {var_target, "B$"}]},
+        erlbasic_parser:parse_statement("INPUT #1, A, B$")),
+    ?assertEqual(
+        {file_line_input, "1", {var_target, "L$"}},
+        erlbasic_parser:parse_statement("LINE INPUT #1, L$")),
+    ?assertEqual(
+        {file_field, "1", [{"5", "N$"}, {"7", "V$"}]},
+        erlbasic_parser:parse_statement("FIELD #1, 5 AS N$, 7 AS V$")),
+    ?assertEqual(
+        {file_put_record, "1", "2"},
+        erlbasic_parser:parse_statement("PUT #1, 2")),
+    ?assertEqual(
+        {file_get_record, "1", "2"},
+        erlbasic_parser:parse_statement("GET #1, 2")),
+    ?assertEqual({error, illegal_function_call}, erlbasic_eval_builtins:apply_math_function("EOF", [1])),
+    ?assertEqual({error, illegal_function_call}, erlbasic_eval_builtins:apply_math_function("LOF", [1])),
+    ?assertEqual({error, illegal_function_call}, erlbasic_eval_builtins:apply_math_function("SEEK", [1])).
+
 immediate_print_test() ->
     State0 = erlbasic_interp:new_state(),
     {_State1, Output} = erlbasic_interp:handle_input("PRINT 1+1", State0),      

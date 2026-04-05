@@ -23,6 +23,14 @@ validate_program_line(Command) ->
     end.
 
 parse_print_statement(Trimmed) ->
+    case parse_file_print_or_write_statement(Trimmed) of
+        nomatch ->
+            parse_print_statement_inner(Trimmed);
+        Result ->
+            Result
+    end.
+
+parse_print_statement_inner(Trimmed) ->
     case re:run(Trimmed, "(?i)^PRINT\\s+USING\\s+(.+)$", [{capture, [1], list}]) of
         {match, [UsingText]} ->
             case parse_print_using_items(UsingText) of
@@ -31,6 +39,44 @@ parse_print_statement(Trimmed) ->
             end;
         nomatch ->
             parse_print_or_qmark_statement(Trimmed)
+    end.
+
+parse_file_print_or_write_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^PRINT\\s*#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+        {match, [ChannelExpr]} ->
+            {file_print, string:trim(ChannelExpr), [], true};
+        {match, [ChannelExpr, ItemsText]} ->
+            case parse_print_items(ItemsText) of
+                {ok, Items, EndWithNewline} ->
+                    {file_print, string:trim(ChannelExpr), Items, EndWithNewline};
+                error ->
+                    unknown
+            end;
+        nomatch ->
+            case re:run(Trimmed, "(?i)^WRITE\\s*#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+                {match, [ChannelExpr]} ->
+                    {file_write, string:trim(ChannelExpr), []};
+                {match, [ChannelExpr, ItemsText]} ->
+                    case parse_write_items(ItemsText) of
+                        {ok, Exprs} -> {file_write, string:trim(ChannelExpr), Exprs};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    nomatch
+            end
+    end.
+
+parse_write_items(Text) ->
+    Parts = split_commas_top_level(Text),
+    parse_write_items(Parts, []).
+
+parse_write_items([], Acc) ->
+    {ok, lists:reverse(Acc)};
+parse_write_items([Part | Rest], Acc) ->
+    Expr = string:trim(Part),
+    case Expr of
+        "" -> error;
+        _ -> parse_write_items(Rest, [Expr | Acc])
     end.
 
 parse_print_or_qmark_statement(Trimmed) ->
@@ -103,6 +149,31 @@ push_print_part(Rest, CurrentRev, PartsRev, Sep) ->
 
 parse_input_statement(Trimmed) ->
     %% INPUT LINE must be checked before plain INPUT to avoid prefix ambiguity.
+    case re:run(Trimmed, "(?i)^LINE\\s+INPUT\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {file_line_input, string:trim(ChannelExpr), Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            parse_input_statement_inner(Trimmed)
+    end.
+
+parse_input_statement_inner(Trimmed) ->
+    case re:run(Trimmed, "(?i)^INPUT\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, TargetsText]} ->
+            case parse_input_target_list(split_commas_top_level(TargetsText), []) of
+                {ok, Targets} -> {file_input, string:trim(ChannelExpr), Targets};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            parse_input_statement_console(Trimmed)
+    end.
+
+parse_input_statement_console(Trimmed) ->
+    %% INPUT LINE must be checked before plain INPUT to avoid prefix ambiguity.
     case re:run(Trimmed, "(?i)^INPUT\\s+LINE\\s+(.+)$", [{capture, [1], list}]) of
         {match, [TargetText]} ->
             case parse_assignment_target(string:trim(TargetText)) of
@@ -125,6 +196,14 @@ parse_input_statement(Trimmed) ->
 
 %% GETKEY must be matched before GET to avoid prefix collision.
 parse_get_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^GET\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {file_get_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
+        nomatch ->
+            parse_get_statement_inner(Trimmed)
+    end.
+
+parse_get_statement_inner(Trimmed) ->
     case re:run(Trimmed, "(?i)^GETKEY\\s+(.+)$", [{capture, [1], list}]) of
         {match, [TargetText]} ->
             case parse_assignment_target(string:trim(TargetText)) of
@@ -536,7 +615,86 @@ parse_sound_statement(Trimmed) ->
 parse_chain_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^CHAIN\\s+(.+)$", [{capture, [1], list}]) of
         {match, [FileExpr]} -> {chain, string:trim(FileExpr)};
-        nomatch             -> parse_color_statement(Trimmed)
+        nomatch             -> parse_file_misc_statement(Trimmed)
+    end.
+
+parse_file_misc_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^OPEN\\s+(.+?)\\s+FOR\\s+(INPUT|OUTPUT|APPEND|RANDOM)\\s+AS\\s*#\\s*(.+?)(?:\\s+LEN\\s*=\\s*(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [PathExpr, Mode, ChannelExpr]} ->
+            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), undefined};
+        {match, [PathExpr, Mode, ChannelExpr, RecLenExpr]} ->
+            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), string:trim(RecLenExpr)};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^CLOSE(?:\\s+(.+))?$", [{capture, all_but_first, list}]) of
+                {match, []} ->
+                    {file_close, all};
+                {match, [ChannelsText]} ->
+                    case parse_file_channels(ChannelsText) of
+                        {ok, Channels} -> {file_close, Channels};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    case re:run(Trimmed, "(?i)^FIELD\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+                        {match, [ChannelExpr, SpecsText]} ->
+                            case parse_field_specs(SpecsText) of
+                                {ok, Specs} -> {file_field, string:trim(ChannelExpr), Specs};
+                                error -> unknown
+                            end;
+                        nomatch ->
+                            case re:run(Trimmed, "(?i)^PUT\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [ChannelExpr, RecordExpr]} ->
+                                    {file_put_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
+                                nomatch ->
+                                    parse_color_statement(Trimmed)
+                            end
+                    end
+            end
+    end.
+
+parse_file_channels(Text) ->
+    Parts = split_commas_top_level(Text),
+    parse_file_channels(Parts, []).
+
+parse_file_channels([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_file_channels([Part | Rest], Acc) ->
+    Trimmed = string:trim(Part),
+    case string:prefix(Trimmed, "#") of
+        nomatch -> error;
+        ChannelExpr ->
+            Expr = string:trim(ChannelExpr),
+            case Expr of
+                "" -> error;
+                _ -> parse_file_channels(Rest, [Expr | Acc])
+            end
+    end.
+
+parse_field_specs(Text) ->
+    Parts = split_commas_top_level(Text),
+    parse_field_specs(Parts, []).
+
+parse_field_specs([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_field_specs([Part | Rest], Acc) ->
+    case re:run(string:trim(Part), "(?i)^(.+?)\\s+AS\\s+" ++ ?VAR_PATTERN ++ "$", [{capture, all_but_first, list}]) of
+        {match, [LenExpr, Var]} ->
+            case is_reserved_variable_name(Var) of
+                true ->
+                    error;
+                false ->
+                    case erlbasic_eval:target_is_string({var_target, string:to_upper(Var)}) of
+                        true -> parse_field_specs(Rest, [{string:trim(LenExpr), string:to_upper(Var)} | Acc]);
+                        false -> error
+                    end
+            end;
+        nomatch ->
+            error
     end.
 
 parse_color_statement(Trimmed) ->
@@ -688,6 +846,46 @@ validate_statement(Stmt) ->
             ok;
         {read_data, Targets} ->
             validate_targets(Targets);
+        {file_open, PathExpr, _Mode, ChannelExpr, undefined} ->
+            validate_expr_pair(PathExpr, ChannelExpr);
+        {file_open, PathExpr, _Mode, ChannelExpr, RecLenExpr} ->
+            case validate_expr_pair(PathExpr, ChannelExpr) of
+                ok -> validate_expr_syntax(RecLenExpr);
+                error -> error
+            end;
+        {file_close, all} ->
+            ok;
+        {file_close, Channels} ->
+            validate_exprs(Channels);
+        {file_print, ChannelExpr, Items, _EndWithNewline} ->
+            case validate_expr_syntax(ChannelExpr) of
+                ok -> validate_print_items(Items);
+                error -> error
+            end;
+        {file_write, ChannelExpr, Exprs} ->
+            case validate_expr_syntax(ChannelExpr) of
+                ok -> validate_exprs(Exprs);
+                error -> error
+            end;
+        {file_input, ChannelExpr, Targets} ->
+            case validate_expr_syntax(ChannelExpr) of
+                ok -> validate_targets(Targets);
+                error -> error
+            end;
+        {file_line_input, ChannelExpr, Target} ->
+            case validate_expr_syntax(ChannelExpr) of
+                ok -> validate_target_syntax(Target);
+                error -> error
+            end;
+        {file_field, ChannelExpr, Specs} ->
+            case validate_expr_syntax(ChannelExpr) of
+                ok -> validate_field_specs(Specs);
+                error -> error
+            end;
+        {file_put_record, ChannelExpr, RecordExpr} ->
+            validate_expr_pair(ChannelExpr, RecordExpr);
+        {file_get_record, ChannelExpr, RecordExpr} ->
+            validate_expr_pair(ChannelExpr, RecordExpr);
         {'return'} ->
             ok;
         {cls} ->
@@ -801,6 +999,14 @@ validate_input_targets_all([]) -> ok;
 validate_input_targets_all([Target | Rest]) ->
     case validate_target_syntax(Target) of
         ok    -> validate_input_targets_all(Rest);
+        error -> error
+    end.
+
+validate_field_specs([]) ->
+    ok;
+validate_field_specs([{LenExpr, _Var} | Rest]) ->
+    case validate_expr_syntax(LenExpr) of
+        ok -> validate_field_specs(Rest);
         error -> error
     end.
 
