@@ -4,6 +4,85 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 6, 2026 - Security Hardening for Public Deployment
+
+### Enhancement
+Applied a set of security hardening measures necessary before exposing the interpreter publicly on-line.
+
+### Implementation
+
+#### 1. Supervisor-driven memory watchdog (`src/erlbasic_mem_watchdog.erl` — new module)
+Replaced the in-loop memory quota checks (called `erlang:external_size` on all interpreter state every 25 steps — expensive) with a dedicated `gen_server` watchdog started as a supervisor child ahead of the TCP/WS listeners:
+- `process_info(Pid, memory)` reads the VM's already-maintained heap counter — negligible CPU cost.
+- Polls every 500 ms; sends `memory_limit_exceeded` to any session process that exceeds its quota.
+- Tracks sessions with `erlang:monitor` so dead connections auto-clean without explicit deregistration.
+- Sessions register/deregister on login and logout through `erlbasic_mem_watchdog:try_register_session/4`.
+- Removed `should_check_memory_quota`, `memory_quota_ok`, `post_step_memory_quota_ok`, and `approximate_memory_bytes` from `src/erlbasic_runtime.erl`.
+- `FRE()` still works — it calls `approximate_current_memory_bytes()` in `src/erlbasic_eval_builtins.erl` only when explicitly invoked by the user, not on every step.
+
+#### 2. Path traversal prevention (`src/erlbasic_fileio.erl`)
+`normalize_path/1` previously passed absolute paths through unchanged, allowing `OPEN "/etc/passwd" FOR INPUT AS #1` to read arbitrary server files.
+- Absolute paths now return `error` immediately.
+- Any relative path containing a `..` component (checked via `filename:split`) also returns `error`.
+- Both cases resolve to `?TYPE MISMATCH ERROR` in the interpreter.
+
+#### 3. SLEEP cap at 30 seconds (`src/erlbasic_interp.erl`, `src/erlbasic_runtime.erl`)
+`SLEEP 9999999` would hold a session process for days, pinning its resources. The computed sleep duration is now capped:
+```erlang
+min(30000, max(0, trunc(Value * 1000)))
+```
+`SLEEP` values greater than 30 silently sleep for exactly 30 seconds.
+
+#### 4. Login brute-force delay (`src/erlbasic_conn.erl`)
+After each failed authentication attempt (wrong PPN or password), a 2-second `timer:sleep/2000` is inserted before the next prompt is shown. Combined with the existing 4-attempt hard limit, this limits automated credential stuffing to ~0.5 attempts/second and disconnects the client after ~8 seconds of bad attempts.
+
+#### 5. Per-PPN concurrent session cap (`src/erlbasic_mem_watchdog.erl`, `src/erlbasic_conn.erl`)
+The memory watchdog's session registry now tracks a `ppn_counts` map. Login uses `try_register_session/4` (a synchronous `gen_server:call`) which atomically checks the count before accepting the session:
+- Rejects login with `?TOO MANY SESSIONS` if the per-PPN session count is at or above the configured limit.
+- Default: 3 concurrent sessions per PPN.
+- Configurable via `{max_sessions_per_ppn, N}` in `sys.config`.
+- System/admin accounts in project 0 or 1 are exempt (unlimited sessions).
+
+#### 6. Open file channel cap (`src/erlbasic_fileio.erl`)
+`OPEN` in a tight loop can exhaust OS file descriptors for the server process. `open_file/6` now checks:
+```erlang
+maps:size(OpenFiles) >= 15
+```
+and returns `?ILLEGAL FUNCTION CALL` if 15 channels are already open. The limit cannot be raised within a session; `CLOSE` must be used to free channels.
+
+### Files Changed
+- `src/erlbasic_mem_watchdog.erl`: New `gen_server` module; session registry; per-PPN count enforcement
+- `src/erlbasic_sup.erl`: Added watchdog as first supervisor child (before listeners)
+- `src/erlbasic_conn.erl`: `try_register_session`, brute-force delay, session limit rejection, `max_sessions_for/2` helper, watchdog unregistration on logout/HELLO/QUIT
+- `src/erlbasic_runtime.erl`: Removed hot-loop quota checks; added `memory_limit_exceeded` message handling in `run_program_lines_continue`
+- `src/erlbasic_fileio.erl`: Absolute path block; `..` traversal block; 15-channel cap
+- `src/erlbasic_interp.erl`: SLEEP value capped to 30 seconds
+
+### Configuration
+New optional `sys.config` key:
+```erlang
+{erlbasic, [
+    {max_sessions_per_ppn, 3}   %% default: 3; 0 = unlimited
+]}
+```
+
+### Testing
+- `escript $env:USERPROFILE/rebar3 compile`: PASS (no warnings)
+- `./run_tests.ps1`: PASS (all EUnit + smoke tests)
+
+### Rationale
+Before public deployment, a single malicious or runaway user could previously:
+- Read arbitrary server files via absolute `OPEN` paths
+- Block a session indefinitely with `SLEEP 9999999`
+- Enumerate credentials at high speed with no delay
+- Exhaust server resources with unlimited parallel logins
+- Exhaust OS file descriptors with unlimited `OPEN` calls
+- Trigger expensive `external_size` serialisation on every interpreter step
+
+The watchdog approach for memory measurement is also faster — the VM maintains the process heap counter continuously; reading it is O(1) rather than O(size of all interpreter state).
+
+---
+
 ## April 3, 2026 - Keyword Architecture Refactor and Consistency Enforcement
 
 ### Refactoring

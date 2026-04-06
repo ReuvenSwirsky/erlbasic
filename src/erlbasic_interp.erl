@@ -630,7 +630,7 @@ execute_statement_single(Command, State) ->
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
-                    Ms = max(0, trunc(Value * 1000)),
+                    Ms = min(30000, max(0, trunc(Value * 1000))),
                     timer:sleep(Ms),
                     {State#state{vars = Vars1}, []};
                 {ok, _Value, Vars1} ->

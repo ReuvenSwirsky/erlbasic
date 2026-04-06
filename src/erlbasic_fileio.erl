@@ -26,6 +26,10 @@ open_file(Path, Mode, ChannelValue, RecLenValue, Vars, State) ->
                 true ->
                     {error, illegal_function_call, Vars};
                 false ->
+                    case maps:size(OpenFiles) >= 15 of
+                        true ->
+                            {error, illegal_function_call, Vars};
+                        false ->
                     case normalize_path(Path) of
                         {ok, FilePath} ->
                             case open_with_mode(FilePath, Mode, RecLenValue) of
@@ -37,6 +41,7 @@ open_file(Path, Mode, ChannelValue, RecLenValue, Vars, State) ->
                             end;
                         error ->
                             {error, type_mismatch, Vars}
+                    end
                     end
             end;
         error ->
@@ -452,13 +457,21 @@ normalize_record_len(_Value) ->
 normalize_path(Path) when is_list(Path) ->
     case filename:pathtype(Path) of
         absolute ->
-            {ok, Path};
+            %% Absolute paths are never permitted — block path traversal out of user dir.
+            error;
         _ ->
-            case erlbasic_storage:ensure_user_dir() of
-                {ok, UserDir} ->
-                    {ok, filename:join(UserDir, Path)};
-                {error, _Reason} ->
-                    error
+            %% Reject any path component that is ".." to prevent directory traversal.
+            Parts = filename:split(Path),
+            case lists:member("..", Parts) of
+                true ->
+                    error;
+                false ->
+                    case erlbasic_storage:ensure_user_dir() of
+                        {ok, UserDir} ->
+                            {ok, filename:join(UserDir, Path)};
+                        {error, _Reason} ->
+                            error
+                    end
             end
     end;
 normalize_path(_Other) ->

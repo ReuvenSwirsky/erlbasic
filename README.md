@@ -143,8 +143,9 @@ RUN
 - `LOCATE row, col` moves the cursor for WebSocket/xterm clients. Telnet/TCP sessions report `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
 - `COLOR fg[, bg]` sets text color (0–15 foreground, 0–7 background). No-op on telnet/TCP.
 - `GET A$` reads one character non-blocking (empty string if buffer empty); `GETKEY A$` blocks until a keystroke arrives. Both switch the WebSocket browser into char mode for immediate keystroke delivery.
-- `SLEEP n` pauses execution for `n` seconds (float). Yields the Erlang scheduler; other connections are unaffected.
-- `SAVE <name>`, `LOAD <name>`, `SCRATCH <name>`, and `DIR` manage stored programs in a per-user directory under `~/BASIC/<user-id>` (falls back to `default`).
+- `SLEEP n` pauses execution for `n` seconds (float, maximum 30). Yields the Erlang scheduler; other connections are unaffected.
+- `SAVE <name>`, `LOAD <name>`, `SCRATCH <name>`, and `DIR` manage stored programs in a per-user directory under `~/BASIC/<user-id>` (falls back to `default`). Absolute paths and names containing `..` are rejected.
+- File I/O (`OPEN`/`CLOSE`/`WRITE #`/`INPUT #` etc.) is sandboxed to the user's directory. A maximum of 15 file channels may be open simultaneously per session.
 
 ## Syntax Reference
 

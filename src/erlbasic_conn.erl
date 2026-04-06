@@ -62,20 +62,28 @@ tcp_prompt_password(Socket, P, N, Attempts) ->
 tcp_try_login(Socket, P, N, Pw, Attempts) ->
     case erlbasic_accounts:authenticate(P, N, Pw) of
         {ok, Name} ->
-            erlang:put(erlbasic_ppn, {P, N}),
-            erlbasic_mem_watchdog:register_session(self(), session_memory_limit(P, N)),
-            NameStr = binary_to_list(Name),
-            Msg = [
-                io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
-                quota_welcome_lines(P, N),
-                "\r\n Ready\r\n"
-            ],
-            ok = gen_tcp:send(Socket, Msg),
-            State = erlbasic_interp:new_state(),
-            ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(State)),
-            tcp_worker_loop(Socket, State, {P, N});
+            MaxSessions = max_sessions_for(P, N),
+            case erlbasic_mem_watchdog:try_register_session(
+                    self(), session_memory_limit(P, N), {P, N}, MaxSessions) of
+                ok ->
+                    erlang:put(erlbasic_ppn, {P, N}),
+                    NameStr = binary_to_list(Name),
+                    Msg = [
+                        io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
+                        quota_welcome_lines(P, N),
+                        "\r\n Ready\r\n"
+                    ],
+                    ok = gen_tcp:send(Socket, Msg),
+                    State = erlbasic_interp:new_state(),
+                    ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(State)),
+                    tcp_worker_loop(Socket, State, {P, N});
+                {error, too_many_sessions} ->
+                    ok = gen_tcp:send(Socket, "\r\n?Too many sessions for this account\r\n"),
+                    tcp_login_loop(Socket, Attempts + 1)
+            end;
         {error, _} ->
             ok = gen_tcp:send(Socket, "\r\n?Login failure\r\n"),
+            timer:sleep(2000),
             tcp_login_loop(Socket, Attempts + 1)
     end.
 
@@ -271,20 +279,28 @@ ws_prompt_password(WsPid, P, N, Attempts) ->
 ws_try_login(WsPid, P, N, Pw, Attempts) ->
     case erlbasic_accounts:authenticate(P, N, Pw) of
         {ok, Name} ->
-            erlang:put(erlbasic_ppn, {P, N}),
-            erlbasic_mem_watchdog:register_session(self(), session_memory_limit(P, N)),
-            NameStr = binary_to_list(Name),
-            Msg = [
-                io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
-                quota_welcome_lines(P, N),
-                "\r\n Ready\r\n"
-            ],
-            WsPid ! {output, Msg},
-            State = erlbasic_interp:new_state(),
-            WsPid ! {output, erlbasic_interp:next_prompt(State)},
-            ws_loop(WsPid, State, {P, N});
+            MaxSessions = max_sessions_for(P, N),
+            case erlbasic_mem_watchdog:try_register_session(
+                    self(), session_memory_limit(P, N), {P, N}, MaxSessions) of
+                ok ->
+                    erlang:put(erlbasic_ppn, {P, N}),
+                    NameStr = binary_to_list(Name),
+                    Msg = [
+                        io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
+                        quota_welcome_lines(P, N),
+                        "\r\n Ready\r\n"
+                    ],
+                    WsPid ! {output, Msg},
+                    State = erlbasic_interp:new_state(),
+                    WsPid ! {output, erlbasic_interp:next_prompt(State)},
+                    ws_loop(WsPid, State, {P, N});
+                {error, too_many_sessions} ->
+                    WsPid ! {output, "?Too many sessions for this account\r\n"},
+                    ws_login_loop(WsPid, Attempts + 1)
+            end;
         {error, _} ->
             WsPid ! {output, "?Login failure\r\n"},
+            timer:sleep(2000),
             ws_login_loop(WsPid, Attempts + 1)
     end.
 
@@ -453,6 +469,13 @@ session_memory_limit(P, N) ->
         KB when is_integer(KB), KB > 0 -> KB * 1024;
         _ -> erlbasic_limits:default_memory_limit_kb() * 1024
     end.
+
+%% Privileged accounts (project 0 or 1) are unrestricted.
+%% Everyone else is limited to the configured cap (default 3).
+max_sessions_for(0, _) -> unlimited;
+max_sessions_for(1, _) -> unlimited;
+max_sessions_for(_, _) ->
+    application:get_env(erlbasic, max_sessions_per_ppn, 3).
 
 %% parse_hello/1 – internal helper used by parse_os_command/1.
 %% Parses the PPN/password arguments of a login OS command.  Returns:

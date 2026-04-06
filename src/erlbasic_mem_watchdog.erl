@@ -1,11 +1,17 @@
 -module(erlbasic_mem_watchdog).
 -behaviour(gen_server).
 
--export([start_link/0, register_session/2, unregister_session/1]).
+-export([start_link/0, register_session/2, unregister_session/1,
+         try_register_session/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 %% How often to poll registered processes (milliseconds).
 -define(CHECK_INTERVAL_MS, 500).
+
+%% Internal state record.
+%% sessions:   Pid => {LimitBytes, MonRef, PPN}   (PPN may be 'undefined')
+%% ppn_counts: {P,N} => integer()                 (active session count)
+-record(wd, {sessions = #{}, ppn_counts = #{}}).
 
 %% ===================================================================
 %% Public API
@@ -21,7 +27,14 @@ register_session(Pid, unlimited) when is_pid(Pid) ->
     %% Unlimited accounts need no monitoring; remove any existing entry.
     gen_server:cast(?MODULE, {unregister, Pid});
 register_session(Pid, LimitBytes) when is_pid(Pid), is_integer(LimitBytes), LimitBytes > 0 ->
-    gen_server:cast(?MODULE, {register, Pid, LimitBytes}).
+    gen_server:cast(?MODULE, {register, Pid, LimitBytes, undefined}).
+
+%% Atomically check the per-PPN session count and register if within the limit.
+%% MaxSessions must be a positive integer or the atom 'unlimited'.
+%% Returns 'ok' on success or '{error, too_many_sessions}'.
+try_register_session(Pid, LimitBytes, PPN, MaxSessions)
+        when is_pid(Pid), is_atom(MaxSessions); is_pid(Pid), is_integer(MaxSessions) ->
+    gen_server:call(?MODULE, {try_register, Pid, LimitBytes, PPN, MaxSessions}).
 
 %% Remove a connection process from watchdog supervision.
 unregister_session(Pid) when is_pid(Pid) ->
@@ -33,34 +46,52 @@ unregister_session(Pid) when is_pid(Pid) ->
 
 init([]) ->
     erlang:send_after(?CHECK_INTERVAL_MS, self(), check),
-    {ok, #{}}.
+    {ok, #wd{}}.
 
-handle_cast({register, Pid, LimitBytes}, Sessions) ->
-    %% Demonitor any existing entry for this Pid before replacing it.
-    Sessions1 = case maps:find(Pid, Sessions) of
-        {ok, {_, OldRef}} ->
-            erlang:demonitor(OldRef, [flush]),
-            maps:remove(Pid, Sessions);
-        error ->
-            Sessions
+handle_call({try_register, Pid, LimitBytes, PPN, MaxSessions}, _From,
+            #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
+    CurrentCount = maps:get(PPN, Counts, 0),
+    Over = case MaxSessions of
+        unlimited -> false;
+        Max when is_integer(Max) -> CurrentCount >= Max
     end,
-    Ref = erlang:monitor(process, Pid),
-    {noreply, Sessions1#{Pid => {LimitBytes, Ref}}};
-
-handle_cast({unregister, Pid}, Sessions) ->
-    case maps:find(Pid, Sessions) of
-        {ok, {_, Ref}} ->
-            erlang:demonitor(Ref, [flush]),
-            {noreply, maps:remove(Pid, Sessions)};
-        error ->
-            {noreply, Sessions}
+    case Over of
+        true ->
+            {reply, {error, too_many_sessions}, State};
+        false ->
+            %% Demonitor any existing entry for this Pid.
+            {Sessions1, Counts1} = do_unregister(Pid, Sessions, Counts),
+            Ref = erlang:monitor(process, Pid),
+            Sessions2 = Sessions1#{Pid => {LimitBytes, Ref, PPN}},
+            Counts2 = case PPN of
+                undefined -> Counts1;
+                _ -> Counts1#{PPN => maps:get(PPN, Counts1, 0) + 1}
+            end,
+            {reply, ok, State#wd{sessions = Sessions2, ppn_counts = Counts2}}
     end;
 
-handle_cast(_Msg, Sessions) ->
-    {noreply, Sessions}.
+handle_call(_Req, _From, State) ->
+    {reply, ok, State}.
 
-handle_info(check, Sessions) ->
-    maps:foreach(fun(Pid, {LimitBytes, _Ref}) ->
+handle_cast({register, Pid, LimitBytes, PPN}, #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
+    {Sessions1, Counts1} = do_unregister(Pid, Sessions, Counts),
+    Ref = erlang:monitor(process, Pid),
+    Sessions2 = Sessions1#{Pid => {LimitBytes, Ref, PPN}},
+    Counts2 = case PPN of
+        undefined -> Counts1;
+        _ -> Counts1#{PPN => maps:get(PPN, Counts1, 0) + 1}
+    end,
+    {noreply, State#wd{sessions = Sessions2, ppn_counts = Counts2}};
+
+handle_cast({unregister, Pid}, #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
+    {Sessions1, Counts1} = do_unregister(Pid, Sessions, Counts),
+    {noreply, State#wd{sessions = Sessions1, ppn_counts = Counts1}};
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(check, #wd{sessions = Sessions} = State) ->
+    maps:foreach(fun(Pid, {LimitBytes, _Ref, _PPN}) ->
         case process_info(Pid, memory) of
             {memory, Mem} when Mem > LimitBytes ->
                 Pid ! memory_limit_exceeded;
@@ -69,18 +100,40 @@ handle_info(check, Sessions) ->
         end
     end, Sessions),
     erlang:send_after(?CHECK_INTERVAL_MS, self(), check),
-    {noreply, Sessions};
+    {noreply, State};
 
-handle_info({'DOWN', _Ref, process, Pid, _Reason}, Sessions) ->
-    {noreply, maps:remove(Pid, Sessions)};
+handle_info({'DOWN', _Ref, process, Pid, _Reason},
+            #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
+    {Sessions1, Counts1} = do_unregister(Pid, Sessions, Counts),
+    {noreply, State#wd{sessions = Sessions1, ppn_counts = Counts1}};
 
-handle_info(_Msg, Sessions) ->
-    {noreply, Sessions}.
+handle_info(_Msg, State) ->
+    {noreply, State}.
 
-handle_call(_Req, _From, Sessions) ->
-    {reply, ok, Sessions}.
-
-terminate(_Reason, Sessions) ->
-    maps:foreach(fun(_Pid, {_, Ref}) ->
+terminate(_Reason, #wd{sessions = Sessions}) ->
+    maps:foreach(fun(_Pid, {_, Ref, _}) ->
         erlang:demonitor(Ref, [flush])
     end, Sessions).
+
+%% ===================================================================
+%% Internal helpers
+%% ===================================================================
+
+do_unregister(Pid, Sessions, Counts) ->
+    case maps:find(Pid, Sessions) of
+        {ok, {_, Ref, PPN}} ->
+            erlang:demonitor(Ref, [flush]),
+            Sessions1 = maps:remove(Pid, Sessions),
+            Counts1 = case PPN of
+                undefined ->
+                    Counts;
+                _ ->
+                    case maps:get(PPN, Counts, 0) of
+                        N when N =< 1 -> maps:remove(PPN, Counts);
+                        N -> Counts#{PPN => N - 1}
+                    end
+            end,
+            {Sessions1, Counts1};
+        error ->
+            {Sessions, Counts}
+    end.

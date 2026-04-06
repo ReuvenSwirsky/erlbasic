@@ -342,6 +342,7 @@ Notes:
 - Filenames are normalized for safety.
 - Filenames (excluding extension) must not exceed 16 characters.
 - Filenames longer than 16 characters raise `?FILE NAME TOO LONG`.
+- Absolute paths and names containing `..` are rejected.
 - File write failures raise `?FILE ERROR`.
 
 ### LOAD
@@ -355,6 +356,7 @@ LOAD myprog.bas
 
 Notes:
 - Files are loaded from `~/BASIC/<user-id>/`.
+- Absolute paths and names containing `..` are rejected.
 - Missing files raise `?PROGRAM NOT FOUND`.
 - Other read failures raise `?FILE ERROR`.
 
@@ -369,6 +371,7 @@ SCRATCH myprog.bas
 
 Notes:
 - Files are deleted from `~/BASIC/<user-id>/`.
+- Absolute paths and names containing `..` are rejected.
 - Example files (in the shared `examples/` directory) cannot be deleted with `SCRATCH`.
 - Missing files raise `?PROGRAM NOT FOUND`.
 - Other file errors raise `?FILE ERROR`.
@@ -459,6 +462,7 @@ Notes:
 - The argument is a numeric expression (integer or float).
 - Fractional seconds are supported (e.g., `SLEEP 0.25` pauses for 250 ms).
 - Negative values are treated as zero (no pause).
+- Values greater than 30 are capped to 30 seconds.
 - The Erlang scheduler is yielded during the sleep; other connections continue unaffected.
 - Passing a string raises `?TYPE MISMATCH ERROR`.
 
