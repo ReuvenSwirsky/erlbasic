@@ -213,6 +213,79 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>Project Storage Limits (1K Blocks)</h2>
+    <p style="color:var(--muted); margin-bottom:1rem; font-size:0.85rem;">
+      Projects 0 and 1 are always unlimited. Projects 2-255 default to 256 blocks (256K) unless set here.
+    </p>
+    <div class="form-row-3">
+      <div>
+        <label for="limit-project">Project (2-255)</label>
+        <input id="limit-project" type="number" min="2" max="255" placeholder="2">
+      </div>
+      <div>
+        <label for="limit-blocks">Limit (Blocks)</label>
+        <input id="limit-blocks" type="number" min="1" placeholder="256">
+      </div>
+      <div style="display:flex; align-items:flex-end; gap:0.8rem;">
+        <button class="btn-primary" onclick="setProjectLimit()">Set Limit</button>
+        <button class="btn-secondary" onclick="clearProjectLimit()">Clear Custom</button>
+      </div>
+    </div>
+    <div class="form-actions">
+      <div class="error-msg" id="limits-project-error"></div>
+      <div class="success-msg" id="limits-project-ok"></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Custom Limit</th>
+          <th>Effective Limit</th>
+        </tr>
+      </thead>
+      <tbody id="project-limits-body">
+        <tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>User Limit Overrides (1K Blocks)</h2>
+    <div class="form-row-3">
+      <div>
+        <label for="override-project">Project (2-255)</label>
+        <input id="override-project" type="number" min="2" max="255" placeholder="2">
+      </div>
+      <div>
+        <label for="override-programmer">Programmer (0-255)</label>
+        <input id="override-programmer" type="number" min="0" max="255" placeholder="1">
+      </div>
+      <div>
+        <label for="override-blocks">Override (Blocks)</label>
+        <input id="override-blocks" type="number" min="1" placeholder="256">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="setUserOverride()">Set Override</button>
+      <button class="btn-secondary" onclick="clearUserOverride()">Clear Override</button>
+      <div class="error-msg" id="limits-user-error"></div>
+      <div class="success-msg" id="limits-user-ok"></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>PPN</th>
+          <th>Limit</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="user-overrides-body">
+        <tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
 </div>
 
 <!-- ============================================================ -->
@@ -261,6 +334,7 @@
       document.getElementById('logged-in-as').textContent = 'Logged in as [' + ppn + ']';
       document.getElementById('logout-btn').style.display = '';
       await loadAccounts();
+      await loadLimits();
     } else if (resp.status === 401) {
       document.getElementById('login-error').textContent =
         'Invalid credentials or account is not privileged.';
@@ -278,6 +352,8 @@
     document.getElementById('logged-in-as').textContent = '';
     document.getElementById('login-password').value = '';
     document.getElementById('login-error').textContent = '';
+    document.getElementById('project-limits-body').innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr>';
+    document.getElementById('user-overrides-body').innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr>';
   }
 
   // Allow Enter key to submit login
@@ -320,6 +396,158 @@
         </td>`;
       tbody.appendChild(tr);
     });
+  }
+
+  async function loadLimits() {
+    await loadProjectLimits();
+    await loadUserOverrides();
+  }
+
+  async function loadProjectLimits() {
+    const resp = await fetch('/admin/limits/projects', { headers: { Authorization: authHeader } });
+    const rows = await resp.json();
+    const tbody = document.getElementById('project-limits-body');
+    tbody.innerHTML = '';
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      const custom = r.limit_blocks == null ? '(default)' : (r.limit_blocks + ' blocks');
+      const effective = r.unlimited ? 'Unlimited' : (r.effective_blocks + ' blocks');
+      tr.innerHTML = `
+        <td class="ppn">[${r.project},*]</td>
+        <td>${custom}</td>
+        <td>${effective}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function setProjectLimit() {
+    const project = document.getElementById('limit-project').value.trim();
+    const blocks = document.getElementById('limit-blocks').value.trim();
+    document.getElementById('limits-project-error').textContent = '';
+    document.getElementById('limits-project-ok').textContent = '';
+
+    if (!project || !blocks) {
+      document.getElementById('limits-project-error').textContent = 'Project and limit are required.';
+      return;
+    }
+
+    const body = new URLSearchParams({ limit_blocks: blocks });
+    const resp = await fetch(`/admin/limits/projects/${project}`, {
+      method: 'PUT',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+
+    if (resp.ok) {
+      document.getElementById('limits-project-ok').textContent = 'Project limit updated.';
+      await loadProjectLimits();
+    } else {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      document.getElementById('limits-project-error').textContent = err.error || 'Error updating project limit.';
+    }
+  }
+
+  async function clearProjectLimit() {
+    const project = document.getElementById('limit-project').value.trim();
+    document.getElementById('limits-project-error').textContent = '';
+    document.getElementById('limits-project-ok').textContent = '';
+
+    if (!project) {
+      document.getElementById('limits-project-error').textContent = 'Project is required.';
+      return;
+    }
+
+    const resp = await fetch(`/admin/limits/projects/${project}`, {
+      method: 'DELETE',
+      headers: { Authorization: authHeader }
+    });
+
+    if (resp.ok) {
+      document.getElementById('limits-project-ok').textContent = 'Project custom limit cleared.';
+      await loadProjectLimits();
+    } else {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      document.getElementById('limits-project-error').textContent = err.error || 'Error clearing project limit.';
+    }
+  }
+
+  async function loadUserOverrides() {
+    const resp = await fetch('/admin/limits/users', { headers: { Authorization: authHeader } });
+    const rows = await resp.json();
+    const tbody = document.getElementById('user-overrides-body');
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">No user overrides.</td></tr>';
+      return;
+    }
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="ppn">[${r.project},${r.programmer}]</td>
+        <td>${r.limit_blocks} blocks</td>
+        <td><button class="btn-secondary btn-sm" onclick="clearUserOverrideRow(${r.project}, ${r.programmer})">Clear</button></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function setUserOverride() {
+    const project = document.getElementById('override-project').value.trim();
+    const programmer = document.getElementById('override-programmer').value.trim();
+    const blocks = document.getElementById('override-blocks').value.trim();
+    document.getElementById('limits-user-error').textContent = '';
+    document.getElementById('limits-user-ok').textContent = '';
+
+    if (!project || !programmer || !blocks) {
+      document.getElementById('limits-user-error').textContent = 'Project, programmer and override are required.';
+      return;
+    }
+
+    const body = new URLSearchParams({ limit_blocks: blocks });
+    const resp = await fetch(`/admin/limits/users/${project}/${programmer}`, {
+      method: 'PUT',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+
+    if (resp.ok) {
+      document.getElementById('limits-user-ok').textContent = 'User override updated.';
+      await loadUserOverrides();
+    } else {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      document.getElementById('limits-user-error').textContent = err.error || 'Error updating user override.';
+    }
+  }
+
+  async function clearUserOverride() {
+    const project = document.getElementById('override-project').value.trim();
+    const programmer = document.getElementById('override-programmer').value.trim();
+    document.getElementById('limits-user-error').textContent = '';
+    document.getElementById('limits-user-ok').textContent = '';
+
+    if (!project || !programmer) {
+      document.getElementById('limits-user-error').textContent = 'Project and programmer are required.';
+      return;
+    }
+
+    await clearUserOverrideRow(project, programmer);
+  }
+
+  async function clearUserOverrideRow(project, programmer) {
+    const resp = await fetch(`/admin/limits/users/${project}/${programmer}`, {
+      method: 'DELETE',
+      headers: { Authorization: authHeader }
+    });
+
+    if (resp.ok) {
+      document.getElementById('limits-user-ok').textContent = 'User override cleared.';
+      await loadUserOverrides();
+    } else {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      document.getElementById('limits-user-error').textContent = err.error || 'Error clearing user override.';
+    }
   }
 
   // -----------------------------------------------------------

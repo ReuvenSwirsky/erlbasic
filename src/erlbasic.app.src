@@ -3,12 +3,13 @@
   {vsn, "0.1.0"},
   {modules, [erlbasic_app, erlbasic_sup, erlbasic_listener, erlbasic_conn, erlbasic_interp,
              erlbasic_ws_handler, erlbasic_http_handler,
-             erlbasic_accounts, erlbasic_admin_handler, erlbasic_storage]},
+             erlbasic_accounts, erlbasic_limits, erlbasic_admin_handler, erlbasic_storage]},
   {registered, []},
   {applications, [kernel, stdlib, crypto, cowboy]},
   {mod, {erlbasic_app, []}},
   {env, [
     {port, 5555},
-    {web_port, 8081}
+    {web_port, 8081},
+    {default_storage_limit_blocks, 256}
   ]}
  ]}.

@@ -69,10 +69,17 @@ print_file(ChannelValue, Items, EndWithNewline, Vars, Funcs, State, PrintCol) ->
                                     true -> Text ++ "\r\n";
                                     false -> Text
                                 end,
-                            case io:put_chars(maps:get(io, Entry), Out) of
+                            case ensure_growth_quota(Entry, byte_size(iolist_to_binary(Out))) of
                                 ok ->
-                                    {ok, Vars1, State, PrintCol};
-                                _ ->
+                                    case io:put_chars(maps:get(io, Entry), Out) of
+                                        ok ->
+                                            {ok, Vars1, State, PrintCol};
+                                        _ ->
+                                            {error, illegal_function_call, Vars1, State, PrintCol}
+                                    end;
+                                {error, quota_exceeded} ->
+                                    {error, storage_quota_exceeded, Vars1, State, PrintCol};
+                                {error, _Reason} ->
                                     {error, illegal_function_call, Vars1, State, PrintCol}
                             end;
                         {error, Reason, Vars1} ->
@@ -95,9 +102,16 @@ write_file(ChannelValue, Exprs, Vars, Funcs, State, _PrintCol) ->
                     case eval_write_values(Exprs, Vars, Funcs, []) of
                         {ok, Values, Vars1} ->
                             Line = build_write_line(Values) ++ "\r\n",
-                            case io:put_chars(maps:get(io, Entry), Line) of
-                                ok -> {ok, Vars1, State};
-                                _ -> {error, illegal_function_call, Vars1, State}
+                            case ensure_growth_quota(Entry, byte_size(iolist_to_binary(Line))) of
+                                ok ->
+                                    case io:put_chars(maps:get(io, Entry), Line) of
+                                        ok -> {ok, Vars1, State};
+                                        _ -> {error, illegal_function_call, Vars1, State}
+                                    end;
+                                {error, quota_exceeded} ->
+                                    {error, storage_quota_exceeded, Vars1, State};
+                                {error, _Reason} ->
+                                    {error, illegal_function_call, Vars1, State}
                             end;
                         {error, Reason, Vars1} ->
                             {error, Reason, Vars1, State}
@@ -206,9 +220,17 @@ put_record(ChannelValue, RecordValue, Vars, _Funcs, State) ->
                                     RecLen = maps:get(rec_len, Entry),
                                     Offset = (RecNo - 1) * RecLen,
                                     Record = build_record_binary(Fields, Vars, RecLen),
-                                    case file:pwrite(maps:get(io, Entry), Offset, Record) of
-                                        ok -> {ok, Vars, State};
-                                        _ -> {error, illegal_function_call, Vars}
+                                    TargetSize = Offset + byte_size(Record),
+                                    case ensure_target_size_quota(Entry, TargetSize) of
+                                        ok ->
+                                            case file:pwrite(maps:get(io, Entry), Offset, Record) of
+                                                ok -> {ok, Vars, State};
+                                                _ -> {error, illegal_function_call, Vars}
+                                            end;
+                                        {error, quota_exceeded} ->
+                                            {error, storage_quota_exceeded, Vars};
+                                        {error, _Reason} ->
+                                            {error, illegal_function_call, Vars}
                                     end
                             end;
                         error ->
@@ -382,6 +404,14 @@ get_open_file(ChannelValue, State) ->
 allow_write_mode(Entry) ->
     Mode = maps:get(mode, Entry),
     Mode =:= output orelse Mode =:= append.
+
+ensure_growth_quota(Entry, GrowthBytes) ->
+    Path = maps:get(path, Entry),
+    erlbasic_storage:check_quota_for_growth(Path, GrowthBytes).
+
+ensure_target_size_quota(Entry, TargetSize) ->
+    Path = maps:get(path, Entry),
+    erlbasic_storage:check_quota_for_size(Path, TargetSize).
 
 close_entry(Entry) ->
     catch file:close(maps:get(io, Entry)),

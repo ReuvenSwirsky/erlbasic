@@ -6,6 +6,12 @@
 %%   POST /admin/users                – create account         [auth required]
 %%   DELETE /admin/users/:p/:n        – delete account         [auth required]
 %%   PUT  /admin/users/:p/:n          – change password        [auth required]
+%%   GET  /admin/limits/projects      – JSON project limits    [auth required]
+%%   PUT  /admin/limits/projects/:p   – set project limit      [auth required]
+%%   DELETE /admin/limits/projects/:p – clear project limit    [auth required]
+%%   GET  /admin/limits/users         – JSON user overrides    [auth required]
+%%   PUT  /admin/limits/users/:p/:n   – set user override      [auth required]
+%%   DELETE /admin/limits/users/:p/:n – clear user override    [auth required]
 %%
 %% Authentication uses HTTP Basic Auth.  The username field must be the PPN in
 %% "Project,Programmer" notation (e.g. "1,1") and the password is the account
@@ -34,6 +40,20 @@ dispatch(Method, <<"/admin/users/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_auth(Method, Parts, Req, State);
 
+dispatch(Method, <<"/admin/limits/projects">>, Req, State) ->
+    with_limits_auth(Method, {projects, []}, Req, State);
+
+dispatch(Method, <<"/admin/limits/projects/", Rest/binary>>, Req, State) ->
+    Parts = binary:split(Rest, <<"/">>, [global]),
+    with_limits_auth(Method, {projects, Parts}, Req, State);
+
+dispatch(Method, <<"/admin/limits/users">>, Req, State) ->
+    with_limits_auth(Method, {users, []}, Req, State);
+
+dispatch(Method, <<"/admin/limits/users/", Rest/binary>>, Req, State) ->
+    Parts = binary:split(Rest, <<"/">>, [global]),
+    with_limits_auth(Method, {users, Parts}, Req, State);
+
 dispatch(_, _, Req, State) ->
     reply(404, <<"Not Found">>, Req, State).
 
@@ -44,6 +64,12 @@ dispatch(_, _, Req, State) ->
 with_auth(Method, Parts, Req, State) ->
     case check_auth(Req) of
         {ok, _P, _N} -> handle_api(Method, Parts, Req, State);
+        unauthorized  -> reply_unauthorized(Req, State)
+    end.
+
+with_limits_auth(Method, Parts, Req, State) ->
+    case check_auth(Req) of
+        {ok, _P, _N} -> handle_limits_api(Method, Parts, Req, State);
         unauthorized  -> reply_unauthorized(Req, State)
     end.
 
@@ -163,6 +189,96 @@ handle_api(_, _, Req, State) ->
     reply(405, <<"Method Not Allowed">>, Req, State).
 
 %% ===================================================================
+%% Limits API handlers
+%% ===================================================================
+
+handle_limits_api(<<"GET">>, {projects, []}, Req, State) ->
+    case erlbasic_limits:list_project_limits() of
+        {ok, Limits} ->
+            Json = project_limits_to_json(Limits),
+            reply_json(200, Json, Req, State);
+        {error, _} ->
+            reply(500, <<"Server Error">>, Req, State)
+    end;
+
+handle_limits_api(<<"PUT">>, {projects, [PBin]}, Req0, State) ->
+    {ok, Body, Req} = cowboy_req:read_urlencoded_body(Req0),
+    LimitBin = proplists:get_value(<<"limit_blocks">>, Body, <<>>),
+    case {safe_int(PBin), safe_int(LimitBin)} of
+        {{ok, P}, {ok, Blocks}} when P >= 2, P =< 255, Blocks > 0 ->
+            case erlbasic_limits:set_project_limit_blocks(P, Blocks) of
+                ok -> reply_json(200, <<"{\"status\":\"updated\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255 and limit_blocks must be > 0\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(<<"DELETE">>, {projects, [PBin]}, Req, State) ->
+    case safe_int(PBin) of
+        {ok, P} when P >= 2, P =< 255 ->
+            case erlbasic_limits:clear_project_limit(P) of
+                ok -> reply_json(200, <<"{\"status\":\"cleared\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(<<"GET">>, {users, []}, Req, State) ->
+    case erlbasic_limits:list_user_overrides() of
+        {ok, Overrides} ->
+            Json = user_overrides_to_json(Overrides),
+            reply_json(200, Json, Req, State);
+        {error, _} ->
+            reply(500, <<"Server Error">>, Req, State)
+    end;
+
+handle_limits_api(<<"PUT">>, {users, [PBin, NBin]}, Req0, State) ->
+    {ok, Body, Req} = cowboy_req:read_urlencoded_body(Req0),
+    LimitBin = proplists:get_value(<<"limit_blocks">>, Body, <<>>),
+    case {safe_int(PBin), safe_int(NBin), safe_int(LimitBin)} of
+        {{ok, P}, {ok, N}, {ok, Blocks}}
+                when P >= 2, P =< 255, N >= 0, N =< 255, Blocks > 0 ->
+            case erlbasic_limits:set_user_limit_blocks(P, N, Blocks) of
+                ok -> reply_json(200, <<"{\"status\":\"updated\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255, programmer 0..255, and limit_blocks > 0\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(<<"DELETE">>, {users, [PBin, NBin]}, Req, State) ->
+    case {safe_int(PBin), safe_int(NBin)} of
+        {{ok, P}, {ok, N}} when P >= 2, P =< 255, N >= 0, N =< 255 ->
+            case erlbasic_limits:clear_user_limit(P, N) of
+                ok -> reply_json(200, <<"{\"status\":\"cleared\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255 and programmer 0..255\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(_, _, Req, State) ->
+    reply(405, <<"Method Not Allowed">>, Req, State).
+
+%% ===================================================================
 %% HTML serving
 %% ===================================================================
 
@@ -207,6 +323,42 @@ accounts_to_json(Accounts) ->
             [P, N, escape_json(binary_to_list(Name))]))
     end, Accounts),
     iolist_to_binary(["[", lists:join(",", Items), "]"]).
+
+project_limits_to_json(Limits) ->
+    LimitsMap = maps:from_list(Limits),
+    DefaultBlocks = erlbasic_limits:default_limit_blocks(),
+    Projects = lists:seq(0, 255),
+    Items = lists:map(fun(P) ->
+        case P of
+            0 ->
+                <<"{\"project\":0,\"limit_blocks\":null,\"effective_blocks\":null,\"unlimited\":true}">>;
+            1 ->
+                <<"{\"project\":1,\"limit_blocks\":null,\"effective_blocks\":null,\"unlimited\":true}">>;
+            _ ->
+                Explicit = maps:get(P, LimitsMap, undefined),
+                Effective = case Explicit of
+                    undefined -> DefaultBlocks;
+                    B -> B
+                end,
+                iolist_to_binary(io_lib:format(
+                    "{\"project\":~w,\"limit_blocks\":~s,\"effective_blocks\":~w,\"unlimited\":false}",
+                    [P, json_optional_int(Explicit), Effective]))
+        end
+    end, Projects),
+    iolist_to_binary(["[", lists:join(",", Items), "]"]).
+
+user_overrides_to_json(Overrides) ->
+    Items = lists:map(fun({{P, N}, Blocks}) ->
+        iolist_to_binary(io_lib:format(
+            "{\"project\":~w,\"programmer\":~w,\"limit_blocks\":~w}",
+            [P, N, Blocks]))
+    end, Overrides),
+    iolist_to_binary(["[", lists:join(",", Items), "]"]).
+
+json_optional_int(undefined) ->
+    "null";
+json_optional_int(Int) when is_integer(Int) ->
+    integer_to_list(Int).
 
 escape_json(Str) ->
     lists:flatmap(fun

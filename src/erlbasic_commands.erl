@@ -197,6 +197,7 @@ handle_save_command(State, RawName) ->
                     Content = serialize_program(State#state.prog),
                     case erlbasic_storage:write_program(FileName, Content) of
                         ok           -> {State, ["Saved " ++ FileName ++ "\r\n"]};
+                        {error, quota_exceeded} -> {State, [erlbasic_eval:format_runtime_error(storage_quota_exceeded)]};
                         {error, _}   -> {State, ["?FILE ERROR\r\n"]}
                     end
             end;

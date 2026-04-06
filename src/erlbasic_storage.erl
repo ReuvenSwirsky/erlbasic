@@ -26,6 +26,8 @@
          list_programs/0,
          list_programs_with_info/0,
          delete_program/1,
+         check_quota_for_size/2,
+         check_quota_for_growth/2,
          user_dir/0,
          user_ppn_string/0,
          ensure_user_dir/0]).
@@ -50,10 +52,58 @@ read_program(FileName) ->
 write_program(FileName, Content) ->
     case ensure_user_dir() of
         {ok, Dir} ->
-            file:write_file(filename:join(Dir, FileName), Content);
+            Path = filename:join(Dir, FileName),
+            ContentBin = iolist_to_binary(Content),
+            case check_quota_for_size(Path, byte_size(ContentBin)) of
+                ok ->
+                    file:write_file(Path, ContentBin);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.
+
+%% @doc Check whether writing a file to TargetSize bytes would exceed quota.
+-spec check_quota_for_size(Path :: string(), TargetSize :: non_neg_integer()) ->
+        ok | {error, quota_exceeded | term()}.
+check_quota_for_size(Path, TargetSize) when is_integer(TargetSize), TargetSize >= 0 ->
+    case ensure_user_dir() of
+        {ok, Dir} ->
+            case project_limit_bytes() of
+                unlimited ->
+                    ok;
+                LimitBytes when is_integer(LimitBytes), LimitBytes >= 0 ->
+                    case total_usage_bytes(Dir) of
+                        {ok, TotalBytes} ->
+                            OldSize =
+                                case path_in_user_dir(Path, Dir) of
+                                    true -> file_size(Path);
+                                    false -> 0
+                                end,
+                            Projected = TotalBytes - OldSize + TargetSize,
+                            case Projected =< LimitBytes of
+                                true -> ok;
+                                false -> {error, quota_exceeded}
+                            end;
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end;
+check_quota_for_size(_Path, _TargetSize) ->
+    {error, quota_exceeded}.
+
+%% @doc Check whether growing a file by GrowthBytes would exceed quota.
+-spec check_quota_for_growth(Path :: string(), GrowthBytes :: non_neg_integer()) ->
+        ok | {error, quota_exceeded | term()}.
+check_quota_for_growth(Path, GrowthBytes) when is_integer(GrowthBytes), GrowthBytes >= 0 ->
+    CurrentSize = file_size(Path),
+    check_quota_for_size(Path, CurrentSize + GrowthBytes);
+check_quota_for_growth(_Path, _GrowthBytes) ->
+    {error, quota_exceeded}.
 
 %% @doc List the names of all program files in the user's storage area.
 -spec list_programs() -> {ok, [string()]} | {error, term()}.
@@ -173,3 +223,41 @@ get_file_info(Dir, Name) ->
         _ ->
             false
     end.
+
+project_limit_bytes() ->
+    case erlang:get(erlbasic_ppn) of
+        {P, _N} when P =:= 0; P =:= 1 ->
+            unlimited;
+        {P, N} ->
+            Blocks = erlbasic_limits:get_effective_limit_blocks(P, N),
+            blocks_to_bytes(Blocks);
+        _ ->
+            blocks_to_bytes(erlbasic_limits:default_limit_blocks())
+    end.
+
+blocks_to_bytes(unlimited) ->
+    unlimited;
+blocks_to_bytes(Blocks) when is_integer(Blocks), Blocks >= 0 ->
+    Blocks * 1024;
+blocks_to_bytes(_Other) ->
+    erlbasic_limits:default_limit_blocks() * 1024.
+
+total_usage_bytes(Dir) ->
+    case list_files_with_info(Dir) of
+        {ok, Infos} ->
+            {ok, lists:sum([Size || {_Name, Size, _MTime} <- Infos])};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+file_size(Path) ->
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = regular, size = Size}} -> Size;
+        _ -> 0
+    end.
+
+path_in_user_dir(Path, UserDir) ->
+    AbsPath = filename:absname(Path),
+    AbsDir = filename:absname(UserDir),
+    Prefix = AbsDir ++ [$/],
+    lists:prefix(Prefix, AbsPath) orelse AbsPath =:= AbsDir.
