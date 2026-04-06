@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ErlBASIC Admin - Storage Quotas</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#1a1a2e;--surface:#16213e;--border:#0f3460;--accent:#00d4ff;--danger:#e94560;--ok:#4caf50;--text:#dde;--muted:#888;--input-bg:#111827}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh}
+header{background:var(--surface);border-bottom:2px solid var(--border);padding:1rem 2rem;display:flex;align-items:center;gap:1rem}
+header h1{font-size:1.2rem;color:var(--accent)} .nav a{color:var(--muted);text-decoration:none;margin-right:1rem}.nav a.active{color:var(--accent)}
+.container{max-width:900px;margin:2rem auto;padding:0 1rem} #login-section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:2rem;max-width:420px;margin:3rem auto}
+label{display:block;margin-bottom:.3rem;color:var(--muted);font-size:.8rem;letter-spacing:.05em;text-transform:uppercase}
+input{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:.5rem .7rem;margin-bottom:1rem;font-size:14px}
+button{cursor:pointer;border:none;border-radius:4px;padding:.5rem 1.2rem;font-size:14px;font-weight:600}.btn-primary{background:var(--accent);color:#000}.btn-secondary{background:var(--border);color:var(--text)}.btn-sm{padding:.3rem .8rem;font-size:12px}
+.error-msg{color:var(--danger);font-size:.85rem;margin-top:.5rem;min-height:1.2em}.success-msg{color:var(--ok);font-size:.85rem;margin-top:.5rem;min-height:1.2em}
+#admin-section{display:none}.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:2rem}.card h2{margin-bottom:1.2rem;color:var(--accent);font-size:1rem;text-transform:uppercase}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 2fr;gap:.8rem}.form-actions{display:flex;align-items:center;gap:1rem;margin-top:.4rem}
+table{width:100%;border-collapse:collapse}th{text-align:left;padding:.5rem .8rem;border-bottom:2px solid var(--border);color:var(--muted);font-size:.75rem;text-transform:uppercase}td{padding:.6rem .8rem;border-bottom:1px solid var(--border)}.ppn{font-family:monospace;color:var(--accent)}
+</style></head>
+<body>
+<header><div><h1>ErlBASIC Admin - Storage Quotas</h1><div class="nav"><a href="/admin/accounts">Accounts</a><a class="active" href="/admin/storage">Storage Quotas</a><a href="/admin/memory">Memory Quotas</a></div></div><div style="margin-left:auto;display:flex;align-items:center;gap:1rem;"><span id="logged-in-as" style="color:var(--muted);font-size:.85rem;"></span><button class="btn-primary btn-sm" id="logout-btn" style="display:none" onclick="logout()">Logout</button></div></header>
+<div id="login-section" class="container"><h2 style="margin-bottom:1rem;color:var(--accent)">Login</h2><label for="login-ppn">PPN</label><input id="login-ppn" type="text"><label for="login-password">Password</label><input id="login-password" type="password"><button class="btn-primary" onclick="doLogin()">Login</button><div class="error-msg" id="login-error"></div></div>
+<div id="admin-section" class="container">
+  <div class="card">
+    <h2>Project Storage Limits (1K Blocks)</h2>
+    <p style="color:var(--muted); margin-bottom:1rem; font-size:.85rem;">Projects 0 and 1 are unlimited. Any account not listed below uses the default limit.</p>
+    <div class="form-row-3">
+      <div><label for="limit-project">Project (2-255)</label><input id="limit-project" type="number" min="2" max="255" placeholder="2"></div>
+      <div><label for="limit-blocks">Limit (Blocks)</label><input id="limit-blocks" type="number" min="1" placeholder="256"></div>
+      <div style="display:flex;align-items:flex-end;gap:.8rem;"><button class="btn-primary" onclick="setProjectLimit()">Set Limit</button><button class="btn-secondary" onclick="clearProjectLimit()">Clear Custom</button></div>
+    </div>
+    <div class="form-actions"><div class="error-msg" id="limits-project-error"></div><div class="success-msg" id="limits-project-ok"></div></div>
+    <table><thead><tr><th>Project</th><th>Custom Limit</th><th>Effective Limit</th></tr></thead><tbody id="project-limits-body"><tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+  </div>
+  <div class="card">
+    <h2>User Storage Overrides (1K Blocks)</h2>
+    <p style="color:var(--muted); margin-bottom:1rem; font-size:.85rem;">Any account not listed below uses the default/project limit.</p>
+    <div class="form-row-3">
+      <div><label for="override-project">Project (2-255)</label><input id="override-project" type="number" min="2" max="255" placeholder="2"></div>
+      <div><label for="override-programmer">Programmer (0-255)</label><input id="override-programmer" type="number" min="0" max="255" placeholder="1"></div>
+      <div><label for="override-blocks">Override (Blocks)</label><input id="override-blocks" type="number" min="1" placeholder="256"></div>
+    </div>
+    <div class="form-actions"><button class="btn-primary" onclick="setUserOverride()">Set Override</button><button class="btn-secondary" onclick="clearUserOverride()">Clear Override</button><div class="error-msg" id="limits-user-error"></div><div class="success-msg" id="limits-user-ok"></div></div>
+    <table><thead><tr><th>PPN</th><th>Limit</th><th>Actions</th></tr></thead><tbody id="user-overrides-body"><tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+  </div>
+</div>
+<script>
+let authHeader = null;
+async function doLogin(){const ppn=document.getElementById('login-ppn').value.trim();const pw=document.getElementById('login-password').value;const h='Basic '+btoa(ppn+':'+pw);const r=await fetch('/admin/limits/projects',{headers:{Authorization:h}});if(r.ok){authHeader=h;document.getElementById('login-section').style.display='none';document.getElementById('admin-section').style.display='block';document.getElementById('logged-in-as').textContent='Logged in as ['+ppn+']';document.getElementById('logout-btn').style.display='';await loadProjectLimits();await loadUserOverrides();}else{document.getElementById('login-error').textContent='Invalid credentials or not privileged.';}}
+function logout(){authHeader=null;document.getElementById('login-section').style.display='';document.getElementById('admin-section').style.display='none';document.getElementById('logout-btn').style.display='none';document.getElementById('logged-in-as').textContent='';}
+async function loadProjectLimits(){const r=await fetch('/admin/limits/projects',{headers:{Authorization:authHeader}});const rows=await r.json();const tb=document.getElementById('project-limits-body');tb.innerHTML='';if(rows.length===0){tb.innerHTML='<tr><td colspan="3" style="color:var(--muted)">No custom project limits.</td></tr>';return;}rows.forEach(x=>{const tr=document.createElement('tr');tr.innerHTML='<td class="ppn">['+x.project+',*]</td><td>'+x.limit_blocks+' blocks</td><td>'+x.effective_blocks+' blocks</td>';tb.appendChild(tr);});}
+async function setProjectLimit(){const p=document.getElementById('limit-project').value.trim();const b=document.getElementById('limit-blocks').value.trim();document.getElementById('limits-project-error').textContent='';document.getElementById('limits-project-ok').textContent='';if(!p||!b){document.getElementById('limits-project-error').textContent='Project and limit are required.';return;}const body=new URLSearchParams({limit_blocks:b});const r=await fetch('/admin/limits/projects/'+p,{method:'PUT',headers:{Authorization:authHeader,'Content-Type':'application/x-www-form-urlencoded'},body});if(r.ok){document.getElementById('limits-project-ok').textContent='Project limit updated.';await loadProjectLimits();}else{const e=await r.json().catch(()=>({error:r.statusText}));document.getElementById('limits-project-error').textContent=e.error||'Error updating project limit.';}}
+async function clearProjectLimit(){const p=document.getElementById('limit-project').value.trim();if(!p){document.getElementById('limits-project-error').textContent='Project is required.';return;}const r=await fetch('/admin/limits/projects/'+p,{method:'DELETE',headers:{Authorization:authHeader}});if(r.ok){document.getElementById('limits-project-ok').textContent='Project custom limit cleared.';await loadProjectLimits();}}
+async function loadUserOverrides(){const r=await fetch('/admin/limits/users',{headers:{Authorization:authHeader}});const rows=await r.json();const tb=document.getElementById('user-overrides-body');tb.innerHTML='';if(rows.length===0){tb.innerHTML='<tr><td colspan="3" style="color:var(--muted)">No user overrides.</td></tr>';return;}rows.forEach(x=>{const tr=document.createElement('tr');tr.innerHTML='<td class="ppn">['+x.project+','+x.programmer+']</td><td>'+x.limit_blocks+' blocks</td><td><button class="btn-secondary btn-sm" onclick="clearUserOverrideRow('+x.project+','+x.programmer+')">Clear</button></td>';tb.appendChild(tr);});}
+async function setUserOverride(){const p=document.getElementById('override-project').value.trim();const n=document.getElementById('override-programmer').value.trim();const b=document.getElementById('override-blocks').value.trim();if(!p||!n||!b){document.getElementById('limits-user-error').textContent='Project, programmer and override are required.';return;}const body=new URLSearchParams({limit_blocks:b});const r=await fetch('/admin/limits/users/'+p+'/'+n,{method:'PUT',headers:{Authorization:authHeader,'Content-Type':'application/x-www-form-urlencoded'},body});if(r.ok){document.getElementById('limits-user-ok').textContent='User override updated.';await loadUserOverrides();}}
+async function clearUserOverride(){const p=document.getElementById('override-project').value.trim();const n=document.getElementById('override-programmer').value.trim();if(!p||!n){document.getElementById('limits-user-error').textContent='Project and programmer are required.';return;}await clearUserOverrideRow(p,n);}async function clearUserOverrideRow(p,n){const r=await fetch('/admin/limits/users/'+p+'/'+n,{method:'DELETE',headers:{Authorization:authHeader}});if(r.ok){document.getElementById('limits-user-ok').textContent='User override cleared.';await loadUserOverrides();}}
+</script>
+</body></html>
