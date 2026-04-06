@@ -325,26 +325,11 @@ accounts_to_json(Accounts) ->
     iolist_to_binary(["[", lists:join(",", Items), "]"]).
 
 project_limits_to_json(Limits) ->
-    LimitsMap = maps:from_list(Limits),
-    DefaultBlocks = erlbasic_limits:default_limit_blocks(),
-    Projects = lists:seq(0, 255),
-    Items = lists:map(fun(P) ->
-        case P of
-            0 ->
-                <<"{\"project\":0,\"limit_blocks\":null,\"effective_blocks\":null,\"unlimited\":true}">>;
-            1 ->
-                <<"{\"project\":1,\"limit_blocks\":null,\"effective_blocks\":null,\"unlimited\":true}">>;
-            _ ->
-                Explicit = maps:get(P, LimitsMap, undefined),
-                Effective = case Explicit of
-                    undefined -> DefaultBlocks;
-                    B -> B
-                end,
-                iolist_to_binary(io_lib:format(
-                    "{\"project\":~w,\"limit_blocks\":~s,\"effective_blocks\":~w,\"unlimited\":false}",
-                    [P, json_optional_int(Explicit), Effective]))
-        end
-    end, Projects),
+    Items = lists:map(fun({P, Blocks}) ->
+        iolist_to_binary(io_lib:format(
+            "{\"project\":~w,\"limit_blocks\":~w,\"effective_blocks\":~w,\"unlimited\":false}",
+            [P, Blocks, Blocks]))
+    end, Limits),
     iolist_to_binary(["[", lists:join(",", Items), "]"]).
 
 user_overrides_to_json(Overrides) ->
@@ -354,11 +339,6 @@ user_overrides_to_json(Overrides) ->
             [P, N, Blocks]))
     end, Overrides),
     iolist_to_binary(["[", lists:join(",", Items), "]"]).
-
-json_optional_int(undefined) ->
-    "null";
-json_optional_int(Int) when is_integer(Int) ->
-    integer_to_list(Int).
 
 escape_json(Str) ->
     lists:flatmap(fun

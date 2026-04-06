@@ -216,7 +216,7 @@
   <div class="card">
     <h2>Project Storage Limits (1K Blocks)</h2>
     <p style="color:var(--muted); margin-bottom:1rem; font-size:0.85rem;">
-      Projects 0 and 1 are always unlimited. Projects 2-255 default to 256 blocks (256K) unless set here.
+      Projects 0 and 1 are always unlimited. Any account not listed below uses the default limit.
     </p>
     <div class="form-row-3">
       <div>
@@ -248,10 +248,16 @@
         <tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr>
       </tbody>
     </table>
+    <p style="color:var(--muted); margin-top:0.8rem; font-size:0.85rem;">
+      Any account not listed below uses the default limit.
+    </p>
   </div>
 
   <div class="card">
     <h2>User Limit Overrides (1K Blocks)</h2>
+    <p style="color:var(--muted); margin-bottom:1rem; font-size:0.85rem;">
+      Any account not listed below uses the default limit.
+    </p>
     <div class="form-row-3">
       <div>
         <label for="override-project">Project (2-255)</label>
@@ -409,9 +415,14 @@
     const tbody = document.getElementById('project-limits-body');
     tbody.innerHTML = '';
 
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">No custom project limits.</td></tr>';
+      return;
+    }
+
     rows.forEach(r => {
       const tr = document.createElement('tr');
-      const custom = r.limit_blocks == null ? '(default)' : (r.limit_blocks + ' blocks');
+      const custom = r.limit_blocks + ' blocks';
       const effective = r.unlimited ? 'Unlimited' : (r.effective_blocks + ' blocks');
       tr.innerHTML = `
         <td class="ppn">[${r.project},*]</td>
