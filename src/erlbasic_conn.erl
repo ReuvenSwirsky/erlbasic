@@ -63,6 +63,7 @@ tcp_try_login(Socket, P, N, Pw, Attempts) ->
     case erlbasic_accounts:authenticate(P, N, Pw) of
         {ok, Name} ->
             erlang:put(erlbasic_ppn, {P, N}),
+            erlbasic_mem_watchdog:register_session(self(), session_memory_limit(P, N)),
             NameStr = binary_to_list(Name),
             Msg = [
                 io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
@@ -132,6 +133,9 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
         interrupt ->
             erlang:put(interrupted, true),
             tcp_worker_loop(Socket, State, PPN);
+        memory_limit_exceeded ->
+            %% Stale message arriving when no program is running; discard.
+            tcp_worker_loop(Socket, State, PPN);
         {input, Line} ->
             %% Only intercept OS commands when the BASIC interpreter is not
             %% waiting for an INPUT statement response.
@@ -141,17 +145,20 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
                         logout ->
                             %% BYE: log off and return to the OS login prompt
                             erlang:erase(erlbasic_ppn),
+                            erlbasic_mem_watchdog:unregister_session(self()),
                             ok = gen_tcp:send(Socket, io_lib:format(
                                     " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
                             tcp_login_loop(Socket, 0);
                         quit ->
                             %% QUIT: disconnect entirely
                             erlang:erase(erlbasic_ppn),
+                            erlbasic_mem_watchdog:unregister_session(self()),
                             ok = gen_tcp:send(Socket, "Goodbye\r\n"),
                             gen_tcp:close(Socket);
                         {login, HelloResult} ->
                             %% HELLO/LOGIN/I: log off current user and start a new login
                             erlang:erase(erlbasic_ppn),
+                            erlbasic_mem_watchdog:unregister_session(self()),
                             ok = gen_tcp:send(Socket, io_lib:format(
                                     " ~s logged off\r\n\r\n", [format_ppn(P, N)])),
                             case HelloResult of
@@ -265,6 +272,7 @@ ws_try_login(WsPid, P, N, Pw, Attempts) ->
     case erlbasic_accounts:authenticate(P, N, Pw) of
         {ok, Name} ->
             erlang:put(erlbasic_ppn, {P, N}),
+            erlbasic_mem_watchdog:register_session(self(), session_memory_limit(P, N)),
             NameStr = binary_to_list(Name),
             Msg = [
                 io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
@@ -301,6 +309,9 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
         interrupt ->
             erlang:put(interrupted, true),
             ws_loop(WsPid, State, PPN);
+        memory_limit_exceeded ->
+            %% Stale message arriving when no program is running; discard.
+            ws_loop(WsPid, State, PPN);
         {input, RawLine} ->
             Line = normalize_input_line(list_to_binary(RawLine)),
             %% Only intercept OS commands when the BASIC interpreter is not
@@ -311,16 +322,19 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
                         logout ->
                             %% BYE: log off and return to the OS login prompt
                             erlang:erase(erlbasic_ppn),
+                            erlbasic_mem_watchdog:unregister_session(self()),
                             WsPid ! {output, io_lib:format(
                                         " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
                             ws_login_loop(WsPid, 0);
                         quit ->
                             %% QUIT: disconnect entirely
                             erlang:erase(erlbasic_ppn),
+                            erlbasic_mem_watchdog:unregister_session(self()),
                             WsPid ! {output, "Goodbye\r\n"};
                         {login, HelloResult} ->
                             %% HELLO/LOGIN/I: log off current user and start a new login
                             erlang:erase(erlbasic_ppn),
+                            erlbasic_mem_watchdog:unregister_session(self()),
                             WsPid ! {output, io_lib:format(
                                         " ~s logged off\r\n\r\n", [format_ppn(P, N)])},
                             case HelloResult of
@@ -432,6 +446,13 @@ quota_welcome_lines(P, N) ->
         " Storage quota: ", StorageText, "\r\n",
         " Memory quota: ", MemoryText, "\r\n"
     ].
+
+session_memory_limit(P, N) ->
+    case erlbasic_limits:get_effective_memory_limit_kb(P, N) of
+        unlimited -> unlimited;
+        KB when is_integer(KB), KB > 0 -> KB * 1024;
+        _ -> erlbasic_limits:default_memory_limit_kb() * 1024
+    end.
 
 %% parse_hello/1 – internal helper used by parse_os_command/1.
 %% Parses the PPN/password arguments of a login OS command.  Returns:

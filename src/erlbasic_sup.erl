@@ -8,6 +8,14 @@ start_link() ->
 
 init([]) ->
     ok = start_cowboy(),
+    MemWatchdog = #{
+        id => erlbasic_mem_watchdog,
+        start => {erlbasic_mem_watchdog, start_link, []},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker,
+        modules => [erlbasic_mem_watchdog]
+    },
     Listener = #{
         id => erlbasic_listener,
         start => {erlbasic_listener, start_link, []},
@@ -16,7 +24,7 @@ init([]) ->
         type => worker,
         modules => [erlbasic_listener]
     },
-    {ok, {{one_for_one, 5, 10}, [Listener]}}.
+    {ok, {{one_for_one, 5, 10}, [MemWatchdog, Listener]}}.
 
 start_cowboy() ->
     HttpPort = application:get_env(erlbasic, http_port, 8081),
