@@ -54,6 +54,8 @@ apply_math_function("TERM$", []) ->
         websocket -> {ok, "XTERM"};
         _         -> {ok, "TELNET"}
     end;
+apply_math_function("FREE", []) ->
+    {ok, free_memory_value()};
 apply_math_function("TIMER", []) ->
     %% Seconds since midnight as a float, matching GW-BASIC behaviour.
     {_, {H, M, S}} = calendar:local_time(),
@@ -121,6 +123,52 @@ apply_math_function("VAL", [Value]) ->
     apply_val(Value);
 apply_math_function(_, _Args) ->
     {error, illegal_function_call}.
+
+free_memory_value() ->
+    case memory_limit_bytes() of
+        unlimited ->
+            2147483647;
+        LimitBytes when is_integer(LimitBytes), LimitBytes > 0 ->
+            UsedBytes = approximate_current_memory_bytes(),
+            Free = LimitBytes - UsedBytes,
+            case Free > 0 of
+                true -> Free;
+                false -> 0
+            end;
+        _ ->
+            0
+    end.
+
+memory_limit_bytes() ->
+    case erlang:get(erlbasic_ppn) of
+        {P, N} ->
+            case erlbasic_limits:get_effective_memory_limit_kb(P, N) of
+                unlimited -> unlimited;
+                KB when is_integer(KB), KB > 0 -> KB * 1024;
+                _ -> erlbasic_limits:default_memory_limit_kb() * 1024
+            end;
+        _ ->
+            erlbasic_limits:default_memory_limit_kb() * 1024
+    end.
+
+approximate_current_memory_bytes() ->
+    Vars = erlang:get(erlbasic_mem_vars),
+    Funcs = erlang:get(erlbasic_mem_funcs),
+    Prog = erlang:get(erlbasic_mem_prog),
+    DataItems = erlang:get(erlbasic_mem_data_items),
+    LoopStack = erlang:get(erlbasic_mem_loopstack),
+    CallStack = erlang:get(erlbasic_mem_callstack),
+    size_or_zero(Vars)
+    + size_or_zero(Funcs)
+    + size_or_zero(Prog)
+    + size_or_zero(DataItems)
+    + size_or_zero(LoopStack)
+    + size_or_zero(CallStack).
+
+size_or_zero(undefined) ->
+    0;
+size_or_zero(Value) ->
+    erlang:external_size(Value).
 
 safe_math(Fun) ->
     try

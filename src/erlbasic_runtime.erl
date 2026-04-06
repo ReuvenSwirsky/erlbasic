@@ -11,6 +11,7 @@
          eval_file_open_args/5, eval_file_close_channels/4, eval_channel_record/4]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
+-define(MEMORY_CHECK_EVERY, 25).
 
 -include("erlbasic_state.hrl").
 
@@ -43,6 +44,19 @@ run_program_lines(Program, Pc, State, _LoopStack, _CallStack, Acc) when Pc > len
 run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
     Count = case erlang:get(line_exec_count) of undefined -> 0; N -> N end,
     erlang:put(line_exec_count, Count + 1),
+    case should_check_memory_quota(Count) of
+        true ->
+            case memory_quota_ok(State, LoopStack, CallStack) of
+                ok ->
+                    run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count);
+                {error, memory_quota_exceeded} ->
+                    handle_memory_quota_error(Program, Pc, State, Acc)
+            end;
+        false ->
+            run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
+    end.
+
+run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count) ->
     %% Check for interrupt message in mailbox (non-blocking)
     receive
         interrupt ->
@@ -68,10 +82,56 @@ run_program_lines(Program, Pc, State, LoopStack, CallStack, Acc) ->
             BreakState = State#state{continue_ctx = {Pc, LoopStack, CallStack}},
             {BreakState, sound_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
-            run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, NewAcc)
+            run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, NewAcc, Count)
     end.
 
-run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
+should_check_memory_quota(Count) ->
+    Count rem ?MEMORY_CHECK_EVERY =:= 0.
+
+memory_quota_ok(State, LoopStack, CallStack) ->
+    case memory_limit_bytes() of
+        unlimited ->
+            ok;
+        LimitBytes when is_integer(LimitBytes), LimitBytes > 0 ->
+            UsedBytes = approximate_memory_bytes(State, LoopStack, CallStack),
+            case UsedBytes =< LimitBytes of
+                true -> ok;
+                false -> {error, memory_quota_exceeded}
+            end
+    end.
+
+memory_limit_bytes() ->
+    case erlang:get(erlbasic_ppn) of
+        {P, N} ->
+            case erlbasic_limits:get_effective_memory_limit_kb(P, N) of
+                unlimited -> unlimited;
+                KB when is_integer(KB), KB > 0 -> KB * 1024;
+                _ -> erlbasic_limits:default_memory_limit_kb() * 1024
+            end;
+        _ ->
+            erlbasic_limits:default_memory_limit_kb() * 1024
+    end.
+
+approximate_memory_bytes(State, LoopStack, CallStack) ->
+    erlang:external_size(State#state.vars)
+    + erlang:external_size(State#state.funcs)
+    + erlang:external_size(State#state.prog)
+    + erlang:external_size(State#state.data_items)
+    + erlang:external_size(LoopStack)
+    + erlang:external_size(CallStack).
+
+handle_memory_quota_error(Program, Pc, State, Acc) ->
+    LineNumber = get_line_number(Program, Pc),
+    ErrorOut = [erlbasic_eval:format_runtime_error(memory_quota_exceeded, LineNumber)],
+    case should_flush_output() of
+        true ->
+            flush_output(Acc),
+            {State, ErrorOut};
+        false ->
+            {State, lists:reverse(ErrorOut ++ Acc)}
+    end.
+
+run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, Count) ->
     TraceAcc = prepend_trace_output(State, Program, Pc, Acc),
     {_LineNumber, Code} = lists:nth(Pc, Program),
     case execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) of
@@ -86,17 +146,24 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
                     false ->
                         CombinedOutput
                 end,
-            case NextState#state.pending_input of
-                undefined ->
-                    run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc);
-                _ ->
-                    case should_flush_output() of
-                        true ->
-                            flush_output(NewAcc),
-                            {NextState, []};
-                        false ->
-                            {NextState, lists:reverse(NewAcc)}
-                    end
+                case post_step_memory_quota_ok(should_check_memory_quota(Count + 1)
+                    orelse (NextState#state.pending_input =/= undefined),
+                    NextState, NextLoopStack, NextCallStack) of
+                ok ->
+                    case NextState#state.pending_input of
+                        undefined ->
+                            run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc);
+                        _ ->
+                            case should_flush_output() of
+                                true ->
+                                    flush_output(NewAcc),
+                                    {NextState, []};
+                                false ->
+                                    {NextState, lists:reverse(NewAcc)}
+                            end
+                    end;
+                {error, memory_quota_exceeded} ->
+                    handle_memory_quota_error(Program, Pc, NextState, NewAcc)
             end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
             %% Accumulate output
@@ -109,17 +176,24 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
                     false ->
                         CombinedOutput
                 end,
-            case NextState#state.pending_input of
-                undefined ->
-                    run_program_lines(Program, TargetPc, NextState, NextLoopStack, NextCallStack, NewAcc);
-                _ ->
-                    case should_flush_output() of
-                        true ->
-                            flush_output(NewAcc),
-                            {NextState, []};
-                        false ->
-                            {NextState, lists:reverse(NewAcc)}
-                    end
+                case post_step_memory_quota_ok(should_check_memory_quota(Count + 1)
+                    orelse (NextState#state.pending_input =/= undefined),
+                    NextState, NextLoopStack, NextCallStack) of
+                ok ->
+                    case NextState#state.pending_input of
+                        undefined ->
+                            run_program_lines(Program, TargetPc, NextState, NextLoopStack, NextCallStack, NewAcc);
+                        _ ->
+                            case should_flush_output() of
+                                true ->
+                                    flush_output(NewAcc),
+                                    {NextState, []};
+                                false ->
+                                    {NextState, lists:reverse(NewAcc)}
+                            end
+                    end;
+                {error, memory_quota_exceeded} ->
+                    handle_memory_quota_error(Program, Pc, NextState, NewAcc)
             end;
         {'end', Output} ->
             %% Flush final output
@@ -153,6 +227,11 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc) ->
                     {State, lists:reverse(CombinedOutput)}
             end
     end.
+
+post_step_memory_quota_ok(false, _State, _LoopStack, _CallStack) ->
+    ok;
+post_step_memory_quota_ok(true, State, LoopStack, CallStack) ->
+    memory_quota_ok(State, LoopStack, CallStack).
 
 prepend_trace_output(State, Program, Pc, Acc) ->
     case trace_line_output(State, Program, Pc) of
@@ -205,6 +284,12 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
 execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack) ->
     put(erlbasic_print_col, State#state.print_col),
     put(erlbasic_open_files, State#state.open_files),
+    put(erlbasic_mem_vars, State#state.vars),
+    put(erlbasic_mem_funcs, State#state.funcs),
+    put(erlbasic_mem_prog, State#state.prog),
+    put(erlbasic_mem_data_items, State#state.data_items),
+    put(erlbasic_mem_loopstack, LoopStack),
+    put(erlbasic_mem_callstack, CallStack),
     LineNumber = get_line_number(Program, Pc),
     ParsedStmt = parse_statement_cached(Command),
     case ParsedStmt of

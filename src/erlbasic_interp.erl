@@ -304,6 +304,12 @@ execute_statement(Command, State) ->
 execute_statement_single(Command, State) ->
     put(erlbasic_print_col, State#state.print_col),
     put(erlbasic_open_files, State#state.open_files),
+    put(erlbasic_mem_vars, State#state.vars),
+    put(erlbasic_mem_funcs, State#state.funcs),
+    put(erlbasic_mem_prog, State#state.prog),
+    put(erlbasic_mem_data_items, State#state.data_items),
+    put(erlbasic_mem_loopstack, []),
+    put(erlbasic_mem_callstack, []),
     case erlbasic_parser:parse_statement(Command) of
         {print, Items, EndWithNewline} ->
             case erlbasic_runtime:render_print_items(Items, State#state.vars, State#state.funcs, State#state.print_col) of

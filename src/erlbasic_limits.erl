@@ -11,7 +11,18 @@
     set_user_limit_blocks/3,
     clear_user_limit/2,
     list_user_overrides/0,
-    default_limit_blocks/0
+    default_limit_blocks/0,
+
+    get_effective_memory_limit_kb/2,
+    get_memory_project_limit_kb/1,
+    set_memory_project_limit_kb/2,
+    clear_memory_project_limit/1,
+    list_memory_project_limits/0,
+    get_memory_user_limit_kb/2,
+    set_memory_user_limit_kb/3,
+    clear_memory_user_limit/2,
+    list_memory_user_overrides/0,
+    default_memory_limit_kb/0
 ]).
 
 -define(TABLE, erlbasic_limits).
@@ -123,6 +134,111 @@ list_user_overrides() ->
 
 default_limit_blocks() ->
     application:get_env(erlbasic, default_storage_limit_blocks, 256).
+
+get_effective_memory_limit_kb(P, N) when is_integer(P), is_integer(N) ->
+    case P of
+        0 -> unlimited;
+        1 -> unlimited;
+        _ ->
+            case get_memory_user_limit_kb(P, N) of
+                {ok, KB} -> KB;
+                not_found ->
+                    case get_memory_project_limit_kb(P) of
+                        {ok, KB} -> KB;
+                        not_found -> default_memory_limit_kb();
+                        {error, _} -> default_memory_limit_kb()
+                    end;
+                {error, _} -> default_memory_limit_kb()
+            end
+    end;
+get_effective_memory_limit_kb(_P, _N) ->
+    default_memory_limit_kb().
+
+get_memory_project_limit_kb(P) when is_integer(P) ->
+    with_table(fun() ->
+        case dets:lookup(?TABLE, {memory_project, P}) of
+            [{{memory_project, P}, KB}] -> {ok, KB};
+            [] -> not_found;
+            {error, Reason} -> {error, Reason}
+        end
+    end);
+get_memory_project_limit_kb(_P) ->
+    {error, badarg}.
+
+set_memory_project_limit_kb(P, KB) when is_integer(P), is_integer(KB), KB > 0 ->
+    with_table(fun() ->
+        dets:insert(?TABLE, {{memory_project, P}, KB})
+    end);
+set_memory_project_limit_kb(_P, _KB) ->
+    {error, badarg}.
+
+clear_memory_project_limit(P) when is_integer(P) ->
+    with_table(fun() ->
+        dets:delete(?TABLE, {memory_project, P})
+    end);
+clear_memory_project_limit(_P) ->
+    {error, badarg}.
+
+list_memory_project_limits() ->
+    with_table(fun() ->
+        Folded = dets:foldl(
+            fun({{memory_project, P}, KB}, Acc) ->
+                    [{P, KB} | Acc];
+               (_, Acc) ->
+                    Acc
+            end,
+            [],
+            ?TABLE),
+        case Folded of
+            {error, Reason} -> {error, Reason};
+            List -> {ok, lists:sort(List)}
+        end
+    end).
+
+get_memory_user_limit_kb(P, N) when is_integer(P), is_integer(N) ->
+    with_table(fun() ->
+        case dets:lookup(?TABLE, {memory_user, P, N}) of
+            [{{memory_user, P, N}, KB}] -> {ok, KB};
+            [] -> not_found;
+            {error, Reason} -> {error, Reason}
+        end
+    end);
+get_memory_user_limit_kb(_P, _N) ->
+    {error, badarg}.
+
+set_memory_user_limit_kb(P, N, KB)
+        when is_integer(P), is_integer(N), is_integer(KB), KB > 0 ->
+    with_table(fun() ->
+        dets:insert(?TABLE, {{memory_user, P, N}, KB})
+    end);
+set_memory_user_limit_kb(_P, _N, _KB) ->
+    {error, badarg}.
+
+clear_memory_user_limit(P, N) when is_integer(P), is_integer(N) ->
+    with_table(fun() ->
+        dets:delete(?TABLE, {memory_user, P, N})
+    end);
+clear_memory_user_limit(_P, _N) ->
+    {error, badarg}.
+
+list_memory_user_overrides() ->
+    with_table(fun() ->
+        Folded = dets:foldl(
+            fun({{memory_user, P, N}, KB}, Acc) ->
+                    [{{P, N}, KB} | Acc];
+               (_, Acc) ->
+                    Acc
+            end,
+            [],
+            ?TABLE),
+        case Folded of
+            {error, Reason} -> {error, Reason};
+            List -> {ok, lists:sort(List)}
+        end
+    end).
+
+default_memory_limit_kb() ->
+    application:get_env(erlbasic, default_memory_limit_kb, 512).
 
 with_table(Fun) ->
     case ensure_open() of

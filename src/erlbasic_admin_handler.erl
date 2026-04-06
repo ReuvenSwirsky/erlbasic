@@ -2,6 +2,9 @@
 %%
 %% Routes (all under /admin/...):
 %%   GET  /admin[/]                   – serve admin.html
+%%   GET  /admin/accounts             – serve account admin page
+%%   GET  /admin/storage              – serve storage quota admin page
+%%   GET  /admin/memory               – serve memory quota admin page
 %%   GET  /admin/users                – JSON list of accounts  [auth required]
 %%   POST /admin/users                – create account         [auth required]
 %%   DELETE /admin/users/:p/:n        – delete account         [auth required]
@@ -12,6 +15,12 @@
 %%   GET  /admin/limits/users         – JSON user overrides    [auth required]
 %%   PUT  /admin/limits/users/:p/:n   – set user override      [auth required]
 %%   DELETE /admin/limits/users/:p/:n – clear user override    [auth required]
+%%   GET  /admin/memory-limits/projects      – JSON project memory limits [auth required]
+%%   PUT  /admin/memory-limits/projects/:p   – set project memory limit   [auth required]
+%%   DELETE /admin/memory-limits/projects/:p – clear project memory limit [auth required]
+%%   GET  /admin/memory-limits/users         – JSON user memory overrides  [auth required]
+%%   PUT  /admin/memory-limits/users/:p/:n   – set user memory override    [auth required]
+%%   DELETE /admin/memory-limits/users/:p/:n – clear user memory override  [auth required]
 %%
 %% Authentication uses HTTP Basic Auth.  The username field must be the PPN in
 %% "Project,Programmer" notation (e.g. "1,1") and the password is the account
@@ -30,8 +39,16 @@ init(Req0, State) ->
 %% ===================================================================
 
 dispatch(<<"GET">>, P, Req, State)
-        when P =:= <<"/admin">>; P =:= <<"/admin/">> ->
-    serve_html(Req, State);
+        when P =:= <<"/admin">>; P =:= <<"/admin/">>; P =:= <<"/admin/accounts">>; P =:= <<"/admin/accounts/">> ->
+    serve_html(accounts, Req, State);
+
+dispatch(<<"GET">>, P, Req, State)
+        when P =:= <<"/admin/storage">>; P =:= <<"/admin/storage/">> ->
+    serve_html(storage, Req, State);
+
+dispatch(<<"GET">>, P, Req, State)
+        when P =:= <<"/admin/memory">>; P =:= <<"/admin/memory/">> ->
+    serve_html(memory, Req, State);
 
 dispatch(Method, <<"/admin/users">>, Req, State) ->
     with_auth(Method, [], Req, State);
@@ -53,6 +70,20 @@ dispatch(Method, <<"/admin/limits/users">>, Req, State) ->
 dispatch(Method, <<"/admin/limits/users/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_limits_auth(Method, {users, Parts}, Req, State);
+
+dispatch(Method, <<"/admin/memory-limits/projects">>, Req, State) ->
+    with_limits_auth(Method, {memory_projects, []}, Req, State);
+
+dispatch(Method, <<"/admin/memory-limits/projects/", Rest/binary>>, Req, State) ->
+    Parts = binary:split(Rest, <<"/">>, [global]),
+    with_limits_auth(Method, {memory_projects, Parts}, Req, State);
+
+dispatch(Method, <<"/admin/memory-limits/users">>, Req, State) ->
+    with_limits_auth(Method, {memory_users, []}, Req, State);
+
+dispatch(Method, <<"/admin/memory-limits/users/", Rest/binary>>, Req, State) ->
+    Parts = binary:split(Rest, <<"/">>, [global]),
+    with_limits_auth(Method, {memory_users, Parts}, Req, State);
 
 dispatch(_, _, Req, State) ->
     reply(404, <<"Not Found">>, Req, State).
@@ -275,6 +306,89 @@ handle_limits_api(<<"DELETE">>, {users, [PBin, NBin]}, Req, State) ->
                 Req, State)
     end;
 
+handle_limits_api(<<"GET">>, {memory_projects, []}, Req, State) ->
+    case erlbasic_limits:list_memory_project_limits() of
+        {ok, Limits} ->
+            Json = memory_project_limits_to_json(Limits),
+            reply_json(200, Json, Req, State);
+        {error, _} ->
+            reply(500, <<"Server Error">>, Req, State)
+    end;
+
+handle_limits_api(<<"PUT">>, {memory_projects, [PBin]}, Req0, State) ->
+    {ok, Body, Req} = cowboy_req:read_urlencoded_body(Req0),
+    LimitBin = proplists:get_value(<<"limit_kb">>, Body, <<>>),
+    case {safe_int(PBin), safe_int(LimitBin)} of
+        {{ok, P}, {ok, KB}} when P >= 2, P =< 255, KB > 0 ->
+            case erlbasic_limits:set_memory_project_limit_kb(P, KB) of
+                ok -> reply_json(200, <<"{\"status\":\"updated\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255 and limit_kb must be > 0\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(<<"DELETE">>, {memory_projects, [PBin]}, Req, State) ->
+    case safe_int(PBin) of
+        {ok, P} when P >= 2, P =< 255 ->
+            case erlbasic_limits:clear_memory_project_limit(P) of
+                ok -> reply_json(200, <<"{\"status\":\"cleared\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(<<"GET">>, {memory_users, []}, Req, State) ->
+    case erlbasic_limits:list_memory_user_overrides() of
+        {ok, Overrides} ->
+            Json = memory_user_overrides_to_json(Overrides),
+            reply_json(200, Json, Req, State);
+        {error, _} ->
+            reply(500, <<"Server Error">>, Req, State)
+    end;
+
+handle_limits_api(<<"PUT">>, {memory_users, [PBin, NBin]}, Req0, State) ->
+    {ok, Body, Req} = cowboy_req:read_urlencoded_body(Req0),
+    LimitBin = proplists:get_value(<<"limit_kb">>, Body, <<>>),
+    case {safe_int(PBin), safe_int(NBin), safe_int(LimitBin)} of
+        {{ok, P}, {ok, N}, {ok, KB}}
+                when P >= 2, P =< 255, N >= 0, N =< 255, KB > 0 ->
+            case erlbasic_limits:set_memory_user_limit_kb(P, N, KB) of
+                ok -> reply_json(200, <<"{\"status\":\"updated\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255, programmer 0..255, and limit_kb > 0\"}">>,
+                Req, State)
+    end;
+
+handle_limits_api(<<"DELETE">>, {memory_users, [PBin, NBin]}, Req, State) ->
+    case {safe_int(PBin), safe_int(NBin)} of
+        {{ok, P}, {ok, N}} when P >= 2, P =< 255, N >= 0, N =< 255 ->
+            case erlbasic_limits:clear_memory_user_limit(P, N) of
+                ok -> reply_json(200, <<"{\"status\":\"cleared\"}">>, Req, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                    reply_json(500, ErrMsg, Req, State)
+            end;
+        _ ->
+            reply_json(400,
+                <<"{\"error\":\"project must be 2..255 and programmer 0..255\"}">>,
+                Req, State)
+    end;
+
 handle_limits_api(_, _, Req, State) ->
     reply(405, <<"Method Not Allowed">>, Req, State).
 
@@ -282,9 +396,15 @@ handle_limits_api(_, _, Req, State) ->
 %% HTML serving
 %% ===================================================================
 
-serve_html(Req, State) ->
+serve_html(Page, Req, State) ->
     PrivDir = code:priv_dir(erlbasic),
-    Path    = filename:join([PrivDir, "www", "admin.html"]),
+    FileName =
+        case Page of
+            accounts -> "admin_accounts.html";
+            storage -> "admin_storage.html";
+            memory -> "admin_memory.html"
+        end,
+    Path    = filename:join([PrivDir, "www", FileName]),
     case file:read_file(Path) of
         {ok, Body} ->
             Req2 = cowboy_req:reply(200,
@@ -337,6 +457,22 @@ user_overrides_to_json(Overrides) ->
         iolist_to_binary(io_lib:format(
             "{\"project\":~w,\"programmer\":~w,\"limit_blocks\":~w}",
             [P, N, Blocks]))
+    end, Overrides),
+    iolist_to_binary(["[", lists:join(",", Items), "]"]).
+
+memory_project_limits_to_json(Limits) ->
+    Items = lists:map(fun({P, KB}) ->
+        iolist_to_binary(io_lib:format(
+            "{\"project\":~w,\"limit_kb\":~w,\"effective_kb\":~w,\"unlimited\":false}",
+            [P, KB, KB]))
+    end, Limits),
+    iolist_to_binary(["[", lists:join(",", Items), "]"]).
+
+memory_user_overrides_to_json(Overrides) ->
+    Items = lists:map(fun({{P, N}, KB}) ->
+        iolist_to_binary(io_lib:format(
+            "{\"project\":~w,\"programmer\":~w,\"limit_kb\":~w}",
+            [P, N, KB]))
     end, Overrides),
     iolist_to_binary(["[", lists:join(",", Items), "]"]).
 

@@ -64,8 +64,11 @@ tcp_try_login(Socket, P, N, Pw, Attempts) ->
         {ok, Name} ->
             erlang:put(erlbasic_ppn, {P, N}),
             NameStr = binary_to_list(Name),
-            Msg = io_lib:format(" ~s  ~s\r\n\r\n Ready\r\n",
-                                [format_ppn(P, N), NameStr]),
+            Msg = [
+                io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
+                quota_welcome_lines(P, N),
+                "\r\n Ready\r\n"
+            ],
             ok = gen_tcp:send(Socket, Msg),
             State = erlbasic_interp:new_state(),
             ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(State)),
@@ -263,8 +266,11 @@ ws_try_login(WsPid, P, N, Pw, Attempts) ->
         {ok, Name} ->
             erlang:put(erlbasic_ppn, {P, N}),
             NameStr = binary_to_list(Name),
-            Msg = io_lib:format(" ~s  ~s\r\n\r\n Ready\r\n",
-                                [format_ppn(P, N), NameStr]),
+            Msg = [
+                io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
+                quota_welcome_lines(P, N),
+                "\r\n Ready\r\n"
+            ],
             WsPid ! {output, Msg},
             State = erlbasic_interp:new_state(),
             WsPid ! {output, erlbasic_interp:next_prompt(State)},
@@ -404,6 +410,28 @@ month_abbr(10) -> "Oct"; month_abbr(11) -> "Nov"; month_abbr(12) -> "Dec".
 
 format_ppn(P, N) ->
     io_lib:format("[~w,~w]", [P, N]).
+
+quota_welcome_lines(P, N) ->
+    StorageText =
+        case erlbasic_limits:get_effective_limit_blocks(P, N) of
+            unlimited -> "unlimited";
+            Blocks when is_integer(Blocks), Blocks > 0 ->
+                lists:flatten(io_lib:format("~w blocks (~wK)", [Blocks, Blocks]));
+            _ ->
+                "default"
+        end,
+    MemoryText =
+        case erlbasic_limits:get_effective_memory_limit_kb(P, N) of
+            unlimited -> "unlimited";
+            KB when is_integer(KB), KB > 0 ->
+                lists:flatten(io_lib:format("~wK", [KB]));
+            _ ->
+                "default"
+        end,
+    [
+        " Storage quota: ", StorageText, "\r\n",
+        " Memory quota: ", MemoryText, "\r\n"
+    ].
 
 %% parse_hello/1 – internal helper used by parse_os_command/1.
 %% Parses the PPN/password arguments of a login OS command.  Returns:
