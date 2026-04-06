@@ -201,6 +201,8 @@ handle_save_command(State, RawName) ->
                         {error, _}   -> {State, ["?FILE ERROR\r\n"]}
                     end
             end;
+        {error, illegal_file_name} ->
+            {State, [erlbasic_eval:format_runtime_error(illegal_file_name)]};
         {error, _} ->
             {State, ["?FILE ERROR\r\n"]}
     end.
@@ -228,6 +230,8 @@ handle_load_command(State, RawName) ->
                 {error, _} ->
                     {State, ["?FILE ERROR\r\n"]}
             end;
+        {error, illegal_file_name} ->
+            {State, [erlbasic_eval:format_runtime_error(illegal_file_name)]};
         {error, _} ->
             {State, ["?FILE ERROR\r\n"]}
     end.
@@ -240,6 +244,8 @@ handle_scratch_command(State, RawName) ->
                 {error, enoent} -> {State, [erlbasic_eval:format_runtime_error(program_not_found)]};
                 {error, _}     -> {State, ["?FILE ERROR\r\n"]}
             end;
+        {error, illegal_file_name} ->
+            {State, [erlbasic_eval:format_runtime_error(illegal_file_name)]};
         {error, _} ->
             {State, ["?FILE ERROR\r\n"]}
     end.
@@ -344,14 +350,20 @@ get_file_info(Dir, Name) ->
 
 normalize_program_filename(RawName) ->
     Name0 = string:trim(RawName),
-    Name = keep_safe_chars(Name0),
-    case Name of
-        "" ->
-            {error, invalid_filename};
-        _ ->
-            case filename:extension(Name) of
-                "" -> {ok, Name ++ ".bas"};
-                _ -> {ok, Name}
+    HasPathChar = lists:any(fun(C) -> C =:= $/ orelse C =:= $\\ orelse C =:= $: end, Name0),
+    case HasPathChar of
+        true ->
+            {error, illegal_file_name};
+        false ->
+            Name = keep_safe_chars(Name0),
+            case Name of
+                "" ->
+                    {error, invalid_filename};
+                _ ->
+                    case filename:extension(Name) of
+                        "" -> {ok, Name ++ ".bas"};
+                        _ -> {ok, Name}
+                    end
             end
     end.
 

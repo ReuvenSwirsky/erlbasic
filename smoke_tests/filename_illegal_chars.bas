@@ -1,0 +1,6 @@
+SAVE "my/file"
+SAVE "my\file"
+SAVE "C:file"
+LOAD "bad/load"
+SCRATCH "bad:scratch"
+PRINT "DONE"

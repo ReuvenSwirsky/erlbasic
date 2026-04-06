@@ -30,17 +30,12 @@ open_file(Path, Mode, ChannelValue, RecLenValue, Vars, State) ->
                         true ->
                             {error, illegal_function_call, Vars};
                         false ->
-                    case normalize_path(Path) of
-                        {ok, FilePath} ->
-                            case open_with_mode(FilePath, Mode, RecLenValue) of
-                                {ok, Entry} ->
-                                    NextFiles = maps:put(Channel, Entry, OpenFiles),
-                                    {ok, Vars, State#state{open_files = NextFiles}};
-                                {error, Reason} ->
-                                    {error, Reason, Vars}
-                            end;
-                        error ->
-                            {error, type_mismatch, Vars}
+                    case erlbasic_filestore:open(Path, Mode, RecLenValue) of
+                        {ok, Entry} ->
+                            NextFiles = maps:put(Channel, Entry, OpenFiles),
+                            {ok, Vars, State#state{open_files = NextFiles}};
+                        {error, Reason} ->
+                            {error, Reason, Vars}
                     end
                     end
             end;
@@ -354,47 +349,6 @@ close_file_channels([ChannelValue | Rest], OpenFiles, State) ->
             {error, illegal_function_call, State}
     end.
 
-open_with_mode(Path, "INPUT", _RecLenValue) ->
-    case file:open(Path, [read]) of
-        {ok, Io} -> {ok, #{mode => input, io => Io, path => Path, eof => false}};
-        {error, enoent} -> {error, illegal_function_call};
-        _ -> {error, illegal_function_call}
-    end;
-open_with_mode(Path, "OUTPUT", _RecLenValue) ->
-    case file:open(Path, [write]) of
-        {ok, Io} -> {ok, #{mode => output, io => Io, path => Path}};
-        _ -> {error, illegal_function_call}
-    end;
-open_with_mode(Path, "APPEND", _RecLenValue) ->
-    case file:open(Path, [append]) of
-        {ok, Io} -> {ok, #{mode => append, io => Io, path => Path}};
-        _ -> {error, illegal_function_call}
-    end;
-open_with_mode(Path, "RANDOM", RecLenValue) ->
-    RecLen =
-        case normalize_record_len(RecLenValue) of
-            {ok, Len} -> Len;
-            error -> 128
-        end,
-    case file:open(Path, [read, write, binary]) of
-        {ok, Io} ->
-            {ok, #{mode => random, io => Io, path => Path, rec_len => RecLen, fields => []}};
-        {error, enoent} ->
-            case file:open(Path, [write, binary]) of
-                {ok, Io0} ->
-                    ok = file:close(Io0),
-                    case file:open(Path, [read, write, binary]) of
-                        {ok, Io1} -> {ok, #{mode => random, io => Io1, path => Path, rec_len => RecLen, fields => []}};
-                        _ -> {error, illegal_function_call}
-                    end;
-                _ -> {error, illegal_function_call}
-            end;
-        _ ->
-            {error, illegal_function_call}
-    end;
-open_with_mode(_Path, _Mode, _RecLenValue) ->
-    {error, illegal_function_call}.
-
 get_open_file(ChannelValue, State) ->
     case normalize_channel(ChannelValue) of
         {ok, Channel} ->
@@ -452,29 +406,6 @@ normalize_record_len(Value) when is_list(Value) ->
         _ -> error
     end;
 normalize_record_len(_Value) ->
-    error.
-
-normalize_path(Path) when is_list(Path) ->
-    case filename:pathtype(Path) of
-        absolute ->
-            %% Absolute paths are never permitted — block path traversal out of user dir.
-            error;
-        _ ->
-            %% Reject any path component that is ".." to prevent directory traversal.
-            Parts = filename:split(Path),
-            case lists:member("..", Parts) of
-                true ->
-                    error;
-                false ->
-                    case erlbasic_storage:ensure_user_dir() of
-                        {ok, UserDir} ->
-                            {ok, filename:join(UserDir, Path)};
-                        {error, _Reason} ->
-                            error
-                    end
-            end
-    end;
-normalize_path(_Other) ->
     error.
 
 strip_newline(Line) ->

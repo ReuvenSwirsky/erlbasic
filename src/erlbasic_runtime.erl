@@ -20,6 +20,7 @@ run_program(State = #state{prog = Program}) ->
     erlang:put(line_exec_count, 0),
     erlang:put(stmt_parse_cache, #{}),
     erlang:put(expr_parse_cache, #{}),
+    erlang:erase(interrupted),
     Result = run_program_lines(Program, 1, RunState, [], [], []),
     erlang:erase(line_exec_count),
     erlang:erase(stmt_parse_cache),
@@ -340,6 +341,15 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
                     PendingState = State#state{pending_input = {getkey, Target, {program, Pc, [], LoopStack, CallStack}}},
                     {continue, PendingState, LoopStack, CallStack, []}
             end;
+        {sleep_keypress} ->
+            case State#state.char_buffer of
+                [_ | Rest] ->
+                    %% Buffered input available — consume one char and continue
+                    {continue, State#state{char_buffer = Rest}, LoopStack, CallStack, []};
+                [] ->
+                    PendingState = State#state{pending_input = {sleep_keypress, {program, Pc, [], LoopStack, CallStack}}},
+                    {continue, PendingState, LoopStack, CallStack, []}
+            end;
         {'end'} ->
             {'end', []};
         {parse_error, Reason} ->
@@ -629,8 +639,11 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
-                    Ms = min(30000, max(0, trunc(Value * 1000))),
-                    timer:sleep(Ms),
+                    Ms = min(300000, max(0, trunc(Value * 1000))),
+                    receive
+                        interrupt             -> erlang:put(interrupted, true);
+                        memory_limit_exceeded -> erlang:put(memory_limit_exceeded, true)
+                    after Ms -> ok end,
                     {continue, State#state{vars = Vars1}, LoopStack, CallStack, []};
                 {ok, _Value, _Vars1} ->
                     handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
@@ -811,6 +824,10 @@ update_pending_input_rest(State = #state{pending_input = {getkey, Target, {immed
     State#state{pending_input = {getkey, Target, {immediate, RemainingStatements}}};
 update_pending_input_rest(State = #state{pending_input = {getkey, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
     State#state{pending_input = {getkey, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {sleep_keypress, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {sleep_keypress, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 

@@ -19,6 +19,7 @@ awaiting_input_nonblocking(_State) -> false.
 
 %% @doc True only when the interpreter is paused waiting for a GETKEY statement.
 awaiting_input_getkey(#state{pending_input = {getkey, _, _}}) -> true;
+awaiting_input_getkey(#state{pending_input = {sleep_keypress, _}}) -> true;
 awaiting_input_getkey(_State) -> false.
 
 next_prompt(#state{pending_input = undefined}) ->
@@ -207,6 +208,10 @@ handle_pending_input(Line, State = #state{pending_input = {input_line, Target, C
         {error, Reason} ->
             {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
     end;
+handle_pending_input(Line, State = #state{pending_input = {sleep_keypress, Continuation}}) ->
+    %% Any keypress (or Enter) resumes; key is left in char_buffer for GETKEY/INKEY$/etc.
+    ClearedState = State#state{pending_input = undefined, char_buffer = Line},
+    resume_continuation(ClearedState, Continuation);
 handle_pending_input(Line, State = #state{pending_input = {get_nb, Target, Continuation}}) ->
     handle_getchar(Target, Line, State, Continuation);
 handle_pending_input(Line, State = #state{pending_input = {getkey, Target, Continuation}}) ->
@@ -627,11 +632,22 @@ execute_statement_single(Command, State) ->
                 false ->
                     {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]}
             end;
+        {sleep_keypress} ->
+            case State#state.char_buffer of
+                [_ | Rest] ->
+                    %% Buffered input available — consume one char and continue
+                    {State#state{char_buffer = Rest}, []};
+                [] ->
+                    {State#state{pending_input = {sleep_keypress, {immediate, []}}}, []}
+            end;
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
-                    Ms = min(30000, max(0, trunc(Value * 1000))),
-                    timer:sleep(Ms),
+                    Ms = min(300000, max(0, trunc(Value * 1000))),
+                    receive
+                        interrupt             -> erlang:put(interrupted, true);
+                        memory_limit_exceeded -> erlang:put(memory_limit_exceeded, true)
+                    after Ms -> ok end,
                     {State#state{vars = Vars1}, []};
                 {ok, _Value, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(type_mismatch)]};

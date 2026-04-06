@@ -601,7 +601,11 @@ parse_circle_statement(Trimmed) ->
 parse_sleep_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^SLEEP\\s+(.+)$", [{capture, [1], list}]) of
         {match, [Expr]} -> {sleep, Expr};
-        nomatch         -> parse_sound_statement(Trimmed)
+        nomatch ->
+            case re:run(Trimmed, "(?i)^SLEEP$", [{capture, none}]) of
+                match   -> {sleep_keypress};
+                nomatch -> parse_sound_statement(Trimmed)
+            end
     end.
 
 parse_sound_statement(Trimmed) ->
@@ -937,6 +941,8 @@ validate_statement(Stmt) ->
             end;
         {sleep, Expr} ->
             validate_expr_syntax(Expr);
+        {sleep_keypress} ->
+            ok;
         {chain, FileExpr} ->
             validate_expr_syntax(FileExpr);
         {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->

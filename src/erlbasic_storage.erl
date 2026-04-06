@@ -39,17 +39,24 @@
 %% @doc Read a program file from the user's storage area.
 -spec read_program(FileName :: string()) -> {ok, binary()} | {error, term()}.
 read_program(FileName) ->
+    case erlbasic_filestore:validate_name(FileName) of
+        {error, _} = Err -> Err;
+        ok ->
     case ensure_user_dir() of
         {ok, Dir} ->
             file:read_file(filename:join(Dir, FileName));
         {error, Reason} ->
             {error, Reason}
+    end
     end.
 
 %% @doc Write (create or overwrite) a program file in the user's storage area.
 -spec write_program(FileName :: string(), Content :: binary() | iolist()) ->
         ok | {error, term()}.
 write_program(FileName, Content) ->
+    case erlbasic_filestore:validate_name(FileName) of
+        {error, _} = Err -> Err;
+        ok ->
     case ensure_user_dir() of
         {ok, Dir} ->
             Path = filename:join(Dir, FileName),
@@ -62,6 +69,7 @@ write_program(FileName, Content) ->
             end;
         {error, Reason} ->
             {error, Reason}
+    end
     end.
 
 %% @doc Check whether writing a file to TargetSize bytes would exceed quota.
@@ -128,11 +136,15 @@ list_programs_with_info() ->
 %% @doc Delete a program file from the user's storage area.
 -spec delete_program(FileName :: string()) -> ok | {error, term()}.
 delete_program(FileName) ->
+    case erlbasic_filestore:validate_name(FileName) of
+        {error, _} = Err -> Err;
+        ok ->
     case ensure_user_dir() of
         {ok, Dir} ->
             file:delete(filename:join(Dir, FileName));
         {error, Reason} ->
             {error, Reason}
+    end
     end.
 
 %% @doc Return the filesystem path of the current user's storage directory.

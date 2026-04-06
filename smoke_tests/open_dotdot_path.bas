@@ -1,0 +1,2 @@
+10 OPEN "../escape.txt" FOR INPUT AS #1
+20 PRINT "SHOULD NOT REACH"

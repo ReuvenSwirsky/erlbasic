@@ -1088,3 +1088,76 @@ pos_immediate_print_column_test() ->
     ?assertEqual("1", lists:flatten(Out1)),
     {_S2, Out2} = erlbasic_interp:handle_input("PRINT POS(0)", S1),
     ?assertEqual("2\r\n", lists:flatten(Out2)).
+
+%% =============================================================================
+%% Security: path traversal and file channel limit tests
+%% =============================================================================
+
+%% OPEN with an absolute path must be rejected with TYPE MISMATCH ERROR.
+open_absolute_path_rejected_test() ->
+    AbsPath = case os:type() of
+        {win32, _} -> "C:/evil/file.txt";
+        _          -> "/etc/passwd"
+    end,
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 OPEN \"" ++ AbsPath ++ "\" FOR INPUT AS #1", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 END", S1),
+    {_, Output} = erlbasic_interp:handle_input("RUN", S2),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "ILLEGAL FILE NAME", [{capture, none}])).
+
+%% OPEN with a ".." component must be rejected with ILLEGAL FILE NAME.
+open_dotdot_path_rejected_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 OPEN \"../escape.txt\" FOR INPUT AS #1", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 END", S1),
+    {_, Output} = erlbasic_interp:handle_input("RUN", S2),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "ILLEGAL FILE NAME", [{capture, none}])).
+
+%% Opening a 16th file channel must be rejected with ILLEGAL FUNCTION CALL.
+open_too_many_channels_test() ->
+    S0 = erlbasic_interp:new_state(),
+    %% Load 15 OPEN statements (FOR OUTPUT so no pre-existing file is needed)
+    %% then attempt a 16th on a different channel.
+    Lines = [
+        {10,  "OPEN \"sec_ch01.tmp\" FOR OUTPUT AS #1"},
+        {20,  "OPEN \"sec_ch02.tmp\" FOR OUTPUT AS #2"},
+        {30,  "OPEN \"sec_ch03.tmp\" FOR OUTPUT AS #3"},
+        {40,  "OPEN \"sec_ch04.tmp\" FOR OUTPUT AS #4"},
+        {50,  "OPEN \"sec_ch05.tmp\" FOR OUTPUT AS #5"},
+        {60,  "OPEN \"sec_ch06.tmp\" FOR OUTPUT AS #6"},
+        {70,  "OPEN \"sec_ch07.tmp\" FOR OUTPUT AS #7"},
+        {80,  "OPEN \"sec_ch08.tmp\" FOR OUTPUT AS #8"},
+        {90,  "OPEN \"sec_ch09.tmp\" FOR OUTPUT AS #9"},
+        {100, "OPEN \"sec_ch10.tmp\" FOR OUTPUT AS #10"},
+        {110, "OPEN \"sec_ch11.tmp\" FOR OUTPUT AS #11"},
+        {120, "OPEN \"sec_ch12.tmp\" FOR OUTPUT AS #12"},
+        {130, "OPEN \"sec_ch13.tmp\" FOR OUTPUT AS #13"},
+        {140, "OPEN \"sec_ch14.tmp\" FOR OUTPUT AS #14"},
+        {150, "OPEN \"sec_ch15.tmp\" FOR OUTPUT AS #15"},
+        {160, "OPEN \"sec_ch16.tmp\" FOR OUTPUT AS #16"},
+        {170, "PRINT \"SHOULD NOT REACH\""}
+    ],
+    Loaded = lists:foldl(fun({LineNo, Stmt}, Acc) ->
+        {Next, _} = erlbasic_interp:handle_input(
+            integer_to_list(LineNo) ++ " " ++ Stmt, Acc),
+        Next
+    end, S0, Lines),
+    {_, Output} = erlbasic_interp:handle_input("RUN", Loaded),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "ILLEGAL FUNCTION CALL", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "SHOULD NOT REACH", [{capture, none}])).
+
+%% SLEEP with a negative value must clamp to zero and complete immediately
+%% (tests the max(0,...) half of the cap expression).
+sleep_negative_clamped_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 PRINT \"BEFORE\"", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 SLEEP -5", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"AFTER\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+    {_, Output} = erlbasic_interp:handle_input("RUN", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "BEFORE", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "AFTER",  [{capture, none}])).
