@@ -1,24 +1,55 @@
 # erlbasic
 
-A BASIC interpreter, implemented in Erlang, exposed over TCP/IP. Each TCP client gets its own isolated interpreter state.
+A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. Each connection gets its own isolated interpreter instance. Users can publish personal BASIC homepages served over HTTP.
 
 ## Features
 
-- Multiple concurrent TCP and/or WebSocket clients
-- One interpreter instance per connection
+- Multiple concurrent TCP and/or WebSocket clients; one interpreter per connection
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
-- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
-- Graphics mode (WebSocket only): `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE` with 640×480 resolution and 16 colors
-- Expression engine with numeric operators, exponentiation, BASIC-style math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, etc.), and string helpers (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
+- Graphics mode (WebSocket only): `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE` — 640×480 canvas, 16 colours
+- Full expression engine: numeric operators, exponentiation, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
+- Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
+- File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
+- **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and serves the output as an HTML page at `/:username`
+- RSTS/E-style PPN login (`[Project,Programmer]`) with PBKDF2-SHA256 password hashing
+- Per-user disk quotas, per-session memory quotas (watchdog process), per-PPN session limits
+- HTTPS support (self-signed or Let's Encrypt)
+
+## Module Map
+
+| Module | Role |
+|---|---|
+| `erlbasic_app` | OTP application entry point; initialises limits, accounts, homepage cache |
+| `erlbasic_sup` | Supervisor; starts memory watchdog, TCP listener, Cowboy HTTP/HTTPS server |
+| `erlbasic_listener` | `gen_server` accepting TCP connections on port 5555 |
+| `erlbasic_conn` | TCP and WebSocket connection handlers; RSTS/E login loop |
+| `erlbasic_ws_handler` | Cowboy WebSocket handler; bridges browser ↔ `erlbasic_conn` |
+| `erlbasic_http_handler` | Serves `priv/www/index.html` for unmatched HTTP routes |
+| `erlbasic_homepage_handler` | Serves user homepages at `/:username`; runs `HOME.BAS`, caches output |
+| `erlbasic_admin_handler` | Web admin UI (account management, quota inspection) |
+| `erlbasic_interp` | REPL layer: parses typed lines, routes to runtime or command handler |
+| `erlbasic_runtime` | Program execution loop; FOR/NEXT, GOSUB/RETURN, error handling |
+| `erlbasic_parser` | Statement and expression text → parse-tree tuples |
+| `erlbasic_commands` | LIST, SAVE, LOAD, SCRATCH, DIR, RENUM, DELETE, program serialisation |
+| `erlbasic_eval` | Expression evaluation, value formatting, error codes |
+| `erlbasic_eval_expr` | Recursive-descent expression parser |
+| `erlbasic_eval_lexer` | Tokeniser for the expression parser |
+| `erlbasic_eval_builtins` | Built-in functions (math, string, I/O helpers) |
+| `erlbasic_eval_arrays` | Array allocation, bounds checking, element access |
+| `erlbasic_fileio` | OPEN/CLOSE/READ/WRITE channel dispatch; eval helpers for channel expressions |
+| `erlbasic_filestore` | Abstraction layer over the backing disk store for channel files |
+| `erlbasic_graphics` | Graphics and display statement dispatch (`HGR`, `PSET`, `LINE`, `LOCATE`, `COLOR`, …) |
+| `erlbasic_print_using` | `PRINT USING` format-string engine |
+| `erlbasic_storage` | Per-user program storage (SAVE/LOAD/DIR) backed by `~/ErlUsers/` |
+| `erlbasic_accounts` | DETS-backed PBKDF2 account store |
+| `erlbasic_limits` | Per-project / per-user disk and memory quota policy |
+| `erlbasic_mem_watchdog` | `gen_server` that polls session heap sizes and enforces memory quotas |
+| `erlbasic_keywords` | Centralised keyword registry (parser, lexer, LIST formatter all read from here) |
+| `erlbasic_state.hrl` | Shared `#state{}` record definition |
 
 ## Build
-
-```powershell
-erlc -o ebin src/*.erl
-```
-
-On Windows PowerShell, if `erlc` fails due to launcher quoting issues, use:
 
 ```powershell
 .\build.ps1
@@ -27,17 +58,10 @@ On Windows PowerShell, if `erlc` fails due to launcher quoting issues, use:
 ## Run
 
 ```powershell
-erl -pa ebin
-application:start(erlbasic).
-```
-
-Or use the one-command helper (build + run):
-
-```powershell
 .\run.ps1
 ```
 
-The server listens on port `5555` by default.
+The BASIC terminal server listens on port **5555** (TCP). The web interface listens on port **8081** (HTTP).
 
 ## Connect
 
@@ -45,13 +69,7 @@ The server listens on port `5555` by default.
 telnet localhost 5555
 ```
 
-or
-
-```powershell
-nc localhost 5555
-```
-
-or navigate to URL
+or navigate to:
 
 ```
 http://localhost:8081/
@@ -59,27 +77,27 @@ http://localhost:8081/
 
 ### HTTPS Support
 
-ErlBASIC supports HTTPS for secure connections. For development with self-signed certificates:
+For development with self-signed certificates:
 
 ```powershell
-# Generate self-signed certificates
 pwsh generate_certs.ps1
-
-# Enable HTTPS in sys.config
 cp sys.config.https sys.config
-
-# Build and run
 pwsh run.ps1
 ```
 
-Then access via:
-```
-https://localhost:8443/
-```
+Access via `https://localhost:8443/`. For production Let's Encrypt deployment see [CERTBOT_DEPLOYMENT.md](CERTBOT_DEPLOYMENT.md). For localhost/LAN testing see [HTTPS_TESTING.md](HTTPS_TESTING.md).
 
-For production deployment with Let's Encrypt and automatic certificate renewal, see [CERTBOT_DEPLOYMENT.md](CERTBOT_DEPLOYMENT.md).
+## User Homepages
 
-For testing on localhost and local network, see [HTTPS_TESTING.md](HTTPS_TESTING.md).
+Every user account gets a public homepage at `/:username` (e.g. `http://localhost:8081/alice`).
+
+If a file named `HOME.BAS` (or `home.bas`) exists in the user's program directory, the interpreter runs it and serves the terminal output wrapped in an HTML page. If the file is absent, a styled default page is shown instead.
+
+**Caching policy** — output is cached by file SHA-256 hash:
+- Programs using `INPUT`, `INKEY$`, `GETKEY`, `RND`, or `RANDOMIZE` are **never cached** (volatile).
+- Programs using `TIME$` or `TIMER` are cached for **30 seconds**.
+- Programs using `DATE$` are cached for **1 hour**.
+- Static programs are cached **until the file changes**.
 
 ## Example session
 
@@ -91,130 +109,76 @@ For testing on localhost and local network, see [HTTPS_TESTING.md](HTTPS_TESTING
 RUN
 ```
 
-## More Examples
-
-Immediate mode:
-
-```text
-LET A$ = "HELLO"
-PRINT A$
-LET I% = 42
-PRINT I%
-INPUT NAME$
-PRINT NAME$
-IF A$ = "HELLO" THEN PRINT "OK" ELSE PRINT "NO"
-LET X = 5 : PRINT X
-```
-
-Stored program with loop and conditional:
-
-```text
-10 FOR I = 1 TO 5
-20 IF I < 3 THEN PRINT "LOW" ELSE PRINT "HIGH"
-30 PRINT I
-40 NEXT I
-50 END
-RUN
-```
-
-Stored program with INPUT and subroutine flow:
-
-```text
-10 INPUT N
-20 GOSUB 100
-30 PRINT N
-40 END
-100 LET N = N + 1
-110 RETURN
-RUN
-```
-
 ## Notes
 
-- Expressions support integer/float literals, quoted strings, scalar/array variable lookup (including 1D/2D/3D arrays), arithmetic operators, common BASIC math functions, and string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`) plus `POS` for print-column queries.
-- `TIMER` returns seconds since midnight as a float (GW-BASIC compatible).
-- Variable names are case-insensitive and cannot use reserved language keywords (statement keywords, expression operators, and builtin function names).
-- `REM` starts a comment statement. Any `:` after `REM` is treated as comment text, not a statement separator.
+- Variable names are case-insensitive and cannot use reserved language keywords.
+- `REM` starts a comment; `:` after `REM` is comment text, not a separator.
 - Undefined variables evaluate to `0`.
-- Sending an empty stored line like `20` deletes that line from the program.
-- Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point when continuation context exists.
+- Sending an empty stored line (e.g. `20`) deletes that line from the program.
+- Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point.
 - `TRON`/`TROFF` toggle runtime line tracing (`[line]` markers during `RUN`).
-- Runtime errors include `?TYPE MISMATCH ERROR`, `?CAN'T CONTINUE ERROR`, and `?RETURN WITHOUT GOSUB ERROR`.
-- `LOCATE row, col` moves the cursor for WebSocket/xterm clients. Telnet/TCP sessions report `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
-- `COLOR fg[, bg]` sets text color (0–15 foreground, 0–7 background). No-op on telnet/TCP.
-- `GET A$` reads one character non-blocking (empty string if buffer empty); `GETKEY A$` blocks until a keystroke arrives. Both switch the WebSocket browser into char mode for immediate keystroke delivery.
-- `SLEEP n` pauses execution for `n` seconds (float, maximum 30). Yields the Erlang scheduler; other connections are unaffected.
-- `SAVE <name>`, `LOAD <name>`, `SCRATCH <name>`, and `DIR` manage stored programs in a per-user directory under `~/BASIC/<user-id>` (falls back to `default`). Absolute paths and names containing `..` are rejected.
-- File I/O (`OPEN`/`CLOSE`/`WRITE #`/`INPUT #` etc.) is sandboxed to the user's directory. A maximum of 15 file channels may be open simultaneously per session.
+- `LOCATE row, col` moves the cursor (WebSocket/xterm only; errors on telnet/TCP).
+- `COLOR fg[, bg]` sets text colour (0–15 fg, 0–7 bg). No-op on telnet/TCP.
+- `GET A$` reads one character non-blocking; `GETKEY A$` blocks until a keystroke.
+- `SLEEP n` pauses for up to 30 seconds (maximum capped); other sessions are unaffected.
+- `SAVE`/`LOAD`/`SCRATCH`/`DIR` manage programs in the user's sandboxed directory.
+- File I/O is sandboxed to the user directory; max 15 channels open simultaneously.
+- Absolute paths and `..` path traversal are rejected.
 
 ## Syntax Reference
 
-See [Basic_Syntax.md](Basic_Syntax.md) for the complete currently supported syntax.
+See [Basic_Syntax.md](Basic_Syntax.md) for full syntax documentation.
 
 ## Examples
 
-- [examples/tictactoe.bas](examples/tictactoe.bas) - Tic-Tac-Toe with human/computer play.
-- [examples/flag.bas](examples/flag.bas) - colorized American flag using loops, `COLOR`, and `STRING$`.
-- [examples/enterprise.bas](examples/enterprise.bas) - Starship Enterprise side-view with animated twinkling starfield, using `LOCATE`, `COLOR`, `SLEEP`, and `TIMER`.
-- [examples/graphics.bas](examples/graphics.bas) - Graphics demo using `HGR`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, and `TEXT` to draw shapes and pixels on a 640×480 canvas (WebSocket only).
-- [examples/life.bas](examples/life.bas) - Graphics-mode Conway's Life with optimized neighbor summation.
-- [examples/asciilife.bas](examples/asciilife.bas) - Text-mode Conway's Life using `#` for occupied cells.
+- [examples/tictactoe.bas](examples/tictactoe.bas) — Tic-Tac-Toe with human/computer play
+- [examples/flag.bas](examples/flag.bas) — Colourised American flag using `COLOR` and `STRING$`
+- [examples/enterprise.bas](examples/enterprise.bas) — Animated starship using `LOCATE`, `COLOR`, `SLEEP`, `TIMER`
+- [examples/graphics.bas](examples/graphics.bas) — Graphics demo: `HGR`, `PSET`, `LINE`, `RECT`, `CIRCLE` (WebSocket only)
+- [examples/life.bas](examples/life.bas) — Graphics-mode Conway's Life
+- [examples/asciilife.bas](examples/asciilife.bas) — Text-mode Conway's Life using `#` for occupied cells
+- [examples/file_io.bas](examples/file_io.bas) — Sequential and random file I/O demo
 
-## EUnit Tests
+## Testing
 
-EUnit tests live under `eunit_tests/`.
-
-Run the full functional suite (compile + EUnit + smoke) from repo root with:
-
-```powershell
-./run_tests.ps1
-```
-
-For compile-only checks:
+### Run everything at once
 
 ```powershell
-escript $env:USERPROFILE\rebar3 compile
+.\run_all.ps1
 ```
 
-## Smoke Tests
+This runs, in order:
+1. **Build** — `rebar3 compile`
+2. **EUnit tests** — unit tests in `eunit_tests/`
+3. **Smoke tests** — end-to-end BASIC programs in `smoke_tests/`
+4. **Perf gate** — `life.bas` and `asciilife.bas` within budget thresholds
+5. **Textlife benchmark** — 100-generation asciilife, 5 runs, with history
 
-Sample BASIC programs for smoke testing live in [smoke_tests/run_smoke_tests.ps1](smoke_tests/run_smoke_tests.ps1) and [smoke_tests](smoke_tests).
-
-Run them with:
+### Individual test scripts
 
 ```powershell
-.\run_tests.ps1
+.\run_tests.ps1               # EUnit + smoke tests only
+.\run_perf_tests.ps1          # Pass/fail perf gate only
+.\run_textlife_benchmark.ps1  # Detailed benchmark only
 ```
 
-## Performance Tests (Life)
+### Performance history
 
-To benchmark Life programs in a repeatable runner:
+Each run of the perf gate and textlife benchmark appends a dated record:
 
-```powershell
-.\run_perf_tests.ps1
+- `perf_tests/perf_runner_history.txt` — `{UnixSecs, GitSha, LifeMs, AsciiLifeMs}.`
+- `perf_tests/textlife_history.txt` — `{UnixSecs, GitSha, MinMs, AvgMs, MaxMs}.`
+
+On each run a delta line is printed comparing against the previous entry:
+
+```
+Vs previous (4840ea7): life.bas +12 ms  asciilife.bas -5 ms
 ```
 
-To measure text-mode Life performance specifically, using `examples/asciilife.bas` tuned to exactly 100 generations:
+Environment variable overrides:
 
-```powershell
-.\run_textlife_benchmark.ps1
-```
-
-The benchmark reports per-run elapsed times plus average/min/max. By default it runs 5 times; override with:
-
-- `ERLBASIC_TEXTLIFE_BENCH_RUNS`
-
-The perf runner executes in WebSocket mode with reduced generation counts for CI-friendly runtime and verifies:
-
-- `examples/life.bas` stays under its budget
-- `examples/asciilife.bas` stays under its budget
-
-Note:
-
-- Run `./run_tests.ps1` and `./run_perf_tests.ps1` sequentially (not in parallel) so both use consistent build artifacts.
-
-Optional budget overrides:
-
-- `ERLBASIC_PERF_MAX_LIFE_MS`
-- `ERLBASIC_PERF_MAX_ASCIILIFE_MS`
-
+| Variable | Default | Effect |
+|---|---|---|
+| `ERLBASIC_PERF_MAX_LIFE_MS` | 15000 | Budget for `life.bas` perf gate |
+| `ERLBASIC_PERF_MAX_ASCIILIFE_MS` | 30000 | Budget for `asciilife.bas` perf gate |
+| `ERLBASIC_TEXTLIFE_BENCH_RUNS` | 5 | Number of benchmark runs |

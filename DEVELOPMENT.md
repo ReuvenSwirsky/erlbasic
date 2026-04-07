@@ -667,3 +667,187 @@ Rather than removing the "unused" functions, we:
 This fix aligns with BASIC language conventions where INPUT prompts should display the variable name(s) being requested, improving user experience by making it clear what input is expected. The compiler warning was actually highlighting a genuine missing feature rather than dead code.
 
 ---
+
+---
+
+## April 7, 2026 - Module Refactor: File I/O and Graphics Split into Domain Modules
+
+### Refactoring
+
+Extracted two large domains out of the monolithic `execute_statement_single/2` function in `erlbasic_interp.erl` into dedicated modules with a consistent `execute_stmt/2` dispatch API.
+
+### Motivation
+
+`execute_statement_single/2` had grown to ~400 lines — a single `case` expression containing the full inline implementation of every BASIC statement type.  File I/O alone accounted for ~130 lines (9 statement kinds) and graphics/display for ~90 lines (11 statement kinds).  Two patterns motivated the split:
+
+1. **Cohesion**: file channel logic (`OPEN`, `CLOSE`, `PRINT #`, `WRITE #`, `INPUT #`, `LINE INPUT #`, `FIELD`, `PUT #`, `GET #`) belongs in the module that already owns channel management — `erlbasic_fileio`.
+2. **Dependency clarification**: three expression-evaluation helpers (`eval_file_open_args`, `eval_file_close_channels`, `eval_channel_record`) were exported from `erlbasic_runtime` even though they exist solely to pre-evaluate arguments for `erlbasic_fileio` calls.  Moving them to `erlbasic_fileio` removes the awkward cross-module coupling.
+
+### Implementation
+
+#### New: `erlbasic_fileio:execute_stmt/2`
+
+Added a new exported function `execute_stmt(ParsedStmt, State) -> {NewState, Output}` to `erlbasic_fileio` handling all 9 file I/O statement kinds.  Also added `eval_file_open_args/5`, `eval_file_close_channels/4`, and `eval_channel_record/4` (moved from `erlbasic_runtime`).
+
+#### New module: `erlbasic_graphics`
+
+Created `src/erlbasic_graphics.erl` with `execute_stmt/2` handling 11 graphics and display statements: `CLS`, `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `LOCATE`, `COLOR`, `SOUND`.  This module delegates the actual evaluation arithmetic to helpers already in `erlbasic_runtime` (`eval_pset`, `eval_line`, `eval_lineto`, `eval_rect`, `eval_circle`, `eval_locate`, `eval_color`, `eval_sound`, `cls_output`, `hgr_output`, `text_output`).
+
+#### `erlbasic_interp` — statement dispatch slimmed down
+
+All 20 replaced clauses become one-liner delegations:
+```erlang
+{file_open, _, _, _, _} = Stmt -> erlbasic_fileio:execute_stmt(Stmt, State);
+{cls} = Stmt               -> erlbasic_graphics:execute_stmt(Stmt, State);
+```
+
+`execute_statement_single` is now ~170 lines (core interpreter logic: `LET`, `PRINT`, `INPUT`, `IF/THEN/ELSE`, `GET`, `GETKEY`, `SLEEP`, `DEF FN`, `DIM`, `DATA/READ`, flow control stubs, and TRON/TROFF).
+
+#### `erlbasic_runtime` — helpers removed
+
+`eval_file_open_args/5`, `eval_file_close_channels/4`, and `eval_channel_record/4` removed from exports and function bodies.  Call sites within `execute_basic_statement` updated to `erlbasic_fileio:eval_file_open_args(...)` etc.
+
+### Line count before → after
+
+| File | Before | After |
+|---|---|---|
+| `erlbasic_interp.erl` | 734 | 557 (−177) |
+| `erlbasic_runtime.erl` | 1474 | 1425 (−49) |
+| `erlbasic_fileio.erl` | 592 | 740 (+148) |
+| `erlbasic_graphics.erl` | — | 108 (new) |
+
+### Files Changed
+
+- `src/erlbasic_fileio.erl`: Added `execute_stmt/2`, `eval_file_open_args/5`, `eval_file_close_channels/4`, `eval_channel_record/4`
+- `src/erlbasic_graphics.erl`: New module — `execute_stmt/2` for graphics and display
+- `src/erlbasic_interp.erl`: 20 case clauses replaced with one-liner delegates
+- `src/erlbasic_runtime.erl`: Removed 3 exported helpers (now in `erlbasic_fileio`), updated 4 call sites
+
+### Testing
+
+- `.\run_all.ps1`: PASS — build, all 94 EUnit tests, all 64 smoke tests, perf gate
+
+---
+
+## April 7, 2026 - Performance History Tracking; `run_all.ps1` Master Test Script
+
+### Enhancement
+
+Added persistent per-run result history to both performance scripts so regressions can be spotted at a glance, and created a single `run_all.ps1` script that runs every test and benchmark in sequence.
+
+### Implementation
+
+#### Performance history files
+
+Each run appends one Erlang-term line to a text file:
+
+- `perf_tests/perf_runner_history.txt` — `{UnixTimeSecs, GitSha, LifeMs, AsciiLifeMs}.`
+- `perf_tests/textlife_history.txt` — `{UnixTimeSecs, GitSha, MinMs, AvgMs, MaxMs}.`
+
+The files are committed to the repo so history is preserved across clones and CI runs.
+
+On each run, the scripts call `file:consult/1` to load history, compare the new result against the last entry, and print a delta line:
+
+```
+Vs previous (4840ea7): life.bas +12 ms  asciilife.bas -5 ms
+Vs previous (4840ea7): min +5 ms  avg +3.2 ms (+1.6%)  max -10 ms
+```
+
+New helper functions added to each escript: `load_history/1`, `save_history/N`, `show_history_comparison/N`, `sign/1`.
+
+The Git short SHA is read at runtime via `os:cmd("git -C <repo> rev-parse --short HEAD")`.
+
+#### `run_all.ps1`
+
+New top-level script running the full pipeline:
+1. Build (`.\build.ps1`)
+2. EUnit tests
+3. Smoke tests
+4. Perf gate (`perf_runner.escript`)
+5. Textlife benchmark (`textlife_100gen_benchmark.escript`)
+
+Each phase is clearly labelled with coloured headers. Any failure exits immediately.
+
+#### Benchmark output formatting
+
+Improved the textlife benchmark output alignment: `Min/Average/Max` now on separate aligned lines, average shown with one decimal place.
+
+### Files Changed
+
+- `perf_tests/perf_runner.escript`: `show_history_comparison/3`, `save_history/4`, `load_history/1`, `sign/1`; updated `main/1` to call them
+- `perf_tests/textlife_100gen_benchmark.escript`: same additions; improved output formatting
+- `perf_tests/perf_runner_history.txt`: new — first entry recorded after adding history
+- `perf_tests/textlife_history.txt`: new — first entry recorded after adding history
+- `run_all.ps1`: new master test runner
+
+### Testing
+
+- `.\run_all.ps1`: PASS — all 94 EUnit tests, all 64 smoke tests, perf gate, benchmark
+
+---
+
+## April 7, 2026 - User Homepages: Run HOME.BAS and Cache Output
+
+### Enhancement
+
+Users can place a BASIC program named `HOME.BAS` in their program directory. When someone visits `/:username`, the server runs the program and serves the terminal output as an HTML page, replacing the placeholder "no home.bas found" default.
+
+### Implementation (commits c11f888, 4840ea7)
+
+#### `erlbasic_homepage_handler` — core logic
+
+Two-phase implementation:
+
+**Phase 1** (c11f888): Added basic handler routing, account lookup, static HTML default page for missing `HOME.BAS`, and the Cowboy route `/:username`.
+
+**Phase 2** (4840ea7): Extended the handler to actually execute `HOME.BAS` and serve the output:
+
+- `read_home_bas/1` — reads `HOME.BAS` or `home.bas` (case fallback) from the user's program directory.
+- `run_home_bas/1` — parses the program with `erlbasic_commands:parse_bin_as_program/1`, creates a fresh `#state{}`, and runs it in a spawned process with a 5-second timeout.  Output is collected by the parent via `receive`.  Control frames (bytes starting with `<<2, _/binary>>`) are filtered out; carriage returns and the trailing "Program ended" suffix are stripped.
+- `execute_home_bas/3` — checks the ETS cache before running; calls `detect_dynamic/1` to pick a TTL; stores the result.
+
+#### Caching (`init_cache/0`, `cache_lookup/2`, `cache_store/4`)
+
+Output is cached in an ETS table named `erlbasic_home_cache`, keyed by `{Project, Programmer}`, with the file's SHA-256 hash stored alongside so a changed file immediately invalidates the entry.
+
+`detect_dynamic/1` scans the uppercased program source for keywords:
+
+| Keyword detected | TTL |
+|---|---|
+| `INPUT`, `INKEY$`, `GETKEY`, `RND`, `RANDOMIZE` | `never` (not cached) |
+| `TIME$`, `TIMER` | 30 seconds |
+| `DATE$` | 3600 seconds |
+| (none of the above) | `infinity` (until file changes) |
+
+`erlbasic_app:start/2` calls `erlbasic_homepage_handler:init_cache/0` before starting the supervisor so the table exists before any HTTP request arrives.
+
+#### Default page
+
+When `HOME.BAS` is absent, `default_homepage/4` returns a styled HTML page explaining how to create one, showing the username, display name, and PPN.
+
+#### Route registration (`erlbasic_sup`)
+
+```erlang
+{"/:username",  erlbasic_homepage_handler, []},
+{"/:username/", erlbasic_homepage_handler, []},
+```
+
+Both the bare and trailing-slash forms are handled.  The fallback `{'_', erlbasic_http_handler, []}` serves `index.html` for all other paths.
+
+### Files Changed
+
+- `src/erlbasic_homepage_handler.erl`: New module (254 lines) — full homepage serving, caching, HTML generation
+- `src/erlbasic_sup.erl`: Added `/:username` and `/:username/` routes; calls `init_cache/0`
+- `src/erlbasic_app.erl`: Added `erlbasic_homepage_handler:init_cache()` call in `start/2`
+- `src/erlbasic_commands.erl`: Added `parse_bin_as_program/1` (used by homepage runner)
+
+### Security Notes
+
+- The program runs in a spawned Erlang process under the normal interpreter; all existing sandboxing (file path validation, memory watchdog, SLEEP cap) applies.
+- The 5-second execution timeout prevents any homepage from holding up an HTTP worker indefinitely.
+- HTML output is passed through `escape_html/1` before insertion into the page template.
+- The spawned program process does not inherit the HTTP connection's PPN, so it sees `undefined` storage context and cannot access other users' files.
+
+### Testing
+
+- `.\run_all.ps1`: PASS — all 94 EUnit tests, all 64 smoke tests, perf gate
