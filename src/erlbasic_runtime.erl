@@ -101,11 +101,13 @@ handle_memory_quota_error(Program, Pc, State, Acc) ->
 
 run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
     TraceAcc = prepend_trace_output(State, Program, Pc, Acc),
-    %% Check for an explicit FLUSH statement (set by {flush_stmt} execution)
-    ExplicitFlush = erlang:erase(explicit_flush_requested) =:= true,
+    %% Clear any stale explicit_flush flag before executing this line, then
+    %% re-read it after — so ExplicitFlush is true only when THIS line is FLUSH.
+    erlang:erase(explicit_flush_requested),
     {_LineNumber, Code} = lists:nth(Pc, Program),
     case execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) of
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
+            ExplicitFlush = erlang:erase(explicit_flush_requested) =:= true,
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
@@ -129,6 +131,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                         end
                 end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
+            ExplicitFlush = erlang:erase(explicit_flush_requested) =:= true,
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
