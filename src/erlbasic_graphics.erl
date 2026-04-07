@@ -9,7 +9,14 @@ execute_stmt({cls}, State) ->
 execute_stmt({hgr}, State) ->
     case erlang:get(erlbasic_conn_type) of
         websocket ->
-            {State#state{graphics_mode = true, graphics_pen = undefined}, erlbasic_runtime:hgr_output()};
+            {State#state{graphics_mode = hgr, graphics_pen = undefined}, erlbasic_runtime:hgr_output()};
+        _ ->
+            {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
+    end;
+execute_stmt({hgr2}, State) ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket ->
+            {State#state{graphics_mode = hgr2, graphics_pen = undefined}, erlbasic_runtime:hgr2_output()};
         _ ->
             {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
     end;
@@ -22,31 +29,33 @@ execute_stmt({text}, State) ->
     end;
 execute_stmt({pset, XExpr, YExpr, ColorExpr}, State) ->
     case State#state.graphics_mode of
-        true ->
+        false ->
+            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+        _ ->
             case erlbasic_runtime:eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
                     {State#state{vars = Vars1}, Output};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
-            end;
-        false ->
-            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]}
+            end
     end;
 execute_stmt({line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr}, State) ->
     case State#state.graphics_mode of
-        true ->
+        false ->
+            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+        _ ->
             case erlbasic_runtime:eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output, X2, Y2} ->
                     {State#state{vars = Vars1, graphics_pen = {X2, Y2}}, Output};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
-            end;
-        false ->
-            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]}
+            end
     end;
 execute_stmt({lineto, XExpr, YExpr, ColorExpr}, State) ->
     case State#state.graphics_mode of
-        true ->
+        false ->
+            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+        _ ->
             case State#state.graphics_pen of
                 {X1, Y1} ->
                     case erlbasic_runtime:eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, State#state.vars, State#state.funcs) of
@@ -57,33 +66,31 @@ execute_stmt({lineto, XExpr, YExpr, ColorExpr}, State) ->
                     end;
                 undefined ->
                     {State, [erlbasic_eval:format_runtime_error(no_previous_line)]}
-            end;
-        false ->
-            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]}
+            end
     end;
 execute_stmt({rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr}, State) ->
     case State#state.graphics_mode of
-        true ->
+        false ->
+            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+        _ ->
             case erlbasic_runtime:eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
                     {State#state{vars = Vars1}, Output};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
-            end;
-        false ->
-            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]}
+            end
     end;
 execute_stmt({circle, XExpr, YExpr, RadiusExpr, ColorExpr}, State) ->
     case State#state.graphics_mode of
-        true ->
+        false ->
+            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+        _ ->
             case erlbasic_runtime:eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
                 {ok, Vars1, Output} ->
                     {State#state{vars = Vars1}, Output};
                 {error, Reason, Vars1} ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
-            end;
-        false ->
-            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]}
+            end
     end;
 execute_stmt({locate, RowExpr, ColExpr}, State) ->
     case erlbasic_runtime:eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of

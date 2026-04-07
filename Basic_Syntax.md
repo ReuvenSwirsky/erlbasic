@@ -226,7 +226,7 @@ Notes:
 
 ### HGR
 
-Enters high-resolution graphics mode (640×480 with 16 colors).
+Enters high-resolution graphics mode (800×600 with 16 colors).
 
 ```text
 HGR
@@ -259,7 +259,7 @@ PSET (X, Y), C
 ```
 
 Notes:
-- Coordinates are 0-based: x ∈ [0, 639], y ∈ [0, 479].
+- Coordinates are 0-based: x ∈ [0, 799], y ∈ [0, 599].
 - Color values 0–15 use the EGA/VGA palette.
 - Only works in graphics mode (after `HGR`).
 - On telnet/TCP sessions, `PSET` is silently ignored.

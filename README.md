@@ -8,7 +8,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
 - Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
-- Graphics mode (WebSocket only): `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE` — 640×480 canvas, 16 colours
+- Graphics mode (WebSocket only): `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE` — 800×600 canvas, 16 colours
 - Full expression engine: numeric operators, exponentiation, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory

@@ -1,31 +1,31 @@
 10 REM GRAPHICS DEMO - DRAW SOME SHAPES
 20 HGR
 30 REM Draw a white rectangle border using LINE and LINETO
-40 LINE (50, 50)-(590, 50), 15
-50 LINETO (590, 430), 15
-60 LINETO (50, 430), 15
+40 LINE (50, 50)-(750, 50), 15
+50 LINETO (750, 550), 15
+60 LINETO (50, 550), 15
 70 LINETO (50, 50), 15
 80 REM Draw colorful circles
 90 FOR I = 0 TO 7
 100 LET C = I + 1
-110 LET X = 100 + I * 60
-120 CIRCLE (X, 120), 30, C
+110 LET X = 104 + I * 80
+120 CIRCLE (X, 150), 40, C
 130 NEXT I
 140 REM Draw filled color rectangles
 150 FOR I = 0 TO 7
 160 LET C = I + 8
-170 LET X = 100 + I * 60
-180 RECT (X - 20, 160)-(X + 20, 180), C
+170 LET X = 104 + I * 80
+180 RECT (X - 30, 210)-(X + 30, 250), C
 190 NEXT I
 200 REM Draw a gradient of lines
 210 FOR I = 0 TO 15
-220 LET X = 100 + I * 30
-230 LINE (X, 200)-(X, 400), I
+220 LET X = 104 + I * 36
+230 LINE (X, 280)-(X, 520), I
 240 NEXT I
 250 REM Draw random pixels
 260 FOR I = 1 TO 500
-270 LET X = INT(RND(1) * 640)
-280 LET Y = INT(RND(1) * 480)
+270 LET X = INT(RND(1) * 800)
+280 LET Y = INT(RND(1) * 600)
 290 LET C = INT(RND(1) * 16)
 300 PSET (X, Y), C
 310 NEXT I

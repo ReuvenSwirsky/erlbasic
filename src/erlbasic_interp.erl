@@ -460,7 +460,8 @@ execute_statement_single(Command, State) ->
         {next_loop, _MaybeVar} ->
             {State, [erlbasic_eval:format_runtime_error(next_without_for)]};
         {cls} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
-        {hgr} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
+        {hgr}  = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
+        {hgr2} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {text} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {pset, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {line, _, _, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);

@@ -1,12 +1,12 @@
 10 REM Conway's Game of Life
-20 REM 64x48 grid, 10x10 pixels per cell
+20 REM 80x60 grid, 10x10 pixels per cell
 30 REM
 40 PRINT "Initializing Conway's Life..."
-50 LET W = 64
-60 LET H = 48
+50 LET W = 80
+60 LET H = 60
 70 LET CELLSIZE = 10
-80 DIM GRID(65, 49)
-90 DIM NEXTGRID(65, 49)
+80 DIM GRID(81, 61)
+90 DIM NEXTGRID(81, 61)
 100 REM
 110 REM Initialize with random pattern (30% alive)
 120 PRINT "Seeding random pattern..."

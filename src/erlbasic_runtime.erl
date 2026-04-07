@@ -5,7 +5,7 @@
          collect_program_data/1, apply_read_vars/2, eval_locate/4,
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
-         hgr_output/0, text_output/0,
+         hgr_output/0, hgr2_output/0, text_output/0,
          eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
          eval_sound/6]).
 
@@ -559,7 +559,14 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
         {hgr} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State#state{graphics_mode = true, graphics_pen = undefined}, LoopStack, CallStack, hgr_output()};
+                    {continue, State#state{graphics_mode = hgr, graphics_pen = undefined}, LoopStack, CallStack, hgr_output()};
+                _ ->
+                    handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {hgr2} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    {continue, State#state{graphics_mode = hgr2, graphics_pen = undefined}, LoopStack, CallStack, hgr2_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -572,31 +579,33 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             end;
         {pset, XExpr, YExpr, ColorExpr} ->
             case State#state.graphics_mode of
-                true ->
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
                     case eval_pset(XExpr, YExpr, ColorExpr, State#state.vars, State#state.funcs) of
                         {ok, Vars1, Output} ->
                             {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                         {error, Reason, _Vars1} ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
-                    end;
-                false ->
-                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
             end;
         {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
             case State#state.graphics_mode of
-                true ->
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
                     case eval_line(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
                         {ok, Vars1, Output, X2, Y2} ->
                             {continue, State#state{vars = Vars1, graphics_pen = {X2, Y2}}, LoopStack, CallStack, Output};
                         {error, Reason, _Vars1} ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
-                    end;
-                false ->
-                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
             end;
         {lineto, XExpr, YExpr, ColorExpr} ->
             case State#state.graphics_mode of
-                true ->
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
                     case State#state.graphics_pen of
                         {X1, Y1} ->
                             case eval_lineto(XExpr, YExpr, ColorExpr, X1, Y1, State#state.vars, State#state.funcs) of
@@ -607,33 +616,31 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                             end;
                         undefined ->
                             handle_runtime_error(no_previous_line, LineNumber, State, Pc, LoopStack, CallStack)
-                    end;
-                false ->
-                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
             end;
         {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr} ->
             case State#state.graphics_mode of
-                true ->
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
                     case eval_rect(X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr, State#state.vars, State#state.funcs) of
                         {ok, Vars1, Output} ->
                             {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                         {error, Reason, _Vars1} ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
-                    end;
-                false ->
-                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
             end;
         {circle, XExpr, YExpr, RadiusExpr, ColorExpr} ->
             case State#state.graphics_mode of
-                true ->
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
                     case eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
                         {ok, Vars1, Output} ->
                             {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
                         {error, Reason, _Vars1} ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
-                    end;
-                false ->
-                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
             end;
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
@@ -1182,6 +1189,12 @@ ansi_bg_code(C) -> 40 + C.               %% background: 40-47
 hgr_output() ->
     case erlang:get(erlbasic_conn_type) of
         websocket -> ["\x02GFX:HGR"];
+        _ -> []
+    end.
+
+hgr2_output() ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> ["\x02GFX:HGR2"];
         _ -> []
     end.
 

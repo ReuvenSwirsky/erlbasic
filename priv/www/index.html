@@ -28,32 +28,37 @@
     header h1 { font-size: 1.4rem; color: #00d4ff; letter-spacing: 0.05em; }
     header p  { font-size: 0.85rem; color: #aaa; }
     #terminal-container {
-      flex: 1;
-      width: 100%;
-      max-width: 960px;
-      padding: 1rem;
       display: flex;
       flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+      width: 100%;
+    }
+    /* Outer box: takes up the post-scale layout space; sized by JS */
+    #terminal-scale-outer {
       position: relative;
+      overflow: hidden;
+    }
+    /* Inner wrapper: holds terminal + canvas at natural pixel size; JS applies CSS scale */
+    #terminal-scale-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: top left;
     }
     #terminal {
-      flex: 1;
+      display: inline-block; /* shrink-to-fit xterm content */
       border: 1px solid #0f3460;
       border-radius: 4px;
       overflow: hidden;
-      padding: 4px;
       background: #000;
       position: relative;
       z-index: 2;
     }
     #graphics-canvas {
       position: absolute;
-      top: 1rem;
-      left: 1rem;
-      right: 1rem;
-      bottom: 0;
-      width: calc(100% - 2rem);
-      height: calc(100% - 1rem);
+      top: 0;
+      left: 0;
       border: 1px solid #0f3460;
       border-radius: 4px;
       background: #000;
@@ -62,6 +67,7 @@
       opacity: 0;
       pointer-events: none;
       z-index: 1;
+      /* CSS width/height matched to terminal pixel size by JS */
     }
     #terminal-container.graphics-mode #terminal {
       z-index: 1;
@@ -69,7 +75,7 @@
     #terminal-container.graphics-mode #graphics-canvas {
       z-index: 3;
       opacity: 1;
-      /* Keep pointer-events: none so keyboard events pass through to terminal */
+      /* pointer-events: none lets keystrokes reach the terminal */
     }
     #status {
       margin-top: 0.5rem;
@@ -79,6 +85,15 @@
     }
     #status.connected { color: #4caf50; }
     #status.disconnected { color: #f44336; }
+    /* Hide xterm scrollbar in HGR2 split-screen mode */
+    #terminal-container.hgr2-mode .xterm-viewport {
+      overflow-y: hidden !important;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    #terminal-container.hgr2-mode .xterm-viewport::-webkit-scrollbar {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -90,18 +105,26 @@
   </header>
 
   <div id="terminal-container">
-    <canvas id="graphics-canvas" width="640" height="480"></canvas>
-    <div id="terminal"></div>
+    <!-- terminal-scale-outer takes up the scaled layout space (JS sets width/height) -->
+    <div id="terminal-scale-outer">
+      <!-- terminal-scale-wrapper holds content at natural size; CSS transform scales it -->
+      <div id="terminal-scale-wrapper">
+        <div id="terminal"></div>
+        <canvas id="graphics-canvas" width="800" height="600"></canvas>
+      </div>
+    </div>
     <div id="status" class="disconnected">Connecting…</div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+
   <script>
     const term = new Terminal({
+      cols: 80,
+      rows: 25,
       cursorBlink: true,
       fontFamily: '"Cascadia Code", "Fira Code", "Courier New", monospace',
-      fontSize: 14,
+      fontSize: 16,
       theme: {
         background: '#000000',
         foreground: '#00ff41',
@@ -110,11 +133,50 @@
         brightBlack:'#555555',
       }
     });
-    const fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
-    fitAddon.fit();
-    window.addEventListener('resize', () => fitAddon.fit());
+
+    // ── Fixed 80×25 terminal with viewport-scaling ───────────────────────────
+    // Strategy: xterm renders at its natural pixel size for 80×25 chars at
+    // the chosen fontSize. We then CSS-transform the wrapper div to fill
+    // the available viewport, keeping the exact 80×25 character grid.
+    // The 800×600 graphics canvas gets its CSS size matched to the terminal
+    // so it overlays precisely in both text and graphics mode.
+    let naturalW = 0, naturalH = 0;
+
+    function initLayout() {
+      // Wait until xterm has rendered and sized the .xterm-screen element.
+      const screen = term.element.querySelector('.xterm-screen');
+      if (!screen || screen.offsetWidth === 0) {
+        requestAnimationFrame(initLayout);
+        return;
+      }
+      // Measure the terminal div (includes xterm content + 1px border each side).
+      naturalW = term.element.offsetWidth;
+      naturalH = term.element.offsetHeight;
+      // Size the overlay canvas CSS to the exact same pixel footprint.
+      // Internal resolution stays 800×600 for BASIC coordinate-space compatibility.
+      canvas.style.width  = naturalW + 'px';
+      canvas.style.height = naturalH + 'px';
+      scaleToFit();
+    }
+
+    function scaleToFit() {
+      if (!naturalW || !naturalH) return;
+      const container = document.getElementById('terminal-container');
+      const header    = document.querySelector('header');
+      // Leave room for the status bar (~28 px) and container padding (2×16 px).
+      const availW = container.clientWidth - 32;
+      const availH = window.innerHeight - header.offsetHeight - 60;
+      const scale  = Math.min(availW / naturalW, availH / naturalH);
+      document.getElementById('terminal-scale-wrapper').style.transform =
+        'scale(' + scale + ')';
+      const outer = document.getElementById('terminal-scale-outer');
+      outer.style.width  = Math.ceil(naturalW * scale) + 'px';
+      outer.style.height = Math.ceil(naturalH * scale) + 'px';
+    }
+
+    requestAnimationFrame(initLayout);
+    window.addEventListener('resize', scaleToFit);
 
     const statusEl = document.getElementById('status');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -149,30 +211,55 @@
       '#FF5555', '#FF55FF', '#FFFF55', '#FFFFFF'
     ];
     
+    let graphicsMode = 'none'; // 'none', 'hgr', 'hgr2'
+
     function handleGraphicsCommand(cmd) {
       const parts = cmd.split(':');
       const action = parts[0];
-      
+
       switch(action) {
         case 'HGR':
+          graphicsMode = 'hgr';
+          canvas.height = 600;
+          canvas.style.height = naturalH + 'px';
           document.getElementById('terminal-container').classList.add('graphics-mode');
           ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, 640, 480);
+          ctx.fillRect(0, 0, 800, 600);
           break;
-          
+
+        case 'HGR2':
+          graphicsMode = 'hgr2';
+          // 480px internal height maps exactly to the 21-row CSS area; no black gap.
+          canvas.height = 480;
+          // Cover exactly 21 of 25 text rows; the bottom 4 rows remain visible as text area.
+          canvas.style.height = Math.round(naturalH * 21 / 25) + 'px';
+          document.getElementById('terminal-container').classList.add('graphics-mode');
+          document.getElementById('terminal-container').classList.add('hgr2-mode');
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, 800, 480);
+          // Clear text rows 22-25, restrict scrolling to that region, move cursor there.
+          term.write('\x1b[22;1H\x1b[2K\x1b[23;1H\x1b[2K\x1b[24;1H\x1b[2K\x1b[25;1H\x1b[2K\x1b[22;25r\x1b[22;1H');
+          break;
+
         case 'TEXT':
+          graphicsMode = 'none';
+          canvas.height = 600;
+          canvas.style.height = naturalH + 'px'; // restore if HGR2 shrank it
           document.getElementById('terminal-container').classList.remove('graphics-mode');
+          document.getElementById('terminal-container').classList.remove('hgr2-mode');
+          term.write('\x1b[r'); // reset scroll region if HGR2 set it
           break;
-          
-        case 'PSET':
+
+        case 'PSET': {
           const x = parseInt(parts[1]);
           const y = parseInt(parts[2]);
           const c = parseInt(parts[3]) & 15;
           ctx.fillStyle = palette[c];
           ctx.fillRect(x, y, 1, 1);
           break;
-          
-        case 'LINE':
+        }
+
+        case 'LINE': {
           const x1 = parseInt(parts[1]);
           const y1 = parseInt(parts[2]);
           const x2 = parseInt(parts[3]);
@@ -184,31 +271,34 @@
           ctx.lineTo(x2, y2);
           ctx.stroke();
           break;
-          
-        case 'RECT':
+        }
+
+        case 'RECT': {
           const rx1 = parseInt(parts[1]);
           const ry1 = parseInt(parts[2]);
           const rx2 = parseInt(parts[3]);
           const ry2 = parseInt(parts[4]);
-          const rc = parseInt(parts[5]) & 15;
+          const rc  = parseInt(parts[5]) & 15;
           ctx.fillStyle = palette[rc];
           ctx.fillRect(rx1, ry1, rx2 - rx1 + 1, ry2 - ry1 + 1);
           break;
-          
-        case 'CIRCLE':
+        }
+
+        case 'CIRCLE': {
           const cx = parseInt(parts[1]);
           const cy = parseInt(parts[2]);
-          const r = parseInt(parts[3]);
+          const r  = parseInt(parts[3]);
           const cc = parseInt(parts[4]) & 15;
           ctx.strokeStyle = palette[cc];
           ctx.beginPath();
           ctx.arc(cx, cy, r, 0, 2 * Math.PI);
           ctx.stroke();
           break;
-          
+        }
+
         case 'GCLS':
           ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, 640, 480);
+          ctx.fillRect(0, 0, 800, graphicsMode === 'hgr2' ? 480 : 600);
           break;
       }
     }
@@ -363,6 +453,16 @@
         stopAllSoundChannels();
         inputBuffer = '';
         // Exit graphics mode if active
+        if (graphicsMode === 'hgr2') {
+          canvas.height = 600;
+          canvas.style.height = naturalH + 'px';
+          term.write('\x1b[r');
+          document.getElementById('terminal-container').classList.remove('hgr2-mode');
+        } else if (graphicsMode === 'hgr') {
+          canvas.height = 600;
+          canvas.style.height = naturalH + 'px';
+        }
+        graphicsMode = 'none';
         document.getElementById('terminal-container').classList.remove('graphics-mode');
         return;
       }

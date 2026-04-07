@@ -41,6 +41,9 @@
     .modal { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:2rem; width:360px; }
     .modal h3 { margin-bottom:1.2rem; color:var(--accent); }
     .modal-actions { display:flex; gap:0.8rem; justify-content:flex-end; margin-top:0.5rem; }
+    .pw-wrap { position:relative; }
+    .pw-wrap input { padding-right:2.2rem; }
+    .pw-eye { position:absolute; right:0.5rem; top:50%; transform:translateY(-75%); background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:1rem; line-height:1; }
   </style>
 </head>
 <body>
@@ -87,7 +90,10 @@
     </div>
     <label for="new-username">Username (max 16 chars)</label><input id="new-username" type="text" maxlength="16" placeholder="JSMITH">
     <label for="new-name">Display Name</label><input id="new-name" type="text" placeholder="Jane Smith">
-    <label for="new-password">Password</label><input id="new-password" type="password">
+    <label for="new-password">Password</label>
+    <div class="pw-wrap"><input id="new-password" type="password"><button class="pw-eye" type="button" onclick="toggleEye('new-password',this)" title="Show/hide password">&#128065;</button></div>
+    <label for="new-password-confirm">Confirm Password</label>
+    <div class="pw-wrap"><input id="new-password-confirm" type="password"><button class="pw-eye" type="button" onclick="toggleEye('new-password-confirm',this)" title="Show/hide password">&#128065;</button></div>
     <div class="form-actions">
       <button class="btn-primary" onclick="createAccount()">Create Account</button>
       <div class="error-msg" id="create-error"></div>
@@ -115,6 +121,7 @@
 <script>
 let authHeader = null;
 let pwTarget = null;
+let allAccounts = [];
 
 async function doLogin() {
   const ppn = document.getElementById('login-ppn').value.trim();
@@ -148,22 +155,46 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
 async function loadAccounts() {
   const resp = await fetch('/admin/users', { headers: { Authorization: authHeader } });
   const accounts = await resp.json();
+  allAccounts = accounts;
   const tbody = document.getElementById('accounts-body');
   tbody.innerHTML = '';
   if (accounts.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">No accounts.</td></tr>';
+    prefillNextPPN();
     return;
   }
   accounts.forEach(a => {
     const ppn = a.project + ',' + a.programmer;
     const priv = (a.project === 0 || a.project === 1) ? 'Privileged' : 'User';
     const username = a.username || '';
+    const isProtected = (a.project === 0 && a.programmer === 1) || (a.project === 1 && a.programmer === 1);
+    const delBtn = isProtected ? '' : ' <button class="btn-danger btn-sm" onclick="deleteAccount(' + a.project + ',' + a.programmer + ')">Delete</button>';
     const tr = document.createElement('tr');
     tr.innerHTML = '<td class="ppn">[' + ppn + ']</td><td>' + escapeHtml(username) + '</td><td>' + escapeHtml(a.name) + '</td><td>' + priv + '</td>' +
-      '<td><button class="btn-primary btn-sm" onclick="openPwModal(' + a.project + ',' + a.programmer + ')">Change Password</button> ' +
-      '<button class="btn-danger btn-sm" onclick="deleteAccount(' + a.project + ',' + a.programmer + ')">Delete</button></td>';
+      '<td><button class="btn-primary btn-sm" onclick="openPwModal(' + a.project + ',' + a.programmer + ')">Change Password</button>' +
+      delBtn + '</td>';
     tbody.appendChild(tr);
   });
+  prefillNextPPN();
+}
+
+function prefillNextPPN() {
+  const used = new Set(allAccounts.map(a => a.project + ',' + a.programmer));
+  for (let p = 2; p <= 254; p++) {
+    for (let n = 1; n <= 255; n++) {
+      if (!used.has(p + ',' + n)) {
+        document.getElementById('new-project').value = p;
+        document.getElementById('new-programmer').value = n;
+        return;
+      }
+    }
+  }
+}
+
+function toggleEye(id, btn) {
+  const inp = document.getElementById(id);
+  if (inp.type === 'password') { inp.type = 'text'; btn.innerHTML = '&#128585;'; }
+  else { inp.type = 'password'; btn.innerHTML = '&#128065;'; }
 }
 
 async function createAccount() {
@@ -174,13 +205,27 @@ async function createAccount() {
   const username = document.getElementById('new-username').value.trim();
   const name = document.getElementById('new-name').value.trim();
   const password = document.getElementById('new-password').value;
+  const confirmPw = document.getElementById('new-password-confirm').value;
   if (!project || !programmer || !password) {
     document.getElementById('create-error').textContent = 'Project, programmer and password are required.';
+    return;
+  }
+  if (password !== confirmPw) {
+    document.getElementById('create-error').textContent = 'Passwords do not match.';
     return;
   }
   if (username.length > 16) {
     document.getElementById('create-error').textContent = 'Username must be 16 characters or fewer.';
     return;
+  }
+  if (username) {
+    const uUp = username.toUpperCase();
+    const dup = allAccounts.find(a => (a.username || '').toUpperCase() === uUp);
+    if (dup) {
+      document.getElementById('create-error').textContent =
+        'Username "' + escapeHtml(username) + '" is already used by [' + dup.project + ',' + dup.programmer + '].';
+      return;
+    }
   }
   const body = new URLSearchParams({ project, programmer, password, username, name });
   const resp = await fetch('/admin/users', {
@@ -190,11 +235,10 @@ async function createAccount() {
   });
   if (resp.ok) {
     document.getElementById('create-ok').textContent = 'Account created.';
-    document.getElementById('new-project').value = '';
-    document.getElementById('new-programmer').value = '';
     document.getElementById('new-username').value = '';
     document.getElementById('new-name').value = '';
     document.getElementById('new-password').value = '';
+    document.getElementById('new-password-confirm').value = '';
     await loadAccounts();
   } else {
     const err = await resp.json().catch(() => ({ error: resp.statusText }));

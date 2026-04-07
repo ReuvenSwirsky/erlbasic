@@ -550,8 +550,9 @@ unquote_data_item(_Other) ->
 
 parse_keyword_statement(Trimmed) ->
     case string:to_upper(Trimmed) of
-        "CLS" -> {cls};
-        "HGR" -> {hgr};
+        "CLS"  -> {cls};
+        "HGR"  -> {hgr};
+        "HGR2" -> {hgr2};
         "TEXT" -> {text};
         "TRON" -> {tron};
         "TROFF" -> {troff};
@@ -895,6 +896,8 @@ validate_statement(Stmt) ->
         {cls} ->
             ok;
         {hgr} ->
+            ok;
+        {hgr2} ->
             ok;
         {text} ->
             ok;

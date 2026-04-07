@@ -16,6 +16,6 @@
     error_line = 0,             % ERL - line number where error occurred
     open_files = #{},           % OPEN file channels (#n => file metadata)
     trace_enabled = false,      % TRON/TROFF runtime line tracing
-    graphics_mode = false,      % True when in HGR mode (WebSocket only)
+    graphics_mode = false,      % false | hgr | hgr2 — active graphics mode (WebSocket only)
     graphics_pen = undefined    % {X, Y} - last graphics endpoint (for LINETO)
 }).
