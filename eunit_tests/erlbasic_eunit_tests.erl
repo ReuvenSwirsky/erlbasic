@@ -1165,6 +1165,31 @@ open_too_many_channels_test() ->
     ?assertEqual(match, re:run(Text, "ILLEGAL FUNCTION CALL", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text, "SHOULD NOT REACH", [{capture, none}])).
 
+case_insensitive_program_filename_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    UserDir = filename:join([TempDir, "ErlUsers", "88_9"]),
+    FilePath = filename:join(UserDir, "HOME.BAS"),
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        erlang:put(erlbasic_ppn, {88, 9}),
+        {ok, _} = erlbasic_storage:ensure_user_dir(),
+        ok = file:write_file(FilePath, <<"10 PRINT \"HELLO\"\n">>),
+        ?assertMatch({ok, _}, erlbasic_storage:read_program("home.bas")),
+        ok = erlbasic_storage:delete_program("home.bas"),
+        ?assertEqual({error, enoent}, erlbasic_storage:read_program("HOME.BAS"))
+    after
+        erlang:erase(erlbasic_ppn),
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(FilePath),
+        file:del_dir(UserDir),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
 %% SLEEP with a negative value must clamp to zero and complete immediately
 %% (tests the max(0,...) half of the cap expression).
 sleep_negative_clamped_test() ->
@@ -1177,3 +1202,10 @@ sleep_negative_clamped_test() ->
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "BEFORE", [{capture, none}])),
     ?assertEqual(match, re:run(Text, "AFTER",  [{capture, none}])).
+
+restore_env(Name, false) ->
+    true = os:unsetenv(Name),
+    ok;
+restore_env(Name, Value) ->
+    true = os:putenv(Name, Value),
+    ok.

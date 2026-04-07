@@ -252,22 +252,30 @@ handle_scratch_command(State, RawName) ->
 
 load_program_file(FileName) ->
     %% 1. Try the shared examples directory first.
-    ExamplePath = filename:join(examples_program_dir(), FileName),
-    case read_program_file(ExamplePath) of
-        {ok, _} = Ok                         -> Ok;
-        {syntax_error, _, _} = E             -> E;
-        {syntax_error, _} = E                -> E;
-        syntax_error                         -> syntax_error;
-        {error, enoent} ->
-            %% 2. Fall back to the user's own storage area.
-            case erlbasic_storage:read_program(FileName) of
-                {ok, Bin} ->
-                    parse_bin_as_program(Bin);
+    case resolve_example_program_path(FileName) of
+        {ok, ExamplePath} ->
+            case read_program_file(ExamplePath) of
+                {ok, _} = Ok                         -> Ok;
+                {syntax_error, _, _} = E             -> E;
+                {syntax_error, _} = E                -> E;
+                syntax_error                         -> syntax_error;
                 {error, enoent} ->
-                    {error, program_not_found};
+                    load_user_program_file(FileName);
                 {error, Reason} ->
                     {error, Reason}
             end;
+        {error, enoent} ->
+            load_user_program_file(FileName);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+load_user_program_file(FileName) ->
+    case erlbasic_storage:read_program(FileName) of
+        {ok, Bin} ->
+            parse_bin_as_program(Bin);
+        {error, enoent} ->
+            {error, program_not_found};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -376,6 +384,31 @@ keep_safe_chars(Text) ->
     case Safe of
         [] -> "";
         _ -> Safe
+    end.
+
+resolve_example_program_path(FileName) ->
+    Dir = examples_program_dir(),
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            case pick_case_insensitive_name(FileName, Names) of
+                undefined -> {error, enoent};
+                ExistingName -> {ok, filename:join(Dir, ExistingName)}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+pick_case_insensitive_name(FileName, Names) ->
+    case lists:member(FileName, Names) of
+        true ->
+            FileName;
+        false ->
+            FoldedTarget = string:to_upper(FileName),
+            Matches = lists:sort([Name || Name <- Names, string:to_upper(Name) =:= FoldedTarget]),
+            case Matches of
+                [Match | _] -> Match;
+                [] -> undefined
+            end
     end.
 
 list_example_files_with_info() ->

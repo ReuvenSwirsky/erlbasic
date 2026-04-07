@@ -62,9 +62,8 @@ open(Name, Mode, RecLenValue) ->
         {error, _} = Err ->
             Err;
         ok ->
-            case erlbasic_storage:ensure_user_dir() of
-                {ok, UserDir} ->
-                    Path = filename:join(UserDir, Name),
+            case resolve_open_path(Name, Mode) of
+                {ok, Path} ->
                     open_local(Path, Mode, RecLenValue);
                 {error, _} ->
                     {error, illegal_function_call}
@@ -134,3 +133,8 @@ normalize_rec_len(S) when is_list(S) ->
         _                  -> 128
     end;
 normalize_rec_len(_) -> 128.
+
+resolve_open_path(Name, "INPUT") ->
+    erlbasic_storage:resolve_existing_program_path(Name);
+resolve_open_path(Name, _Mode) ->
+    erlbasic_storage:program_path_for_write(Name).

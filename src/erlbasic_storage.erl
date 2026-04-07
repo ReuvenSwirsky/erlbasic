@@ -28,6 +28,8 @@
          delete_program/1,
          check_quota_for_size/2,
          check_quota_for_growth/2,
+         resolve_existing_program_path/1,
+         program_path_for_write/1,
          user_dir/0,
          user_ppn_string/0,
          ensure_user_dir/0]).
@@ -42,9 +44,11 @@ read_program(FileName) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            file:read_file(filename:join(Dir, FileName));
+    case resolve_existing_program_path(FileName) of
+        {ok, Path} ->
+            file:read_file(Path);
+        {error, enoent} ->
+            {error, enoent};
         {error, Reason} ->
             {error, Reason}
     end
@@ -57,9 +61,8 @@ write_program(FileName, Content) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            Path = filename:join(Dir, FileName),
+    case program_path_for_write(FileName) of
+        {ok, Path} ->
             ContentBin = iolist_to_binary(Content),
             case check_quota_for_size(Path, byte_size(ContentBin)) of
                 ok ->
@@ -139,12 +142,42 @@ delete_program(FileName) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            file:delete(filename:join(Dir, FileName));
+    case resolve_existing_program_path(FileName) of
+        {ok, Path} ->
+            file:delete(Path);
+        {error, enoent} ->
+            {error, enoent};
         {error, Reason} ->
             {error, Reason}
     end
+    end.
+
+resolve_existing_program_path(FileName) ->
+    case ensure_user_dir() of
+        {ok, Dir} ->
+            case resolve_existing_name_in_dir(Dir, FileName) of
+                {ok, ExistingName} ->
+                    {ok, filename:join(Dir, ExistingName)};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+program_path_for_write(FileName) ->
+    case ensure_user_dir() of
+        {ok, Dir} ->
+            case resolve_existing_name_in_dir(Dir, FileName) of
+                {ok, ExistingName} ->
+                    {ok, filename:join(Dir, ExistingName)};
+                {error, enoent} ->
+                    {ok, filename:join(Dir, FileName)};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 %% @doc Return the filesystem path of the current user's storage directory.
@@ -273,3 +306,32 @@ path_in_user_dir(Path, UserDir) ->
     AbsDir = filename:absname(UserDir),
     Prefix = AbsDir ++ [$/],
     lists:prefix(Prefix, AbsPath) orelse AbsPath =:= AbsDir.
+
+resolve_existing_name_in_dir(Dir, FileName) ->
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            case pick_case_insensitive_name(FileName, Names) of
+                undefined -> {error, enoent};
+                ExistingName -> {ok, ExistingName}
+            end;
+        {error, enoent} ->
+            {error, enoent};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+pick_case_insensitive_name(FileName, Names) ->
+    case lists:member(FileName, Names) of
+        true ->
+            FileName;
+        false ->
+            FoldedTarget = filename_key(FileName),
+            Matches = lists:sort([Name || Name <- Names, filename_key(Name) =:= FoldedTarget]),
+            case Matches of
+                [Match | _] -> Match;
+                [] -> undefined
+            end
+    end.
+
+filename_key(Name) ->
+    string:to_upper(Name).
