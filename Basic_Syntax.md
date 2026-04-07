@@ -513,6 +513,97 @@ Notes:
 - `TROFF` turns trace mode off.
 - Works in immediate mode and in stored programs.
 
+### DBLBUFF
+
+Enables or disables double-buffer mode for WebSocket sessions.
+
+```text
+DLBUFF ON
+DLBUFF OFF
+```
+
+Notes:
+- In double-buffer mode, graphics drawing commands (`PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`) are accumulated in the server's output buffer instead of being sent as individual WebSocket frames.
+- Mode-change commands (`HGR`, `HGR2`, `TEXT`, `GCLS`) and query commands (`PGET`, `GETCHAR`) still flush immediately.
+- The periodic automatic flush (every 100 program lines) is suppressed while double-buffer is on.
+- Use `FLUSH` to send the accumulated buffer to the browser at the desired sync point (e.g. once per animation frame or once per generation).
+- `DBLBUFF ON` raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
+- `DBLBUFF OFF` is always safe to call; it also re-enables the automatic flushing.
+
+### FLUSH
+
+Forces an immediate flush of the accumulated output buffer to the browser.
+
+```text
+FLUSH
+```
+
+Notes:
+- Useful in double-buffer mode to control exactly when accumulated graphics output is sent.
+- In normal (non-buffered) mode, `FLUSH` is a no-op because output is already sent incrementally.
+- In immediate mode, `FLUSH` is also a no-op.
+
+Typical usage with `DBLBUFF`:
+
+```text
+10 DBLBUFF ON
+20 HGR
+30 FOR I = 0 TO 799
+40   PSET (I, 300), 10
+50 NEXT I
+60 FLUSH
+70 TEXT
+80 DBLBUFF OFF
+```
+
+### PGET
+
+Reads the palette index of a single pixel from the graphics canvas.
+
+```text
+PGET (X, Y), VAR
+```
+
+Notes:
+- Assigns the EGA palette index (`0..15`) of the pixel at `(X, Y)` to `VAR`.
+- Returns `-1` if the pixel colour does not exactly match any palette entry.
+- Valid only in graphics mode (`HGR` or `HGR2`); raises `?NO GRAPHICS MODE` otherwise.
+- In `HGR` mode, `Y` must be in `0..599`. In `HGR2` mode, `Y` must be in `0..479`.
+- Out-of-range coordinates raise `?ILLEGAL FUNCTION CALL`.
+- WebSocket only; raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
+- Execution suspends briefly while the browser reads the canvas pixel and responds.
+
+```text
+100 HGR
+110 PSET (100, 100), 14
+120 PGET (100, 100), C
+130 PRINT C          ' prints 14
+```
+
+### GETCHAR
+
+Reads the character displayed at a terminal cell.
+
+```text
+GETCHAR ROW, COL, VAR$
+```
+
+Notes:
+- Assigns the character at terminal position `(ROW, COL)` to `VAR$` as a one-character string.
+- Returns `""` (empty string) for cells that have not been written or contain code-point `0`.
+- In text mode, `ROW` must be `1..25` and `COL` must be `1..80`.
+- In `HGR2` mode, only the text rows `22..25` are accessible (`ROW` must be `22..25`).
+- Not valid in full `HGR` mode (no visible text rows); raises `?ILLEGAL FUNCTION CALL`.
+- WebSocket only; raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
+- Execution suspends briefly while the browser reads the xterm buffer and responds.
+
+```text
+10 LOCATE 5, 10
+20 PRINT "A"
+30 GETCHAR 5, 10, C$
+40 PRINT C$           ' prints A
+```
+
 ### END
 
 Stops execution of a running stored program.

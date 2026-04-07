@@ -136,6 +136,7 @@ See [Basic_Syntax.md](Basic_Syntax.md) for full syntax documentation.
 - [examples/enterprise.bas](examples/enterprise.bas) — Animated starship using `LOCATE`, `COLOR`, `SLEEP`, `TIMER`
 - [examples/graphics.bas](examples/graphics.bas) — Graphics demo: `HGR`, `PSET`, `LINE`, `RECT`, `CIRCLE` (WebSocket only)
 - [examples/hgr2demo.bas](examples/hgr2demo.bas) — Split-screen demo: `HGR2` 800×480 graphics above 4 text rows (WebSocket only)
+- [examples/dblbuff_demo.bas](examples/dblbuff_demo.bas) — Double-buffer demo: `DBLBUFF`, `FLUSH`, `PGET`, `GETCHAR` (WebSocket only)
 - [examples/life.bas](examples/life.bas) — Graphics-mode Conway's Life
 - [examples/asciilife.bas](examples/asciilife.bas) — Text-mode Conway's Life using `#` for occupied cells
 - [examples/file_io.bas](examples/file_io.bas) — Sequential and random file I/O demo
