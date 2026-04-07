@@ -7,8 +7,7 @@
          eval_color/4, render_print_using_items/5,
          hgr_output/0, text_output/0,
          eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
-         eval_sound/6,
-         eval_file_open_args/5, eval_file_close_channels/4, eval_channel_record/4]).
+         eval_sound/6]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
 
@@ -372,7 +371,7 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                     handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {file_open, PathExpr, Mode, ChannelExpr, RecLenExpr} ->
-            case eval_file_open_args(PathExpr, ChannelExpr, RecLenExpr, State#state.vars, State#state.funcs) of
+            case erlbasic_fileio:eval_file_open_args(PathExpr, ChannelExpr, RecLenExpr, State#state.vars, State#state.funcs) of
                 {ok, PathValue, ChannelValue, RecLenValue, Vars1} ->
                     case erlbasic_fileio:open_file(PathValue, Mode, ChannelValue, RecLenValue, Vars1, State#state{vars = Vars1}) of
                         {ok, Vars2, NextState} ->
@@ -389,7 +388,7 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                 {error, Reason, ErrState} -> handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
             end;
         {file_close, ChannelExprs} ->
-            case eval_file_close_channels(ChannelExprs, State#state.vars, State#state.funcs, []) of
+            case erlbasic_fileio:eval_file_close_channels(ChannelExprs, State#state.vars, State#state.funcs, []) of
                 {ok, Channels, Vars1} ->
                     case erlbasic_fileio:close_file(Channels, State#state{vars = Vars1}) of
                         {ok, NextState} -> {continue, NextState#state{vars = Vars1}, LoopStack, CallStack, []};
@@ -459,7 +458,7 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                     handle_runtime_error(Reason, LineNumber, State#state{vars = Vars1}, Pc, LoopStack, CallStack)
             end;
         {file_put_record, ChannelExpr, RecordExpr} ->
-            case eval_channel_record(ChannelExpr, RecordExpr, State#state.vars, State#state.funcs) of
+            case erlbasic_fileio:eval_channel_record(ChannelExpr, RecordExpr, State#state.vars, State#state.funcs) of
                 {ok, ChannelValue, RecordValue, Vars1} ->
                     case erlbasic_fileio:put_record(ChannelValue, RecordValue, Vars1, State#state.funcs, State#state{vars = Vars1}) of
                         {ok, Vars2, NextState} ->
@@ -471,7 +470,7 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                     handle_runtime_error(Reason, LineNumber, State#state{vars = Vars1}, Pc, LoopStack, CallStack)
             end;
         {file_get_record, ChannelExpr, RecordExpr} ->
-            case eval_channel_record(ChannelExpr, RecordExpr, State#state.vars, State#state.funcs) of
+            case erlbasic_fileio:eval_channel_record(ChannelExpr, RecordExpr, State#state.vars, State#state.funcs) of
                 {ok, ChannelValue, RecordValue, Vars1} ->
                     case erlbasic_fileio:get_record(ChannelValue, RecordValue, Vars1, State#state.funcs, State#state{vars = Vars1}, State#state.print_col) of
                         {ok, Vars2, NextState} ->
@@ -946,54 +945,6 @@ eval_dim_values([Expr | Rest], Vars, Funcs, Acc) ->
             eval_dim_values(Rest, Vars, Funcs, [erlbasic_eval:normalize_int(Value) | Acc]);
         {error, Reason, _} ->
             {error, Reason}
-    end.
-
-eval_file_open_args(PathExpr, ChannelExpr, undefined, Vars, Funcs) ->
-    case erlbasic_eval:eval_expr_result(PathExpr, Vars, Funcs) of
-        {ok, PathValue, Vars1} ->
-            case erlbasic_eval:eval_expr_result(ChannelExpr, Vars1, Funcs) of
-                {ok, ChannelValue, Vars2} -> {ok, PathValue, ChannelValue, undefined, Vars2};
-                {error, Reason, Vars2} -> {error, Reason, Vars2}
-            end;
-        {error, Reason, Vars1} ->
-            {error, Reason, Vars1}
-    end;
-eval_file_open_args(PathExpr, ChannelExpr, RecLenExpr, Vars, Funcs) ->
-    case erlbasic_eval:eval_expr_result(PathExpr, Vars, Funcs) of
-        {ok, PathValue, Vars1} ->
-            case erlbasic_eval:eval_expr_result(ChannelExpr, Vars1, Funcs) of
-                {ok, ChannelValue, Vars2} ->
-                    case erlbasic_eval:eval_expr_result(RecLenExpr, Vars2, Funcs) of
-                        {ok, RecLenValue, Vars3} -> {ok, PathValue, ChannelValue, RecLenValue, Vars3};
-                        {error, Reason, Vars3} -> {error, Reason, Vars3}
-                    end;
-                {error, Reason, Vars2} -> {error, Reason, Vars2}
-            end;
-        {error, Reason, Vars1} ->
-            {error, Reason, Vars1}
-    end.
-
-eval_file_close_channels([], Vars, _Funcs, Acc) ->
-    {ok, lists:reverse(Acc), Vars};
-eval_file_close_channels([Expr | Rest], Vars, Funcs, Acc) ->
-    case erlbasic_eval:eval_expr_result(Expr, Vars, Funcs) of
-        {ok, ChannelValue, Vars1} ->
-            eval_file_close_channels(Rest, Vars1, Funcs, [ChannelValue | Acc]);
-        {error, Reason, Vars1} ->
-            {error, Reason, Vars1}
-    end.
-
-eval_channel_record(ChannelExpr, RecordExpr, Vars, Funcs) ->
-    case erlbasic_eval:eval_expr_result(ChannelExpr, Vars, Funcs) of
-        {ok, ChannelValue, Vars1} ->
-            case erlbasic_eval:eval_expr_result(RecordExpr, Vars1, Funcs) of
-                {ok, RecordValue, Vars2} ->
-                    {ok, ChannelValue, RecordValue, Vars2};
-                {error, Reason, Vars2} ->
-                    {error, Reason, Vars2}
-            end;
-        {error, Reason, Vars1} ->
-            {error, Reason, Vars1}
     end.
 
 handle_next_statement(_MaybeVar, Program, _State, Pc, [], _CallStack) ->

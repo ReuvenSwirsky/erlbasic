@@ -4,8 +4,12 @@
 main([RepoRoot]) ->
     code:add_pathz(filename:join([RepoRoot, "_build", "default", "lib", "erlbasic", "ebin"])),
     code:add_pathz(filename:join([RepoRoot, "_build", "default", "lib", "cowboy", "ebin"])),
-    {ok, _LifeMs} = run_case(RepoRoot, "examples/life.bas", 15000),
-    {ok, _AsciiLifeMs} = run_case(RepoRoot, "examples/asciilife.bas", 30000),
+    {ok, LifeMs}      = run_case(RepoRoot, "examples/life.bas",      15000),
+    {ok, AsciiLifeMs} = run_case(RepoRoot, "examples/asciilife.bas", 30000),
+    HistoryFile = filename:join([RepoRoot, "perf_tests", "perf_runner_history.txt"]),
+    show_history_comparison(HistoryFile, LifeMs, AsciiLifeMs),
+    GitSha = string:trim(os:cmd("git -C " ++ RepoRoot ++ " rev-parse --short HEAD")),
+    save_history(HistoryFile, GitSha, LifeMs, AsciiLifeMs),
     io:format("Performance tests passed.~n"),
     ok;
 main(_) ->
@@ -87,6 +91,37 @@ env_name_for_case("asciilife.bas") ->
     "ERLBASIC_PERF_MAX_ASCIILIFE_MS";
 env_name_for_case(_Other) ->
     "ERLBASIC_PERF_MAX_MS".
+
+load_history(HistoryFile) ->
+    case file:consult(HistoryFile) of
+        {ok, Terms} -> Terms;
+        _ -> []
+    end.
+
+save_history(HistoryFile, GitSha, LifeMs, AsciiLifeMs) ->
+    {Date, Time} = calendar:local_time(),
+    UnixSecs = calendar:datetime_to_gregorian_seconds({Date, Time})
+              - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}),
+    Record = io_lib:format("{~B, ~p, ~B, ~B}.~n",
+                           [UnixSecs, GitSha, LifeMs, AsciiLifeMs]),
+    file:write_file(HistoryFile, Record, [append]).
+
+show_history_comparison(HistoryFile, LifeMs, AsciiLifeMs) ->
+    case load_history(HistoryFile) of
+        [] ->
+            io:format("History: no previous results recorded~n");
+        History ->
+            {_Ts, PrevSha, PrevLife, PrevAscii} = lists:last(History),
+            DeltaLife  = LifeMs  - PrevLife,
+            DeltaAscii = AsciiLifeMs - PrevAscii,
+            io:format("Vs previous (~s): life.bas ~s~B ms  asciilife.bas ~s~B ms~n",
+                      [PrevSha,
+                       sign(DeltaLife),  abs(DeltaLife),
+                       sign(DeltaAscii), abs(DeltaAscii)])
+    end.
+
+sign(N) when N >= 0 -> "+";
+sign(_)             -> "-".
 
 tune_program("life.bas", Lines) ->
     [
