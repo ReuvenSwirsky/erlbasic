@@ -237,6 +237,22 @@ Notes:
 - On telnet/TCP sessions, `HGR` is silently ignored.
 - The graphics canvas is cleared to black when entering graphics mode.
 
+### HGR2
+
+Enters split-screen graphics mode: 800×480 graphics canvas overlaying the top 21 terminal rows, with the bottom 4 rows remaining as a scrollable text area.
+
+```text
+HGR2
+```
+
+Notes:
+- On WebSocket sessions, displays an 800×480 canvas above rows 22–25 of the terminal.
+- The scroll region is restricted to rows 22–25; `PRINT` and `LOCATE` output goes there.
+- `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, and `GCLS` all work in HGR2 mode; y coordinates range from 0 to 479.
+- `TEXT` restores full-screen text mode and resets the scroll region.
+- On telnet/TCP sessions, `HGR2` is silently ignored.
+- See `examples/hgr2demo.bas` for a complete split-screen demo.
+
 ### TEXT
 
 Returns to text mode from graphics mode.
