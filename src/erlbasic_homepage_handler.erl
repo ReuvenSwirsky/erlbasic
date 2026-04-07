@@ -1,6 +1,8 @@
 -module(erlbasic_homepage_handler).
 -export([init/2]).
 
+-include("erlbasic_state.hrl").
+
 init(Req, State) ->
     case cowboy_req:method(Req) of
         <<"GET">> ->
@@ -63,7 +65,7 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     UsernameText = escape_html(to_text(Username)),
     NameText = escape_html(to_text(Name)),
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
-    BasText = escape_html(binary_to_list(HomeBas)),
+    OutputHtml = escape_html(execute_home_bas(HomeBas)),
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -73,14 +75,51 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
         ".card{background:#ffffffdd;border:1px solid #cbd5e1;border-radius:16px;padding:24px;box-shadow:0 10px 30px #64748b33}",
         "h1{margin:0 0 8px 0;font-size:2rem;color:#0f172a}",
         ".meta{color:#334155;margin-bottom:18px}",
-        "pre{background:#0b1220;color:#dbeafe;border-radius:12px;padding:16px;overflow:auto;line-height:1.4}",
+        "pre{background:#0b1220;color:#dbeafe;border-radius:12px;padding:16px;overflow:auto;line-height:1.4;white-space:pre-wrap}",
         "</style></head><body><div class=\"wrap\"><div class=\"card\">",
         "<h1>", UsernameText, "</h1>",
         "<div class=\"meta\">", NameText, " - ", io_lib:format("~s", [PpnText]), "</div>",
-        "<p>This page is generated from <strong>home.bas</strong>. BASIC-to-HTML rendering is active in preview mode.</p>",
-        "<pre>", BasText, "</pre>",
+        "<pre>", OutputHtml, "</pre>",
         "</div></div></body></html>"
     ]).
+
+execute_home_bas(HomeBas) ->
+    case erlbasic_commands:parse_bin_as_program(HomeBas) of
+        {ok, Program} ->
+            State = #state{prog = Program},
+            Self = self(),
+            Pid = spawn(fun() ->
+                {_RanState, Output} = erlbasic_runtime:run_program(State),
+                Self ! {bas_output, collect_text_output(Output)}
+            end),
+            receive
+                {bas_output, Text} -> Text
+            after 5000 ->
+                exit(Pid, kill),
+                ""
+            end;
+        _ ->
+            ""
+    end.
+
+collect_text_output(Output) ->
+    Parts = lists:filtermap(fun(Part) ->
+        Bin = try iolist_to_binary(Part) catch _:_ -> <<>> end,
+        case Bin of
+            <<2, _/binary>> -> false;
+            _ -> {true, binary_to_list(Bin)}
+        end
+    end, Output),
+    Text = lists:concat(Parts),
+    Stripped = [C || C <- Text, C =/= $\r],
+    strip_program_ended_suffix(Stripped).
+
+strip_program_ended_suffix(Text) ->
+    Suffix = "Program ended\n",
+    case lists:suffix(Suffix, Text) of
+        true -> lists:sublist(Text, length(Text) - length(Suffix));
+        false -> Text
+    end.
 
 default_homepage(Username, _Name, Project, Programmer) ->
     UsernameText = escape_html(to_text(Username)),
