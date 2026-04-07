@@ -5,6 +5,7 @@
 start(_Type, _Args) ->
     ok = erlbasic_limits:init(),
     ok = erlbasic_accounts:init(),
+    ok = erlbasic_homepage_handler:init_cache(),
     erlbasic_sup:start_link().
 
 stop(_State) ->

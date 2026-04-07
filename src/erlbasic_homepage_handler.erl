@@ -1,5 +1,5 @@
 -module(erlbasic_homepage_handler).
--export([init/2]).
+-export([init/2, init_cache/0]).
 
 -include("erlbasic_state.hrl").
 
@@ -65,7 +65,9 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     UsernameText = escape_html(to_text(Username)),
     NameText = escape_html(to_text(Name)),
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
-    OutputHtml = escape_html(execute_home_bas(HomeBas)),
+    CacheKey = {Project, Programmer},
+    FileHash = crypto:hash(sha256, HomeBas),
+    OutputHtml = escape_html(execute_home_bas(CacheKey, FileHash, HomeBas)),
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -83,7 +85,27 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
         "</div></div></body></html>"
     ]).
 
-execute_home_bas(HomeBas) ->
+init_cache() ->
+    case ets:info(erlbasic_home_cache) of
+        undefined ->
+            ets:new(erlbasic_home_cache, [named_table, public, set]),
+            ok;
+        _ ->
+            ok
+    end.
+
+execute_home_bas(CacheKey, FileHash, HomeBas) ->
+    case cache_lookup(CacheKey, FileHash) of
+        {hit, CachedOutput} ->
+            CachedOutput;
+        miss ->
+            TTL = detect_dynamic(HomeBas),
+            Output = run_home_bas(HomeBas),
+            cache_store(CacheKey, FileHash, Output, TTL),
+            Output
+    end.
+
+run_home_bas(HomeBas) ->
     case erlbasic_commands:parse_bin_as_program(HomeBas) of
         {ok, Program} ->
             State = #state{prog = Program},
@@ -101,6 +123,55 @@ execute_home_bas(HomeBas) ->
         _ ->
             ""
     end.
+
+%% Detect whether HOME.BAS uses dynamic keywords that affect caching.
+%% Returns: never (volatile - don't cache), or an integer TTL in seconds,
+%%          or the atom 'infinity' (cache until the file changes).
+detect_dynamic(HomeBas) ->
+    Upper = string:to_upper(binary_to_list(HomeBas)),
+    HasVolatile = lists:any(
+        fun(Kw) -> string:find(Upper, Kw) =/= nomatch end,
+        ["INPUT", "INKEY$", "GETKEY", "RND", "RANDOMIZE"]),
+    HasTimed = lists:any(
+        fun(Kw) -> string:find(Upper, Kw) =/= nomatch end,
+        ["TIME$", "TIMER"]),
+    HasDate = string:find(Upper, "DATE$") =/= nomatch,
+    if
+        HasVolatile -> never;
+        HasTimed    -> 30;
+        HasDate     -> 3600;
+        true        -> infinity
+    end.
+
+cache_lookup(Key, FileHash) ->
+    try ets:lookup(erlbasic_home_cache, Key) of
+        [{Key, FileHash, Output, CachedAt, TTL}] ->
+            case TTL of
+                infinity ->
+                    {hit, Output};
+                _ ->
+                    Now = erlang:system_time(second),
+                    case Now - CachedAt =< TTL of
+                        true  -> {hit, Output};
+                        false -> miss
+                    end
+            end;
+        _ ->
+            miss
+    catch
+        _:_ -> miss
+    end.
+
+cache_store(_Key, _FileHash, _Output, never) ->
+    ok;
+cache_store(Key, FileHash, Output, TTL) ->
+    Now = erlang:system_time(second),
+    try
+        ets:insert(erlbasic_home_cache, {Key, FileHash, Output, Now, TTL})
+    catch
+        _:_ -> ok
+    end,
+    ok.
 
 collect_text_output(Output) ->
     Parts = lists:filtermap(fun(Part) ->
