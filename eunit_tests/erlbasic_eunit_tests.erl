@@ -324,6 +324,9 @@ accounts_test() ->
         acc_nonexistent_account(Dir),
         acc_password_case_insensitive(Dir),
         acc_list_accounts(Dir),
+        acc_find_by_username(Dir),
+        acc_reject_reserved_username(Dir),
+        acc_reject_duplicate_username(Dir),
         acc_delete_account(Dir),
         acc_change_password(Dir),
         acc_change_password_not_found(Dir),
@@ -386,9 +389,22 @@ acc_list_accounts(_Dir) ->
     ok = erlbasic_accounts:create_account(5, 1, "PW", "Alice"),
     ok = erlbasic_accounts:create_account(5, 2, "PW", "Bob"),
     {ok, List} = erlbasic_accounts:list_accounts(),
-    PPNs = [PPN || {PPN, _} <- List],
+    PPNs = [PPN || {PPN, _, _} <- List],
     ?assert(lists:member({5, 1}, PPNs)),
     ?assert(lists:member({5, 2}, PPNs)).
+
+acc_find_by_username(_Dir) ->
+    ok = erlbasic_accounts:create_account(5, 10, "PW", "Lookup User", "lookup1"),
+    ?assertMatch({ok, {5, 10, _, _}}, erlbasic_accounts:find_by_username("LOOKUP1")).
+
+acc_reject_reserved_username(_Dir) ->
+    ?assertEqual({error, reserved_username},
+                 erlbasic_accounts:create_account(7, 1, "PW", "Bad", "sysadmin")).
+
+acc_reject_duplicate_username(_Dir) ->
+    ok = erlbasic_accounts:create_account(7, 2, "PW", "One", "dupeuser"),
+    ?assertEqual({error, username_taken},
+                 erlbasic_accounts:create_account(7, 3, "PW", "Two", "DUPEUSER")).
 
 acc_delete_account(_Dir) ->
     ok = erlbasic_accounts:create_account(20, 1, "PW", "Temp"),

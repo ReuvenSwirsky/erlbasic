@@ -14,19 +14,24 @@
 
 -export([init/0,
          create_account/4,
+         create_account/5,
          authenticate/3,
          list_accounts/0,
+         find_by_username/1,
          delete_account/2,
          change_password/3,
          is_privileged/2,
          parse_credentials/1]).
 
 -record(account, {
-    ppn,    %% {Project :: 0..254, Programmer :: 0..254}  - primary key
-    salt,   %% binary() - random 16-byte PBKDF2 salt
-    hash,   %% binary() - 32-byte PBKDF2-SHA256 derived key
-    name    %% binary() - display name
+    ppn,       %% {Project :: 0..254, Programmer :: 0..254}  - primary key
+    salt,      %% binary() - random 16-byte PBKDF2 salt
+    hash,      %% binary() - 32-byte PBKDF2-SHA256 derived key
+    name,      %% binary() - display name
+    username   %% binary() - optional login/display username (max 16 chars)
 }).
+
+-define(MAX_USERNAME_LEN, 16).
 
 -define(PBKDF2_ITERS, 100000).
 -define(PBKDF2_LEN,   32).       %% 256-bit key
@@ -43,25 +48,38 @@ init() ->
     ok = filelib:ensure_dir(filename:join([DataDir, "x"])),
     File = filename:join(DataDir, "accounts.dets"),
     {ok, _} = dets:open_file(?TABLE, [{file, File}, {type, set}, {keypos, 2}]),
+    ok = migrate_accounts_schema(),
     load_credentials().
 
 %% @doc Create (or overwrite) an account.  Password is uppercased before hashing.
 create_account(Project, Programmer, Password, Name) ->
-    {Salt, Hash} = hash_password(upcase_bin(Password)),
-    Rec = #account{
-        ppn  = {Project, Programmer},
-        salt = Salt,
-        hash = Hash,
-        name = to_bin(Name)
-    },
-    dets:insert(?TABLE, Rec).
+    create_account(Project, Programmer, Password, Name, <<>>).
+
+%% @doc Create (or overwrite) an account with username metadata.
+create_account(Project, Programmer, Password, Name, Username) ->
+    UsernameBin = normalize_username(Username),
+    case validate_username_for_create(Project, Programmer, UsernameBin) of
+        ok ->
+            {Salt, Hash} = hash_password(upcase_bin(Password)),
+            Rec = #account{
+                ppn  = {Project, Programmer},
+                salt = Salt,
+                hash = Hash,
+                name = to_bin(Name),
+                username = UsernameBin
+            },
+            dets:insert(?TABLE, Rec);
+        {error, _} = Err ->
+            Err
+    end.
 
 %% @doc Authenticate a user.  Password is uppercased before comparison.
 %%      Returns {ok, Name} or {error, bad_credentials}.
 authenticate(Project, Programmer, Password) ->
     PwBin = upcase_bin(Password),
     case dets:lookup(?TABLE, {Project, Programmer}) of
-        [#account{salt = Salt, hash = Hash, name = Name}] ->
+        [RawRec] ->
+            #account{salt = Salt, hash = Hash, name = Name} = normalize_account(RawRec),
             case verify_password(PwBin, Salt, Hash) of
                 true  -> {ok, Name};
                 false -> {error, bad_credentials}
@@ -72,15 +90,48 @@ authenticate(Project, Programmer, Password) ->
             {error, Reason}
     end.
 
-%% @doc Return a sorted list of {PPN, Name} tuples.
+%% @doc Return a sorted list of {PPN, Name, Username} tuples.
 list_accounts() ->
     Result = dets:foldl(
-        fun(#account{ppn = PPN, name = Name}, Acc) -> [{PPN, Name} | Acc] end,
+        fun(RawRec, Acc) ->
+            #account{ppn = PPN, name = Name, username = Username} = normalize_account(RawRec),
+            [{PPN, Name, Username} | Acc]
+        end,
         [],
         ?TABLE),
     case Result of
         {error, Reason} -> {error, Reason};
         List            -> {ok, lists:sort(List)}
+    end.
+
+%% @doc Find an account by username (case-insensitive).
+%%      Returns {ok, {Project, Programmer, Name, Username}} or {error, not_found}.
+find_by_username(Username) ->
+    Norm = username_key(normalize_username(Username)),
+    case Norm of
+        <<>> ->
+            {error, not_found};
+        _ ->
+            Result = dets:foldl(
+                fun(RawRec, Acc) ->
+                    case Acc of
+                        {ok, _} ->
+                            Acc;
+                        not_found ->
+                            #account{ppn = {P, N}, name = Name, username = StoredUsername} = normalize_account(RawRec),
+                            case username_key(StoredUsername) of
+                                Norm -> {ok, {P, N, Name, StoredUsername}};
+                                _ -> not_found
+                            end
+                    end
+                end,
+                not_found,
+                ?TABLE),
+            case Result of
+                {ok, _} = Ok -> Ok;
+                not_found -> {error, not_found};
+                {error, Reason} -> {error, Reason}
+            end
     end.
 
 %% @doc Delete the account identified by [Project, Programmer].
@@ -90,8 +141,9 @@ delete_account(Project, Programmer) ->
 %% @doc Replace the password for an existing account.
 change_password(Project, Programmer, NewPassword) ->
     case dets:lookup(?TABLE, {Project, Programmer}) of
-        [Rec] ->
+        [RawRec] ->
             {Salt, Hash} = hash_password(upcase_bin(NewPassword)),
+            Rec = normalize_account(RawRec),
             dets:insert(?TABLE, Rec#account{salt = Salt, hash = Hash});
         [] ->
             {error, not_found};
@@ -202,8 +254,73 @@ parse_name_from_rest(Rest, P, N) ->
 
 seed_default_accounts() ->
     %% [0,1] - system account  |  [1,1] - first admin
-    ok = create_account(0, 1, <<"SYSTEM">>, <<"System Account">>),
-    ok = create_account(1, 1, <<"SYSTEM">>, <<"System Manager">>).
+    ok = create_account(0, 1, <<"SYSTEM">>, <<"System Account">>, <<"">>),
+    ok = create_account(1, 1, <<"SYSTEM">>, <<"System Manager">>, <<"">>).
+
+migrate_accounts_schema() ->
+    Result = dets:foldl(
+        fun(RawRec, Count) ->
+            case RawRec of
+                #account{} ->
+                    Count;
+                {account, PPN, Salt, Hash, Name} ->
+                    NewRec = #account{ppn = PPN, salt = Salt, hash = Hash, name = Name, username = <<>>},
+                    ok = dets:insert(?TABLE, NewRec),
+                    Count + 1;
+                _ ->
+                    Count
+            end
+        end,
+        0,
+        ?TABLE),
+    case Result of
+        {error, Reason} -> {error, Reason};
+        _ -> ok
+    end.
+
+normalize_account(#account{} = Rec) ->
+    Rec;
+normalize_account({account, PPN, Salt, Hash, Name}) ->
+    #account{ppn = PPN, salt = Salt, hash = Hash, name = Name, username = <<>>}.
+
+normalize_username(Username) ->
+    UsernameBin = to_bin(Username),
+    Trimmed = list_to_binary(string:trim(binary_to_list(UsernameBin))),
+    case byte_size(Trimmed) =< ?MAX_USERNAME_LEN of
+        true -> Trimmed;
+        false -> binary:part(Trimmed, 0, ?MAX_USERNAME_LEN)
+    end.
+
+validate_username_for_create(_Project, _Programmer, <<>>) ->
+    ok;
+validate_username_for_create(Project, Programmer, UsernameBin) ->
+    case is_reserved_username(UsernameBin) of
+        true ->
+            {error, reserved_username};
+        false ->
+            case find_by_username(UsernameBin) of
+                {ok, {Project, Programmer, _Name, _Stored}} -> ok;
+                {ok, _Other} -> {error, username_taken};
+                {error, not_found} -> ok;
+                {error, Reason} -> {error, Reason}
+            end
+    end.
+
+username_key(Bin) when is_binary(Bin) ->
+    list_to_binary(string:to_lower(binary_to_list(Bin))).
+
+is_reserved_username(UsernameBin) ->
+    Key = username_key(UsernameBin),
+    case Key of
+        <<>> -> false;
+        _ ->
+            Tokens = [
+                <<"admin">>, <<"administrator">>, <<"sysadmin">>, <<"system">>,
+                <<"sysop">>, <<"operator">>, <<"root">>, <<"superuser">>,
+                <<"supervisor">>, <<"owner">>, <<"service">>
+            ],
+            lists:any(fun(Token) -> binary:match(Key, Token) =/= nomatch end, Tokens)
+    end.
 
 hash_password(PwBin) ->
     Salt = crypto:strong_rand_bytes(16),

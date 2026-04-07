@@ -162,17 +162,28 @@ handle_api(<<"POST">>, [], Req0, State) ->
     NBin = proplists:get_value(<<"programmer">>, Body, <<>>),
     Pw   = proplists:get_value(<<"password">>,   Body, <<>>),
     Name = proplists:get_value(<<"name">>,        Body, <<>>),
+    Username = proplists:get_value(<<"username">>, Body, <<>>),
     case {safe_int(PBin), safe_int(NBin), Pw} of
         {{ok, P}, {ok, N}, Pw} when byte_size(Pw) > 0 ->
             validate_ppn_range(P, N, fun() ->
-                case erlbasic_accounts:create_account(P, N, Pw, Name) of
-                    ok ->
-                        reply_json(201, <<"{\"status\":\"created\"}">>, Req, State);
-                    {error, Reason} ->
-                        ErrMsg = iolist_to_binary(
-                            io_lib:format("{\"error\":\"~p\"}", [Reason])),
-                        reply_json(500, ErrMsg, Req, State)
-                end
+                validate_username(Username, fun(ValidUsername) ->
+                    case erlbasic_accounts:create_account(P, N, Pw, Name, ValidUsername) of
+                        ok ->
+                            reply_json(201, <<"{\"status\":\"created\"}">>, Req, State);
+                        {error, reserved_username} ->
+                            reply_json(400,
+                                <<"{\"error\":\"username is reserved\"}">>,
+                                Req, State);
+                        {error, username_taken} ->
+                            reply_json(400,
+                                <<"{\"error\":\"username is already in use\"}">>,
+                                Req, State);
+                        {error, Reason} ->
+                            ErrMsg = iolist_to_binary(
+                                io_lib:format("{\"error\":\"~p\"}", [Reason])),
+                            reply_json(500, ErrMsg, Req, State)
+                    end
+                end, Req, State)
             end, Req, State);
         _ ->
             reply_json(400,
@@ -436,11 +447,21 @@ validate_ppn_range(_, _, _, Req, State) ->
         <<"{\"error\":\"project and programmer must be 0..254\"}">>,
         Req, State).
 
+validate_username(UsernameBin, Fun, Req, State) ->
+    Trimmed = string:trim(UsernameBin),
+    case byte_size(Trimmed) =< 16 of
+        true -> Fun(Trimmed);
+        false ->
+            reply_json(400,
+                <<"{\"error\":\"username must be 16 characters or fewer\"}">>,
+                Req, State)
+    end.
+
 accounts_to_json(Accounts) ->
-    Items = lists:map(fun({{P, N}, Name}) ->
+    Items = lists:map(fun({{P, N}, Name, Username}) ->
         iolist_to_binary(io_lib:format(
-            "{\"project\":~w,\"programmer\":~w,\"name\":\"~s\"}",
-            [P, N, escape_json(binary_to_list(Name))]))
+            "{\"project\":~w,\"programmer\":~w,\"name\":\"~s\",\"username\":\"~s\"}",
+            [P, N, escape_json(binary_to_list(Name)), escape_json(binary_to_list(Username))]))
     end, Accounts),
     iolist_to_binary(["[", lists:join(",", Items), "]"]).
 

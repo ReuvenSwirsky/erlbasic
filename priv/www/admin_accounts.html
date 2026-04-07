@@ -74,8 +74,8 @@
   <div class="card">
     <h2>User Accounts</h2>
     <table>
-      <thead><tr><th>PPN</th><th>Name</th><th>Privilege</th><th>Actions</th></tr></thead>
-      <tbody id="accounts-body"><tr><td colspan="4" style="color:var(--muted)">Loading...</td></tr></tbody>
+      <thead><tr><th>PPN</th><th>Username</th><th>Name</th><th>Privilege</th><th>Actions</th></tr></thead>
+      <tbody id="accounts-body"><tr><td colspan="5" style="color:var(--muted)">Loading...</td></tr></tbody>
     </table>
   </div>
 
@@ -85,6 +85,7 @@
       <div><label for="new-project">Project (0-254)</label><input id="new-project" type="number" min="0" max="254" placeholder="2"></div>
       <div><label for="new-programmer">Programmer (0-254)</label><input id="new-programmer" type="number" min="0" max="254" placeholder="1"></div>
     </div>
+    <label for="new-username">Username (max 16 chars)</label><input id="new-username" type="text" maxlength="16" placeholder="JSMITH">
     <label for="new-name">Display Name</label><input id="new-name" type="text" placeholder="Jane Smith">
     <label for="new-password">Password</label><input id="new-password" type="password">
     <div class="form-actions">
@@ -150,14 +151,15 @@ async function loadAccounts() {
   const tbody = document.getElementById('accounts-body');
   tbody.innerHTML = '';
   if (accounts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted)">No accounts.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">No accounts.</td></tr>';
     return;
   }
   accounts.forEach(a => {
     const ppn = a.project + ',' + a.programmer;
     const priv = (a.project === 0 || a.project === 1) ? 'Privileged' : 'User';
+    const username = a.username || '';
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td class="ppn">[' + ppn + ']</td><td>' + escapeHtml(a.name) + '</td><td>' + priv + '</td>' +
+    tr.innerHTML = '<td class="ppn">[' + ppn + ']</td><td>' + escapeHtml(username) + '</td><td>' + escapeHtml(a.name) + '</td><td>' + priv + '</td>' +
       '<td><button class="btn-primary btn-sm" onclick="openPwModal(' + a.project + ',' + a.programmer + ')">Change Password</button> ' +
       '<button class="btn-danger btn-sm" onclick="deleteAccount(' + a.project + ',' + a.programmer + ')">Delete</button></td>';
     tbody.appendChild(tr);
@@ -169,13 +171,18 @@ async function createAccount() {
   document.getElementById('create-ok').textContent = '';
   const project = document.getElementById('new-project').value.trim();
   const programmer = document.getElementById('new-programmer').value.trim();
+  const username = document.getElementById('new-username').value.trim();
   const name = document.getElementById('new-name').value.trim();
   const password = document.getElementById('new-password').value;
   if (!project || !programmer || !password) {
     document.getElementById('create-error').textContent = 'Project, programmer and password are required.';
     return;
   }
-  const body = new URLSearchParams({ project, programmer, password, name });
+  if (username.length > 16) {
+    document.getElementById('create-error').textContent = 'Username must be 16 characters or fewer.';
+    return;
+  }
+  const body = new URLSearchParams({ project, programmer, password, username, name });
   const resp = await fetch('/admin/users', {
     method: 'POST',
     headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -185,6 +192,7 @@ async function createAccount() {
     document.getElementById('create-ok').textContent = 'Account created.';
     document.getElementById('new-project').value = '';
     document.getElementById('new-programmer').value = '';
+    document.getElementById('new-username').value = '';
     document.getElementById('new-name').value = '';
     document.getElementById('new-password').value = '';
     await loadAccounts();

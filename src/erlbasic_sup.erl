@@ -35,6 +35,7 @@ start_cowboy() ->
             {"/ws", erlbasic_ws_handler, []},
             {"/admin", erlbasic_admin_handler, []},
             {"/admin/[...]", erlbasic_admin_handler, []},
+            {"/:username", erlbasic_homepage_handler, []},
             {'_', erlbasic_http_handler, []}
         ]}
     ]),
