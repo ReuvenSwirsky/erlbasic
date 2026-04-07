@@ -174,6 +174,8 @@ format_runtime_error(resume_without_error) ->
     "?RESUME WITHOUT ERROR\r\n";
 format_runtime_error(tty_no_cursor_movement) ->
     "?TTY DOESN'T SUPPORT CURSOR MOVEMENT\r\n";
+format_runtime_error(ws_only) ->
+    "?WEBSOCKET ONLY\r\n";
 format_runtime_error(graphics_not_supported_on_tty) ->
     "?GRAPHICS NOT SUPPORTED ON TTY\r\n";
 format_runtime_error(sound_not_supported_on_tty) ->
@@ -210,6 +212,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         next_without_for -> "NEXT WITHOUT FOR ERROR";
         resume_without_error -> "RESUME WITHOUT ERROR";
         tty_no_cursor_movement -> "TTY DOESN'T SUPPORT CURSOR MOVEMENT";
+        ws_only -> "WEBSOCKET ONLY";
         graphics_not_supported_on_tty -> "GRAPHICS NOT SUPPORTED ON TTY";
         sound_not_supported_on_tty -> "SOUND NOT SUPPORTED ON TTY";
         no_graphics_mode -> "NO GRAPHICS MODE";

@@ -605,6 +605,20 @@ parse_sleep_statement(Trimmed) ->
         nomatch ->
             case re:run(Trimmed, "(?i)^SLEEP$", [{capture, none}]) of
                 match   -> {sleep_keypress};
+                nomatch -> parse_flush_dblbuff_statement(Trimmed)
+            end
+    end.
+
+parse_flush_dblbuff_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^FLUSH$", [{capture, none}]) of
+        match -> {flush_stmt};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^DBLBUFF\\s+(ON|OFF)$", [{capture, [1], list}]) of
+                {match, [OnOff]} ->
+                    case string:to_upper(OnOff) of
+                        "ON"  -> {dblbuff, on};
+                        "OFF" -> {dblbuff, off}
+                    end;
                 nomatch -> parse_sound_statement(Trimmed)
             end
     end.
@@ -709,7 +723,27 @@ parse_color_statement(Trimmed) ->
         {match, [FgExpr, BgExpr]} ->
             {color, FgExpr, BgExpr};
         nomatch ->
-            parse_implicit_let_statement(Trimmed)
+            parse_pget_statement(Trimmed)
+    end.
+
+parse_pget_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^PGET\\s*\\((.+),(.+)\\),(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {pget, string:trim(XExpr), string:trim(YExpr), Target};
+                _            -> unknown
+            end;
+        nomatch -> parse_getchar_statement(Trimmed)
+    end.
+
+parse_getchar_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^GETCHAR\\s+(.+),(.+),(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [RowExpr, ColExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {getchar, string:trim(RowExpr), string:trim(ColExpr), Target};
+                _            -> unknown
+            end;
+        nomatch -> parse_implicit_let_statement(Trimmed)
     end.
 
 parse_implicit_let_statement(Trimmed) ->
@@ -946,6 +980,22 @@ validate_statement(Stmt) ->
             validate_expr_syntax(Expr);
         {sleep_keypress} ->
             ok;
+        {flush_stmt} ->
+            ok;
+        {dblbuff, on} ->
+            ok;
+        {dblbuff, off} ->
+            ok;
+        {pget, XExpr, YExpr, Target} ->
+            case validate_expr_pair(XExpr, YExpr) of
+                ok    -> validate_target_syntax(Target);
+                error -> error
+            end;
+        {getchar, RowExpr, ColExpr, Target} ->
+            case validate_expr_pair(RowExpr, ColExpr) of
+                ok    -> validate_target_syntax(Target);
+                error -> error
+            end;
         {chain, FileExpr} ->
             validate_expr_syntax(FileExpr);
         {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->

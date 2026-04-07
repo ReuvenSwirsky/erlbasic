@@ -18,6 +18,7 @@
 180 REM
 190 REM Switch to graphics mode
 200 PRINT "Starting simulation..."
+205 DBLBUFF ON
 210 HGR
 220 REM
 230 REM Main simulation loop
@@ -31,6 +32,7 @@
 310       RECT (PX, PY) - (PX + CELLSIZE - 1, PY + CELLSIZE - 1), C
 320     NEXT X
 330   NEXT Y
+335   FLUSH
 340   REM
 350   REM Calculate next generation
 360   FOR Y = 1 TO H
@@ -53,6 +55,7 @@
 570     NEXT X
 580   NEXT Y
 590 NEXT GEN
+595 DBLBUFF OFF
 640 REM
 650 REM End simulation
 660 TEXT

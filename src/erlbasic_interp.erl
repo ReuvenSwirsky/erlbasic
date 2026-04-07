@@ -212,6 +212,30 @@ handle_pending_input(Line, State = #state{pending_input = {sleep_keypress, Conti
     %% Any keypress (or Enter) resumes; key is left in char_buffer for GETKEY/INKEY$/etc.
     ClearedState = State#state{pending_input = undefined, char_buffer = Line},
     resume_continuation(ClearedState, Continuation);
+handle_pending_input(Line, State = #state{pending_input = {pget_query, Target, Continuation}}) ->
+    %% Browser responds with the palette index (0..15) or -1 if not in palette.
+    Color = case string:to_integer(Line) of
+        {N, _} when N >= -1, N =< 15 -> float(N);
+        _                             -> -1.0
+    end,
+    case erlbasic_eval:assign_target(Target, Color, State#state.vars, State#state.funcs) of
+        {ok, NextVars} ->
+            resume_continuation(State#state{vars = NextVars, pending_input = undefined}, Continuation);
+        {error, Reason} ->
+            {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
+    end;
+handle_pending_input(Line, State = #state{pending_input = {getchar_query, Target, Continuation}}) ->
+    %% Browser responds with the Unicode code point of the character (32 for space/empty).
+    Ch = case string:to_integer(Line) of
+        {N, _} when N >= 1, N =< 65535 -> [N];
+        _                               -> ""
+    end,
+    case erlbasic_eval:assign_target(Target, Ch, State#state.vars, State#state.funcs) of
+        {ok, NextVars} ->
+            resume_continuation(State#state{vars = NextVars, pending_input = undefined}, Continuation);
+        {error, Reason} ->
+            {State#state{pending_input = undefined}, [erlbasic_eval:format_runtime_error(Reason)]}
+    end;
 handle_pending_input(Line, State = #state{pending_input = {get_nb, Target, Continuation}}) ->
     handle_getchar(Target, Line, State, Continuation);
 handle_pending_input(Line, State = #state{pending_input = {getkey, Target, Continuation}}) ->
@@ -496,6 +520,83 @@ execute_statement_single(Command, State) ->
             {State#state{trace_enabled = true}, []};
         {troff} ->
             {State#state{trace_enabled = false}, []};
+        {flush_stmt} ->
+            %% In immediate mode there is no accumulator, so FLUSH is a no-op.
+            {State, []};
+        {dblbuff, on} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket -> {State#state{dblbuff = true}, []};
+                _         -> {State, [erlbasic_eval:format_runtime_error(ws_only)]}
+            end;
+        {dblbuff, off} ->
+            {State#state{dblbuff = false}, []};
+        {pget, XExpr, YExpr, Target} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    case State#state.graphics_mode of
+                        false ->
+                            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+                        Mode ->
+                            case erlbasic_eval:eval_expr_result(XExpr, State#state.vars, State#state.funcs) of
+                                {ok, X, Vars1} when is_number(X) ->
+                                    case erlbasic_eval:eval_expr_result(YExpr, Vars1, State#state.funcs) of
+                                        {ok, Y, Vars2} when is_number(Y) ->
+                                            Xi = trunc(X), Yi = trunc(Y),
+                                            MaxY = case Mode of hgr -> 599; _ -> 479 end,
+                                            case Xi >= 0 andalso Xi =< 799 andalso Yi >= 0 andalso Yi =< MaxY of
+                                                true ->
+                                                    Output = io_lib:format("\x02GFX:PGET:~B:~B", [Xi, Yi]),
+                                                    {State#state{vars = Vars2, pending_input = {pget_query, Target, {immediate, []}}}, [Output]};
+                                                false ->
+                                                    {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(illegal_function_call)]}
+                                            end;
+                                        {ok, _, Vars2} ->
+                                            {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(type_mismatch)]};
+                                        {error, Reason, Vars2} ->
+                                            {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                                    end;
+                                {ok, _, Vars1} ->
+                                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(type_mismatch)]};
+                                {error, Reason, Vars1} ->
+                                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+                            end
+                    end;
+                _ ->
+                    {State, [erlbasic_eval:format_runtime_error(ws_only)]}
+            end;
+        {getchar, RowExpr, ColExpr, Target} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    case erlbasic_eval:eval_expr_result(RowExpr, State#state.vars, State#state.funcs) of
+                        {ok, Row, Vars1} when is_number(Row) ->
+                            case erlbasic_eval:eval_expr_result(ColExpr, Vars1, State#state.funcs) of
+                                {ok, Col, Vars2} when is_number(Col) ->
+                                    RowI = trunc(Row), ColI = trunc(Col),
+                                    Valid = case State#state.graphics_mode of
+                                        hgr  -> false;
+                                        hgr2 -> RowI >= 22 andalso RowI =< 25 andalso ColI >= 1 andalso ColI =< 80;
+                                        false -> RowI >= 1  andalso RowI =< 25 andalso ColI >= 1 andalso ColI =< 80
+                                    end,
+                                    case Valid of
+                                        true ->
+                                            Output = io_lib:format("\x02TXT:GETCHAR:~B:~B", [RowI, ColI]),
+                                            {State#state{vars = Vars2, pending_input = {getchar_query, Target, {immediate, []}}}, [Output]};
+                                        false ->
+                                            {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(illegal_function_call)]}
+                                    end;
+                                {ok, _, Vars2} ->
+                                    {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(type_mismatch)]};
+                                {error, Reason, Vars2} ->
+                                    {State#state{vars = Vars2}, [erlbasic_eval:format_runtime_error(Reason)]}
+                            end;
+                        {ok, _, Vars1} ->
+                            {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(type_mismatch)]};
+                        {error, Reason, Vars1} ->
+                            {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                _ ->
+                    {State, [erlbasic_eval:format_runtime_error(ws_only)]}
+            end;
         {remark} ->
             {State, []};
         {goto, _LineExpr} ->

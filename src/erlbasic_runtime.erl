@@ -55,8 +55,8 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
     after 0 ->
         ok
     end,
-    %% Periodic flush for output during loops
-    NewAcc = case should_flush_output() andalso (Count rem ?FLUSH_OUTPUT_EVERY =:= 0) andalso (Acc =/= []) of
+    %% Periodic flush for output during loops — suppressed in double-buffer mode
+    NewAcc = case should_flush_output() andalso not State#state.dblbuff andalso (Count rem ?FLUSH_OUTPUT_EVERY =:= 0) andalso (Acc =/= []) of
         true ->
             flush_output(Acc),
             [];
@@ -71,7 +71,13 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
             drain_interrupt_messages(),
             flush_output(NewAcc),
             BreakState = State#state{continue_ctx = {Pc, LoopStack, CallStack}},
-            {BreakState, sound_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
+            %% Include GFX:TEXT so the browser resets graphics state even if its
+            %% Ctrl-C handler fires after these frames arrive.
+            GfxReset = case State#state.graphics_mode of
+                false -> [];
+                _     -> text_output()
+            end,
+            {BreakState#state{graphics_mode = false}, GfxReset ++ sound_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
             case erlang:get(memory_limit_exceeded) of
                 true ->
@@ -95,13 +101,15 @@ handle_memory_quota_error(Program, Pc, State, Acc) ->
 
 run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
     TraceAcc = prepend_trace_output(State, Program, Pc, Acc),
+    %% Check for an explicit FLUSH statement (set by {flush_stmt} execution)
+    ExplicitFlush = erlang:erase(explicit_flush_requested) =:= true,
     {_LineNumber, Code} = lists:nth(Pc, Program),
     case execute_program_line(Code, Program, State, Pc, LoopStack, CallStack) of
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
-                case should_flush_output() andalso (output_contains_newline(Output) orelse output_contains_control_frame(Output)) of
+                case should_flush_output() andalso needs_flush(Output, NextState#state.dblbuff, ExplicitFlush) of
                     true ->
                         flush_output(CombinedOutput),
                         [];
@@ -124,7 +132,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             NewAcc =
-                case should_flush_output() andalso (output_contains_newline(Output) orelse output_contains_control_frame(Output)) of
+                case should_flush_output() andalso needs_flush(Output, NextState#state.dblbuff, ExplicitFlush) of
                     true ->
                         flush_output(CombinedOutput),
                         [];
@@ -676,6 +684,81 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             {continue, State#state{trace_enabled = true}, LoopStack, CallStack, []};
         {troff} ->
             {continue, State#state{trace_enabled = false}, LoopStack, CallStack, []};
+        {flush_stmt} ->
+            %% Mark that the accumulator should be flushed after this line.
+            %% No-op on non-WebSocket connections (nothing is buffered anyway).
+            erlang:put(explicit_flush_requested, true),
+            {continue, State, LoopStack, CallStack, []};
+        {dblbuff, on} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    {continue, State#state{dblbuff = true}, LoopStack, CallStack, []};
+                _ ->
+                    handle_runtime_error(ws_only, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {dblbuff, off} ->
+            {continue, State#state{dblbuff = false}, LoopStack, CallStack, []};
+        {pget, XExpr, YExpr, Target} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    case State#state.graphics_mode of
+                        false ->
+                            handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                        Mode ->
+                            case eval_exprs([XExpr, YExpr], State#state.vars, State#state.funcs) of
+                                {ok, [{X, _}, {Y, Vars1}]} when is_number(X), is_number(Y) ->
+                                    Xi = trunc(X), Yi = trunc(Y),
+                                    MaxY = case Mode of hgr -> 599; _ -> 479 end,
+                                    case Xi >= 0 andalso Xi =< 799 andalso Yi >= 0 andalso Yi =< MaxY of
+                                        true ->
+                                            Output = [io_lib:format("\x02GFX:PGET:~B:~B", [Xi, Yi])],
+                                            PendingState = State#state{
+                                                vars = Vars1,
+                                                pending_input = {pget_query, Target, {program, Pc, [], LoopStack, CallStack}}
+                                            },
+                                            {continue, PendingState, LoopStack, CallStack, Output};
+                                        false ->
+                                            handle_runtime_error(illegal_function_call, LineNumber, State, Pc, LoopStack, CallStack)
+                                    end;
+                                {ok, _} ->
+                                    handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
+                                {error, Reason, _} ->
+                                    handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                            end
+                    end;
+                _ ->
+                    handle_runtime_error(ws_only, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {getchar, RowExpr, ColExpr, Target} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    case eval_exprs([RowExpr, ColExpr], State#state.vars, State#state.funcs) of
+                        {ok, [{Row, _}, {Col, Vars1}]} when is_number(Row), is_number(Col) ->
+                            RowI = trunc(Row), ColI = trunc(Col),
+                            Valid = case State#state.graphics_mode of
+                                hgr  -> false;  %% full graphics — no text rows
+                                hgr2 -> RowI >= 22 andalso RowI =< 25 andalso ColI >= 1 andalso ColI =< 80;
+                                false -> RowI >= 1  andalso RowI =< 25 andalso ColI >= 1 andalso ColI =< 80
+                            end,
+                            case Valid of
+                                true ->
+                                    Output = [io_lib:format("\x02TXT:GETCHAR:~B:~B", [RowI, ColI])],
+                                    PendingState = State#state{
+                                        vars = Vars1,
+                                        pending_input = {getchar_query, Target, {program, Pc, [], LoopStack, CallStack}}
+                                    },
+                                    {continue, PendingState, LoopStack, CallStack, Output};
+                                false ->
+                                    handle_runtime_error(illegal_function_call, LineNumber, State, Pc, LoopStack, CallStack)
+                            end;
+                        {ok, _} ->
+                            handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
+                        {error, Reason, _} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                _ ->
+                    handle_runtime_error(ws_only, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
         {on_error_goto, TargetExpr} ->
             execute_on_error_goto(TargetExpr, Program, State, Pc, LoopStack, CallStack);
         {resume} ->
@@ -834,6 +917,14 @@ update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {immed
     State#state{pending_input = {sleep_keypress, {immediate, RemainingStatements}}};
 update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
     State#state{pending_input = {sleep_keypress, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {pget_query, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {pget_query, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {pget_query, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {pget_query, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {getchar_query, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {getchar_query, Target, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {getchar_query, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {getchar_query, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State, _RemainingStatements) ->
     State.
 
@@ -1051,6 +1142,36 @@ output_contains_newline(OutputParts) ->
 
 output_contains_control_frame(OutputParts) ->
     lists:any(fun part_is_control_frame/1, OutputParts).
+
+%% In dblbuff mode, drawing primitives are buffered; only mode-change/query
+%% control frames (HGR, HGR2, TEXT, GCLS, sound, PGET) trigger an immediate flush.
+output_contains_non_drawing_control_frame(OutputParts) ->
+    lists:any(fun part_is_non_drawing_control_frame/1, OutputParts).
+
+part_is_non_drawing_control_frame(Part) ->
+    Bin = iolist_to_binary(Part),
+    case Bin of
+        <<2, "GFX:PSET:",   _/binary>> -> false;
+        <<2, "GFX:LINE:",   _/binary>> -> false;
+        <<2, "GFX:LINETO:", _/binary>> -> false;
+        <<2, "GFX:RECT:",   _/binary>> -> false;
+        <<2, "GFX:CIRCLE:", _/binary>> -> false;
+        <<2, _/binary>>                -> true;
+        _                              -> false
+    end.
+
+%% Decide whether accumulated output should be flushed immediately.
+%% ExplicitFlush: set by the FLUSH statement.
+%% In dblbuff mode: flush on explicit FLUSH, newlines, or non-drawing control frames.
+%% In normal mode:  flush on newlines or any control frame (existing behaviour).
+needs_flush(Output, _Dblbuff, true) ->
+    %% Explicit FLUSH always drains the buffer
+    _ = Output,
+    true;
+needs_flush(Output, true, false) ->
+    output_contains_newline(Output) orelse output_contains_non_drawing_control_frame(Output);
+needs_flush(Output, false, false) ->
+    output_contains_newline(Output) orelse output_contains_control_frame(Output).
 
 part_contains_newline(Part) ->
     Bin = iolist_to_binary(Part),

@@ -203,19 +203,44 @@
     const canvas = document.getElementById('graphics-canvas');
     const ctx = canvas.getContext('2d');
     
-    // 16-color EGA/VGA palette
+    // 16-color EGA/VGA palette (CSS strings for drawing, RGB triples for PGET matching)
     const palette = [
       '#000000', '#0000AA', '#00AA00', '#00AAAA',
       '#AA0000', '#AA00AA', '#AA5500', '#AAAAAA',
       '#555555', '#5555FF', '#55FF55', '#55FFFF',
       '#FF5555', '#FF55FF', '#FFFF55', '#FFFFFF'
     ];
+    const paletteRgb = [
+      [0,0,0],   [0,0,170],   [0,170,0],   [0,170,170],
+      [170,0,0], [170,0,170], [170,85,0],  [170,170,170],
+      [85,85,85],[85,85,255], [85,255,85], [85,255,255],
+      [255,85,85],[255,85,255],[255,255,85],[255,255,255]
+    ];
+    function findPaletteColor(r, g, b) {
+      for (let i = 0; i < paletteRgb.length; i++) {
+        const [pr, pg, pb] = paletteRgb[i];
+        if (r === pr && g === pg && b === pb) return i;
+      }
+      return -1;
+    }
     
     let graphicsMode = 'none'; // 'none', 'hgr', 'hgr2'
 
     function handleGraphicsCommand(cmd) {
       const parts = cmd.split(':');
       const action = parts[0];
+
+      // PGET pixel queries: always handle (respond to server even if graphics were reset)
+      if (action === 'PGET') {
+        const x = parseInt(parts[1]), y = parseInt(parts[2]);
+        const data = ctx.getImageData(x, y, 1, 1).data;
+        ws.send(findPaletteColor(data[0], data[1], data[2]).toString());
+        return;
+      }
+
+      // Skip drawing commands when not in graphics mode (drains stale GFX frames
+      // instantly after Ctrl-C resets graphicsMode, so BREAK text isn't delayed).
+      if (graphicsMode === 'none' && action !== 'HGR' && action !== 'HGR2' && action !== 'TEXT') return;
 
       switch(action) {
         case 'HGR':
@@ -300,6 +325,24 @@
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 800, graphicsMode === 'hgr2' ? 480 : 600);
           break;
+      }
+    }
+
+    // Handle TXT: control frames (GETCHAR row/col queries from the server)
+    function handleTextQuery(cmd) {
+      const parts = cmd.split(':');
+      if (parts[0] === 'GETCHAR') {
+        const row = parseInt(parts[1]), col = parseInt(parts[2]);
+        const line = term.buffer.active.getLine(row - 1);  // xterm is 0-indexed
+        let code = 32;  // default: space for empty/unwritten cells
+        if (line) {
+          const cell = line.getCell(col - 1);
+          if (cell) {
+            const c = cell.getCode();
+            code = c > 0 ? c : 32;
+          }
+        }
+        ws.send(code.toString());
       }
     }
 
@@ -427,6 +470,7 @@
         if (cmd === 'CHAR_MODE_OFF') { charMode = false; inputBuffer = ''; }
         if (cmd.startsWith('GFX:')) { handleGraphicsCommand(cmd.slice(4)); }
         if (cmd.startsWith('SND:')) { handleSoundCommand(cmd.slice(4)); }
+        if (cmd.startsWith('TXT:')) { handleTextQuery(cmd.slice(4)); }
         return;
       }
       // Normalise \r\n from BASIC to what xterm expects
