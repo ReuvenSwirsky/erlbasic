@@ -138,11 +138,6 @@ handle_dir_command(State) ->
             {State, ["?FILE ERROR\r\n"]}
     end.
 
-format_dir_listing([], []) ->
-    PPN = erlbasic_storage:user_ppn_string(),
-    ["DIR ", PPN, "\r\n",
-     "Name             .Ext  Size Prot   Date       SY:", PPN, "\r\n\r\n",
-     "Total of 0 blocks in 0 files in SY:", PPN, "\r\n"];
 format_dir_listing(UserFiles, ExampleFiles) ->
     PPN = erlbasic_storage:user_ppn_string(),
     AllFiles = UserFiles ++ ExampleFiles,
@@ -150,10 +145,21 @@ format_dir_listing(UserFiles, ExampleFiles) ->
     TotalBlocks = lists:sum([blocks_from_bytes(Size) || {_, Size, _} <- AllFiles]),
     Header = ["DIR ", PPN, "\r\n",
               "Name             .Ext  Size Prot   Date       SY:", PPN, "\r\n\r\n"],
-    FileLines = [format_file_entry(Name, Size, MTime) || {Name, Size, MTime} <- AllFiles],
+    Sections = [format_dir_section("Your files", UserFiles),
+                "\r\n",
+                format_dir_section("Shared examples", ExampleFiles)],
     Footer = ["\r\nTotal of ", integer_to_list(TotalBlocks), " blocks in ",
               integer_to_list(TotalFiles), " files in SY:", PPN, "\r\n"],
-    Header ++ FileLines ++ Footer.
+    Header ++ Sections ++ Footer.
+
+format_dir_section(Title, []) ->
+    [Title, ":\r\n",
+     "------------------------------\r\n",
+     "(none)\r\n"];
+format_dir_section(Title, Files) ->
+    [Title, ":\r\n",
+     "------------------------------\r\n",
+     [format_file_entry(Name, Size, MTime) || {Name, Size, MTime} <- Files]].
 
 format_file_entry(FileName, Size, MTime) ->
     {Name, Ext} = split_filename(FileName),

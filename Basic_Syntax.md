@@ -403,6 +403,7 @@ DIR
 
 Notes:
 - Lists files from `~/BASIC/<user-id>/`.
+- `DIR` shows personal files separately from the shared example programs.
 - If no files exist, no filenames are printed.
 
 ### DATA

@@ -1310,6 +1310,43 @@ case_insensitive_program_filename_test() ->
         file:del_dir(TempDir)
     end.
 
+dir_groups_personal_and_example_files_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    UserDir = filename:join([TempDir, "ErlUsers", "88_9"]),
+    FilePath = filename:join(UserDir, "dirtest.bas"),
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        erlang:put(erlbasic_ppn, {88, 9}),
+        {ok, _} = erlbasic_storage:ensure_user_dir(),
+        ok = file:write_file(FilePath, <<"10 PRINT \"MINE\"\n">>),
+        State0 = erlbasic_interp:new_state(),
+        {_State1, Output} = erlbasic_interp:handle_input("DIR", State0),
+        Text = lists:flatten(Output),
+        LowerText = string:to_lower(Text),
+        UserSectionPos = string:str(Text, "Your files:"),
+        UserFilePos = string:str(LowerText, "dirtest"),
+        ExamplesSectionPos = string:str(Text, "Shared examples:"),
+        ExampleFilePos = string:str(LowerText, "life"),
+        ?assertEqual(match, re:run(Text, "Your files:", [{capture, none}])),
+        ?assertEqual(match, re:run(Text, "Shared examples:", [{capture, none}])),
+        ?assert(UserSectionPos > 0),
+        ?assert(UserFilePos > UserSectionPos),
+        ?assert(ExamplesSectionPos > UserFilePos),
+        ?assert(ExampleFilePos > ExamplesSectionPos),
+        ?assertEqual(match, re:run(Text, "Total of", [{capture, none}]))
+    after
+        erlang:erase(erlbasic_ppn),
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(FilePath),
+        file:del_dir(UserDir),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
 %% SLEEP with a negative value must clamp to zero and complete immediately
 %% (tests the max(0,...) half of the cap expression).
 sleep_negative_clamped_test() ->
