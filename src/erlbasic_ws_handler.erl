@@ -5,7 +5,19 @@
 
 %% Called by Cowboy when the HTTP request arrives; upgrade to WebSocket.
 init(Req, State) ->
-    {cowboy_websocket, Req, State, #{idle_timeout => infinity}}.
+    BaseOpts = #{idle_timeout => infinity},
+    DefaultDeflateOpts = #{server_context_takeover => no_takeover},
+    WsOpts = case State of
+        #{compress := false} ->
+            BaseOpts;
+        #{compress := true} = Map ->
+            case maps:get(deflate_opts, Map, undefined) of
+                undefined -> BaseOpts#{compress => true, deflate_opts => DefaultDeflateOpts};
+                DeflateOpts -> BaseOpts#{compress => true, deflate_opts => DeflateOpts}
+            end;
+        _ -> BaseOpts#{compress => true, deflate_opts => DefaultDeflateOpts}
+    end,
+    {cowboy_websocket, Req, State, WsOpts}.
 
 %% Called once the WebSocket handshake is complete.
 websocket_init(_State) ->

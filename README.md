@@ -5,6 +5,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 ## Features
 
 - Multiple concurrent TCP and/or WebSocket clients; one interpreter per connection
+- Browser WebSocket sessions use permessage-deflate compression with `server_no_context_takeover` for stable interactive `INPUT`/`GETKEY` traffic
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
 - Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
@@ -120,6 +121,7 @@ RUN
 - `LOCATE row, col` moves the cursor (WebSocket/xterm only; errors on telnet/TCP).
 - `COLOR fg[, bg]` sets text colour (0–15 fg, 0–7 bg). No-op on telnet/TCP.
 - `GET A$` reads one character non-blocking; `GETKEY A$` blocks until a keystroke.
+- Browser WebSocket compression is enabled, but negotiated with `server_no_context_takeover` so successive prompt/output frames remain decodable during interactive sessions.
 - `SLEEP n` pauses for up to 30 seconds (maximum capped); other sessions are unaffected.
 - `SAVE`/`LOAD`/`SCRATCH`/`DIR` manage programs in the user's sandboxed directory.
 - File I/O is sandboxed to the user directory; max 15 channels open simultaneously.
@@ -167,6 +169,8 @@ This runs, in order:
 .\run_perf_tests.ps1          # Pass/fail perf gate only
 .\run_textlife_benchmark.ps1  # Detailed benchmark only
 ```
+
+The EUnit suite includes a compressed WebSocket integration test that performs a real login plus `INPUT` roundtrip against a temporary Cowboy listener.
 
 ### Performance history
 

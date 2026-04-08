@@ -222,6 +222,66 @@ websocket_implicit_boundary_flush_test() ->
         ok
     end.
 
+compressed_websocket_input_roundtrip_test() ->
+    Dir = accounts_setup(),
+    WatchdogState = ensure_mem_watchdog_started(),
+    ListenerRef = erlbasic_ws_compression_test,
+    try
+        start_compressed_test_listener(ListenerRef),
+        Port = ranch:get_port(ListenerRef),
+        {Socket, Extensions, Buffer0} = ws_connect_with_compression(Port),
+        try
+            {ok, _Banner, Buffer1} = ws_collect_visible_text_until(
+            Socket, Extensions, Buffer0, fun(Text) -> binary:matches(Text, <<"#">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"hello 1,1\n">>),
+            {ok, _LoginPrompt, Buffer2} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer1,
+                fun(Text) -> binary:matches(Text, <<"Password: ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"system\n">>),
+            {ok, _ReadyPrompt, Buffer3} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer2,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"10 PRINT \"hello\"\n">>),
+            {ok, _Prompt4, Buffer4} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer3,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"20 INPUT A\n">>),
+            {ok, _Prompt5, Buffer5} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer4,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"30 PRINT A\n">>),
+            {ok, _Prompt6, Buffer6} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer5,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"RUN\n">>),
+            {ok, RunText, Buffer7} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer6,
+                fun(Text) -> binary:matches(Text, <<"? ">>) =/= [] end),
+            ?assertEqual(match, re:run(binary_to_list(RunText), "hello", [{capture, none}])),
+
+            ok = ws_send_text(Socket, Extensions, <<"1\n">>),
+            {ok, FinalText, _Buffer8} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer7,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+            FinalTextList = binary_to_list(FinalText),
+            ?assertEqual(match, re:run(FinalTextList, "1", [{capture, none}])),
+            ?assertEqual(nomatch, re:run(FinalTextList, "SYSTEM ERROR|Connection closed", [{capture, none}]))
+        after
+            cleanup_ws_extensions(Extensions),
+            gen_tcp:close(Socket)
+        end
+    after
+        catch cowboy:stop_listener(ListenerRef),
+        cleanup_mem_watchdog(WatchdogState),
+        accounts_teardown(Dir)
+    end.
+
 list_command_test() ->
     State0 = erlbasic_interp:new_state(),
     {State1, _} = erlbasic_interp:handle_input("10 PRINT \"A\"", State0),       
@@ -1279,3 +1339,171 @@ collect_output_messages(Acc) ->
     after 0 ->
         lists:reverse(Acc)
     end.
+
+ensure_mem_watchdog_started() ->
+    case whereis(erlbasic_mem_watchdog) of
+        undefined ->
+            {ok, Pid} = erlbasic_mem_watchdog:start_link(),
+            unlink(Pid),
+            {started, Pid};
+        Pid ->
+            {existing, Pid}
+    end.
+
+cleanup_mem_watchdog({started, Pid}) ->
+    Ref = erlang:monitor(process, Pid),
+    exit(Pid, shutdown),
+    receive
+        {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 ->
+        ok
+    end;
+cleanup_mem_watchdog({existing, _Pid}) ->
+    ok.
+
+start_compressed_test_listener(ListenerRef) ->
+    {ok, _} = application:ensure_all_started(cowboy),
+    Dispatch = cowboy_router:compile([
+        {'_', [
+            {"/ws", erlbasic_ws_handler, []}
+        ]}
+    ]),
+    case whereis(ListenerRef) of
+        undefined -> ok;
+        _ -> cowboy:stop_listener(ListenerRef)
+    end,
+    {ok, _} = cowboy:start_clear(ListenerRef,
+        [{port, 0}, {nodelay, true}],
+        #{env => #{dispatch => Dispatch}}),
+    ok.
+
+ws_connect_with_compression(Port) ->
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port,
+        [binary, {packet, raw}, {active, false}], 5000),
+    Key = cow_ws:key(),
+    Request = iolist_to_binary([
+        "GET /ws HTTP/1.1\r\n",
+        "Host: localhost:", integer_to_list(Port), "\r\n",
+        "Upgrade: websocket\r\n",
+        "Connection: Upgrade\r\n",
+        "Sec-WebSocket-Version: 13\r\n",
+        "Sec-WebSocket-Key: ", Key, "\r\n",
+        "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n",
+        "\r\n"
+    ]),
+    ok = gen_tcp:send(Socket, Request),
+    {ok, Response} = recv_http_response(Socket, <<>>),
+    {StatusLine, Headers, Rest} = parse_http_response_headers(Response),
+    ?assertEqual(<<"HTTP/1.1 101 Switching Protocols">>, StatusLine),
+    ?assertEqual(cow_ws:encode_key(Key), maps:get(<<"sec-websocket-accept">>, Headers)),
+    ExtValue = maps:get(<<"sec-websocket-extensions">>, Headers),
+    [{<<"permessage-deflate">>, Params}] = cow_http_hd:parse_sec_websocket_extensions(ExtValue),
+    ?assert(lists:member(<<"server_no_context_takeover">>, Params)),
+    {ok, Extensions} = cow_ws:validate_permessage_deflate(Params, #{}, #{owner => self()}),
+    {Socket, Extensions, Rest}.
+
+recv_http_response(Socket, Acc) ->
+    case binary:match(Acc, <<"\r\n\r\n">>) of
+        {_, _} ->
+            {ok, Acc};
+        nomatch ->
+            case gen_tcp:recv(Socket, 0, 5000) of
+                {ok, Data} -> recv_http_response(Socket, <<Acc/binary, Data/binary>>);
+                Error -> Error
+            end
+    end.
+
+parse_http_response_headers(Response) ->
+    {HeaderBlock, Rest} = split_http_headers(Response),
+    [StatusLine | HeaderLines] = binary:split(HeaderBlock, <<"\r\n">>, [global]),
+    Headers = maps:from_list([
+        parse_http_header_line(Line)
+        || Line <- HeaderLines,
+           Line =/= <<>>
+    ]),
+    {StatusLine, Headers, Rest}.
+
+split_http_headers(Response) ->
+    {Pos, 4} = binary:match(Response, <<"\r\n\r\n">>),
+    {
+        binary:part(Response, 0, Pos),
+        binary:part(Response, Pos + 4, byte_size(Response) - Pos - 4)
+    }.
+
+parse_http_header_line(Line) ->
+    [Name, Value] = binary:split(Line, <<": ">>),
+    {string:lowercase(Name), Value}.
+
+ws_send_text(Socket, Extensions, Text) ->
+    gen_tcp:send(Socket, cow_ws:masked_frame({text, Text}, Extensions)).
+
+ws_collect_visible_text_until(Socket, Extensions, Buffer, Predicate) ->
+    ws_collect_visible_text_until(Socket, Extensions, Buffer, Predicate, <<>>, 32).
+
+ws_collect_visible_text_until(_Socket, _Extensions, Buffer, _Predicate, Acc, 0) ->
+    {ok, Acc, Buffer};
+ws_collect_visible_text_until(Socket, Extensions, Buffer, Predicate, Acc, Remaining) ->
+    case Predicate(Acc) of
+        true ->
+            {ok, Acc, Buffer};
+        false ->
+            {Frame, Buffer1} = ws_recv_frame(Socket, Extensions, Buffer),
+            case Frame of
+                {text, Payload} ->
+                    Acc1 = case Payload of
+                        <<2, _/binary>> -> Acc;
+                        _ -> <<Acc/binary, Payload/binary>>
+                    end,
+                    ws_collect_visible_text_until(Socket, Extensions, Buffer1, Predicate, Acc1, Remaining - 1);
+                {close, Code, Payload} ->
+                    erlang:error({unexpected_close, Code, Payload});
+                {close, Payload} ->
+                    erlang:error({unexpected_close, Payload});
+                close ->
+                    erlang:error(unexpected_close);
+                _ ->
+                    ws_collect_visible_text_until(Socket, Extensions, Buffer1, Predicate, Acc, Remaining - 1)
+            end
+    end.
+
+ws_recv_frame(Socket, Extensions, Buffer) ->
+    case ws_try_parse_frame(Buffer, Extensions) of
+        {ok, Frame, Rest} ->
+            {Frame, Rest};
+        more ->
+            {ok, Data} = gen_tcp:recv(Socket, 0, 5000),
+            ws_recv_frame(Socket, Extensions, <<Buffer/binary, Data/binary>>)
+    end.
+
+ws_try_parse_frame(Buffer, Extensions) ->
+    case cow_ws:parse_header(Buffer, Extensions, undefined) of
+        {Type, FragState, Rsv, Len, MaskKey, Rest} ->
+            case cow_ws:parse_payload(Rest, MaskKey, 0, 0, Type, Len, FragState, Extensions, Rsv) of
+                {ok, CloseCode, Payload, _Utf8State, Remaining} ->
+                    {ok, cow_ws:make_frame(Type, Payload, CloseCode, FragState), Remaining};
+                {ok, Payload, _Utf8State, Remaining} ->
+                    {ok, cow_ws:make_frame(Type, Payload, 1000, FragState), Remaining};
+                {more, _, _} ->
+                    more;
+                {more, _, _, _} ->
+                    more;
+                {error, Reason} ->
+                    erlang:error({bad_ws_payload, Reason})
+            end;
+        more ->
+            more;
+        error ->
+            erlang:error(bad_ws_frame)
+    end.
+
+cleanup_ws_extensions(Extensions) ->
+    cleanup_ws_zstream(maps:get(inflate, Extensions, undefined)),
+    cleanup_ws_zstream(maps:get(deflate, Extensions, undefined)).
+
+cleanup_ws_zstream(undefined) ->
+    ok;
+cleanup_ws_zstream(false) ->
+    ok;
+cleanup_ws_zstream(Z) ->
+    catch zlib:close(Z),
+    ok.

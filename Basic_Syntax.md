@@ -193,6 +193,7 @@ Notes:
 - Variables ending in `%` behave like integer-style numeric variables.
 - Variables ending in `&` behave like byte variables (values clamped to 0-255).
 - During `RUN`, program execution pauses until a value is entered.
+- On browser WebSocket sessions, `INPUT` remains compatible with compressed transport; the server negotiates compression without server-side context takeover so prompts and replies stay stable across successive frames.
 
 ### LOCATE
 
