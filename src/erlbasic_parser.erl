@@ -314,11 +314,22 @@ parse_def_fn_statement(Trimmed) ->
 parse_if_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^IF\\s+(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
         {match, [CondExpr, ThenStmt]} ->
-            {if_then_else, CondExpr, ThenStmt, undefined};
+            {if_then_else, CondExpr, normalize_if_branch_statement(ThenStmt), undefined};
         {match, [CondExpr, ThenStmt, ElseStmt]} ->
-            {if_then_else, CondExpr, ThenStmt, ElseStmt};
+            {if_then_else, CondExpr,
+             normalize_if_branch_statement(ThenStmt),
+             normalize_if_branch_statement(ElseStmt)};
         nomatch ->
             parse_error_handler_statement(Trimmed)
+    end.
+
+normalize_if_branch_statement(Stmt) ->
+    Trimmed = string:trim(Stmt),
+    case re:run(Trimmed, "^(\\d+)$", [{capture, [1], list}]) of
+        {match, [LineNumber]} ->
+            "GOTO " ++ LineNumber;
+        nomatch ->
+            Trimmed
     end.
 
 parse_error_handler_statement(Trimmed) ->

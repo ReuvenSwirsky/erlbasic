@@ -199,12 +199,21 @@ tcp_handle_basic(Socket, State, PPN, Line) ->
                             ok = gen_tcp:send(Socket, erlbasic_interp:next_prompt(NextState)),
                             erlang:erase(output_pid),
                             erlang:erase(output_socket),
-                            tcp_worker_loop(Socket, NextState, PPN)
+                            tcp_worker_loop(Socket, NextState, PPN);
+                        Other ->
+                            throw({bad_interp_return, Other})
                     catch
                         Class:Reason:Stacktrace ->
                             io:format("ERROR in handle_input: ~p:~p~nStack: ~p~n",
                                       [Class, Reason, Stacktrace]),
-                            ErrorMsg = io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason]),
+                            ErrorMsg = case Reason of
+                                {bad_interp_return, {syntax_errors, _Program, _ErrorLines}} ->
+                                    "?SYNTAX ERROR\r\n";
+                                {case_clause, {syntax_errors, _Program, _ErrorLines}} ->
+                                    "?SYNTAX ERROR\r\n";
+                                _ ->
+                                    io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason])
+                            end,
                             ok = gen_tcp:send(Socket, ErrorMsg),
                             ok = gen_tcp:send(Socket, "> "),
                             erlang:erase(output_pid),
@@ -391,12 +400,21 @@ ws_handle_basic(WsPid, State, PPN, Line) ->
                             Prompt = erlbasic_interp:next_prompt(NextState),
                             WsPid ! {output, Prompt},
                             erlang:erase(output_pid),
-                            ws_loop(WsPid, NextState, PPN)
+                            ws_loop(WsPid, NextState, PPN);
+                        Other ->
+                            throw({bad_interp_return, Other})
                     catch
                         Class:Reason:Stacktrace ->
                             error_logger:error_msg("CRASH in ws_handle_basic: ~p:~p~nStacktrace: ~p~n", 
                                                    [Class, Reason, Stacktrace]),
-                            ErrorMsg = io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason]),
+                            ErrorMsg = case Reason of
+                                {bad_interp_return, {syntax_errors, _Program, _ErrorLines}} ->
+                                    "?SYNTAX ERROR\r\n";
+                                {case_clause, {syntax_errors, _Program, _ErrorLines}} ->
+                                    "?SYNTAX ERROR\r\n";
+                                _ ->
+                                    io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason])
+                            end,
                             WsPid ! {output, ErrorMsg},
                             WsPid ! {output, "> "},
                             erlang:erase(output_pid),

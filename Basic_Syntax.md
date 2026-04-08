@@ -646,6 +646,20 @@ THEN/ELSE bodies can contain one statement or multiple statements separated by `
 IF X = 1 THEN LET Y = 7 : PRINT Y ELSE PRINT 0
 ```
 
+A bare line number is accepted as shorthand for `GOTO`:
+
+```text
+IF X = 1 THEN 200
+IF X = 0 THEN 100 ELSE 300
+```
+
+These are interpreted as:
+
+```text
+IF X = 1 THEN GOTO 200
+IF X = 0 THEN GOTO 100 ELSE GOTO 300
+```
+
 ### FOR ... TO ... [STEP ...]
 
 Loop statement (intended for program execution with `RUN`).

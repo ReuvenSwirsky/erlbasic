@@ -935,6 +935,28 @@ on_goto_zero_index_test() ->
     ?assertEqual(nomatch, re:run(Text, "LINE1", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text, "LINE2", [{capture, none}])).
 
+if_then_line_number_implies_goto_test() ->
+    ?assertEqual(
+        {if_then_else, "X=1", "GOTO 200", undefined},
+        erlbasic_parser:parse_statement("IF X=1 THEN 200")
+    ),
+    ?assertEqual(
+        {if_then_else, "X=1", "GOTO 100", "GOTO 300"},
+        erlbasic_parser:parse_statement("IF X=1 THEN 100 ELSE 300")
+    ).
+
+if_then_line_number_run_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 1", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 IF X = 1 THEN 40", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 PRINT \"BAD\"", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 PRINT \"OK\"", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 END", S4),
+    {_S6, Output} = erlbasic_interp:handle_input("RUN", S5),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "OK", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "BAD", [{capture, none}])).
+
 %% =============================================================================
 %% ON ERROR GOTO and RESUME Tests
 %% =============================================================================
