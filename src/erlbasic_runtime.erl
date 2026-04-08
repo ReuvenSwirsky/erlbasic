@@ -110,8 +110,11 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
             ExplicitFlush = erlang:erase(explicit_flush_requested) =:= true,
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
+            FlushNow = should_flush_output() andalso
+                (needs_flush(Output, NextState#state.dblbuff, ExplicitFlush) orelse
+                 should_flush_implicit_boundary(Output, NextState#state.dblbuff, TraceAcc)),
             NewAcc =
-                case should_flush_output() andalso needs_flush(Output, NextState#state.dblbuff, ExplicitFlush) of
+                case FlushNow of
                     true ->
                         flush_output(CombinedOutput),
                         [];
@@ -134,8 +137,11 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
             ExplicitFlush = erlang:erase(explicit_flush_requested) =:= true,
             %% Accumulate output
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
+            FlushNow = should_flush_output() andalso
+                (needs_flush(Output, NextState#state.dblbuff, ExplicitFlush) orelse
+                 should_flush_implicit_boundary(Output, NextState#state.dblbuff, TraceAcc)),
             NewAcc =
-                case should_flush_output() andalso needs_flush(Output, NextState#state.dblbuff, ExplicitFlush) of
+                case FlushNow of
                     true ->
                         flush_output(CombinedOutput),
                         [];
@@ -1161,6 +1167,12 @@ needs_flush(Output, true, false) ->
     false;
 needs_flush(Output, false, false) ->
     output_contains_newline(Output) orelse output_contains_control_frame(Output).
+
+%% In BUFFER OFF mode, flush accumulated output when the current statement
+%% produced no output. This makes screen-update loops responsive (e.g. text
+%% animation that prints with trailing ';' and then advances via NEXT/INPUT/GET).
+should_flush_implicit_boundary(Output, Dblbuff, Acc) ->
+    (not Dblbuff) andalso (Output =:= []) andalso (Acc =/= []).
 
 %% In BUFFER mode, still flush when execution is waiting for interactive input
 %% that should present prior output immediately.

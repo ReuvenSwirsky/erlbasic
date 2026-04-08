@@ -186,6 +186,42 @@ run_program_output_test() ->
     ?assertEqual(match, re:run(Text, "42", [{capture, none}])),
     ?assertEqual(match, re:run(Text, "Program ended", [{capture, none}])).      
 
+websocket_implicit_boundary_flush_test() ->
+    PrevOutputPid = erlang:get(output_pid),
+    PrevOutputSocket = erlang:get(output_socket),
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    _ = collect_output_messages(),
+    erlang:erase(output_socket),
+    erlang:put(output_pid, self()),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        S0 = erlbasic_interp:new_state(),
+        {S1, _} = erlbasic_interp:handle_input("10 FOR I = 1 TO 3", S0),
+        {S2, _} = erlbasic_interp:handle_input("20 PRINT \"X\";", S1),
+        {S3, _} = erlbasic_interp:handle_input("30 NEXT I", S2),
+        {S4, _} = erlbasic_interp:handle_input("40 END", S3),
+        {_S5, RunOutput} = erlbasic_interp:handle_input("RUN", S4),
+        ?assertEqual("Program ended\r\n", lists:flatten(RunOutput)),
+        Chunks = [binary_to_list(iolist_to_binary(B)) || B <- collect_output_messages()],
+        XChunks = [Chunk || Chunk <- Chunks, Chunk =:= "X"],
+        ?assertEqual(3, length(XChunks))
+    after
+        case PrevOutputPid of
+            undefined -> erlang:erase(output_pid);
+            _ -> erlang:put(output_pid, PrevOutputPid)
+        end,
+        case PrevOutputSocket of
+            undefined -> erlang:erase(output_socket);
+            _ -> erlang:put(output_socket, PrevOutputSocket)
+        end,
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end,
+        _ = collect_output_messages(),
+        ok
+    end.
+
 list_command_test() ->
     State0 = erlbasic_interp:new_state(),
     {State1, _} = erlbasic_interp:handle_input("10 PRINT \"A\"", State0),       
@@ -1215,3 +1251,13 @@ restore_env(Name, false) ->
 restore_env(Name, Value) ->
     true = os:putenv(Name, Value),
     ok.
+
+collect_output_messages() ->
+    collect_output_messages([]).
+
+collect_output_messages(Acc) ->
+    receive
+        {output, Text} -> collect_output_messages([Text | Acc])
+    after 0 ->
+        lists:reverse(Acc)
+    end.
