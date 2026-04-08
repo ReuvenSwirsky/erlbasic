@@ -15,7 +15,8 @@ init([]) ->
         binary,
         {packet, line},
         {active, false},
-        {reuseaddr, true}
+        {reuseaddr, true},
+        {nodelay, true}
     ]),
     _AcceptPid = spawn_link(fun() -> accept_loop(ListenSocket) end),
     io:format("erlbasic listening on port ~p~n", [Port]),

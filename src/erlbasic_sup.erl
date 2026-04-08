@@ -44,8 +44,10 @@ start_cowboy() ->
     ]),
     
     %% Start HTTP listener
+    %% Enable nodelay to disable Nagle's algorithm — critical for real-time
+    %% output streaming in text-mode animations (e.g., asciilife.bas loops).
     {ok, _} = cowboy:start_clear(erlbasic_http,
-        [{port, HttpPort}],
+        [{port, HttpPort}, {nodelay, true}],
         #{env => #{dispatch => Dispatch}}
     ),
     io:format("erlbasic HTTP server listening on port ~p~n", [HttpPort]),
@@ -69,7 +71,8 @@ start_https_listener(Dispatch) ->
             BaseTlsOpts = [
                 {port, HttpsPort},
                 {certfile, CertFile},
-                {keyfile, KeyFile}
+                {keyfile, KeyFile},
+                {nodelay, true}
             ],
             
             %% Add CA cert file if specified
