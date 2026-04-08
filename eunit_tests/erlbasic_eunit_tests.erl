@@ -1108,6 +1108,24 @@ input_with_arithmetic_test() ->
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "13", [{capture, none}])).
 
+%% Test INPUT with float value used as array index (tictactoe crash regression)
+%% INPUT evaluates numeric input as floats (e.g., "9" becomes 9.0).
+%% normalize_int must properly convert floats to integers for array indexing.
+input_float_as_array_index_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 DIM B(9)", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 INPUT I", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 B(I) = 42", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 PRINT B(I)", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 END", S4),
+    {S6, _} = erlbasic_interp:handle_input("RUN", S5),
+    {_S7, Output} = erlbasic_interp:handle_input("9", S6),
+    Text = lists:flatten(Output),
+    %% Should print 42, not crash or print 0
+    ?assertEqual(match, re:run(Text, "42", [{capture, none}])),
+    %% Should not have any error messages
+    ?assertEqual(nomatch, re:run(Text, "ERROR|SUBSCRIPT", [{capture, none}])).
+
 tron_troff_trace_test() ->
     S0 = erlbasic_interp:new_state(),
     {S1, _} = erlbasic_interp:handle_input("10 TRON", S0),
