@@ -129,6 +129,10 @@ RUN
 
 See [Basic_Syntax.md](Basic_Syntax.md) for full syntax documentation.
 
+## Roadmap
+
+See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase issue list.
+
 ## Examples
 
 - [examples/tictactoe.bas](examples/tictactoe.bas) — Tic-Tac-Toe with human/computer play
