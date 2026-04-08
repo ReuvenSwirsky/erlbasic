@@ -5,15 +5,14 @@
 
 %% Called by Cowboy when the HTTP request arrives; upgrade to WebSocket.
 init(Req, State) ->
-    %% Enable permessage-deflate when supported by the browser to reduce
-    %% over-the-wire size of graphics-heavy frame streams.
-    {cowboy_websocket, Req, State, #{idle_timeout => infinity, compress => true}}.
+    {cowboy_websocket, Req, State, #{idle_timeout => infinity}}.
 
 %% Called once the WebSocket handshake is complete.
 websocket_init(_State) ->
     %% Start a fresh interpreter session, telling it to send output to this process.
     {ok, Pid} = erlbasic_conn:start_ws(self()),
-    {ok, #{conn => Pid}}.
+    MonitorRef = erlang:monitor(process, Pid),
+    {ok, #{conn => Pid, monitor => MonitorRef}}.
 
 %% Data arriving from the browser (keyboard input).
 websocket_handle({text, <<3>>}, State = #{conn := Pid}) ->
@@ -30,6 +29,12 @@ websocket_handle(_Frame, State) ->
 websocket_info({output, Text}, State) ->
     %% WebSocket text frames must be valid UTF-8. Convert iodata/chars safely.
     Utf8 = unicode:characters_to_binary(Text),
+    {reply, {text, Utf8}, State};
+websocket_info({'DOWN', _MonRef, process, Pid, Reason}, State = #{conn := Pid}) ->
+    %% The interpreter process crashed
+    error_logger:error_msg("===== WebSocket interpreter process ~p CRASHED =====~nReason: ~p~n", [Pid, Reason]),
+    ErrorMsg = io_lib:format("\r\n?SYSTEM ERROR: Interpreter crashed - ~p\r\n", [Reason]),
+    Utf8 = unicode:characters_to_binary(ErrorMsg),
     {reply, {text, Utf8}, State};
 websocket_info(close, State) ->
     {stop, State};

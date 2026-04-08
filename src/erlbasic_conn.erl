@@ -217,7 +217,7 @@ tcp_handle_basic(Socket, State, PPN, Line) ->
 %% Spawn a connection process for a WebSocket session.
 %% WsPid is the ws_handler process; output is sent as {output, Text}.
 start_ws(WsPid) ->
-    Pid = spawn_link(fun() ->
+    Pid = spawn(fun() ->
         erlang:put(erlbasic_conn_type, websocket),
         WsPid ! {output, banner()},
         ws_login_loop(WsPid, 0)
@@ -388,11 +388,14 @@ ws_handle_basic(WsPid, State, PPN, Line) ->
                                 false -> ok
                             end,
                             lists:foreach(fun(T) -> WsPid ! {output, T} end, Output),
-                            WsPid ! {output, erlbasic_interp:next_prompt(NextState)},
+                            Prompt = erlbasic_interp:next_prompt(NextState),
+                            WsPid ! {output, Prompt},
                             erlang:erase(output_pid),
                             ws_loop(WsPid, NextState, PPN)
                     catch
-                        Class:Reason:_ ->
+                        Class:Reason:Stacktrace ->
+                            error_logger:error_msg("CRASH in ws_handle_basic: ~p:~p~nStacktrace: ~p~n", 
+                                                   [Class, Reason, Stacktrace]),
                             ErrorMsg = io_lib:format("?SYSTEM ERROR: ~p:~p\r\n", [Class, Reason]),
                             WsPid ! {output, ErrorMsg},
                             WsPid ! {output, "> "},
