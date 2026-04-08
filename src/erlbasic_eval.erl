@@ -266,6 +266,8 @@ eval_indices([Expr | Rest], Vars, Funcs, Acc) ->
 
 normalize_int(Value) when is_integer(Value) ->
     Value;
+normalize_int(Value) when is_float(Value) ->
+    trunc(Value);
 normalize_int(Value) when is_list(Value) ->
     case string:to_integer(string:trim(Value)) of
         {Int, ""} -> Int;
