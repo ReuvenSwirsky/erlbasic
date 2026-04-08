@@ -32,6 +32,7 @@
 }).
 
 -define(MAX_USERNAME_LEN, 16).
+-define(MIN_USERNAME_LEN, 2).
 
 -define(PBKDF2_ITERS, 100000).
 -define(PBKDF2_LEN,   32).       %% 256-bit key
@@ -294,15 +295,20 @@ normalize_username(Username) ->
 validate_username_for_create(_Project, _Programmer, <<>>) ->
     ok;
 validate_username_for_create(Project, Programmer, UsernameBin) ->
-    case is_reserved_username(UsernameBin) of
-        true ->
-            {error, reserved_username};
+    case byte_size(UsernameBin) >= ?MIN_USERNAME_LEN of
         false ->
-            case find_by_username(UsernameBin) of
-                {ok, {Project, Programmer, _Name, _Stored}} -> ok;
-                {ok, _Other} -> {error, username_taken};
-                {error, not_found} -> ok;
-                {error, Reason} -> {error, Reason}
+            {error, username_too_short};
+        true ->
+            case is_reserved_username(UsernameBin) of
+                true ->
+                    {error, reserved_username};
+                false ->
+                    case find_by_username(UsernameBin) of
+                        {ok, {Project, Programmer, _Name, _Stored}} -> ok;
+                        {ok, _Other} -> {error, username_taken};
+                        {error, not_found} -> ok;
+                        {error, Reason} -> {error, Reason}
+                    end
             end
     end.
 

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ErlBASIC System Stats</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0f172a; --surface:#111827; --border:#334155; --accent:#38bdf8;
+      --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --danger:#ef4444; --input:#0b1220;
+    }
+    body { background: radial-gradient(circle at 20% 10%, #1e293b 0%, var(--bg) 55%); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+    header { background: #0b1220dd; border-bottom: 1px solid var(--border); backdrop-filter: blur(6px); padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1.1rem; color: var(--accent); }
+    .nav a { color: var(--muted); text-decoration: none; margin-right: .9rem; font-size: .9rem; }
+    .nav a.active { color: var(--accent); }
+    .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+    #login-section { max-width: 430px; margin: 3.5rem auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; }
+    label { display: block; margin-bottom: .3rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-size: .75rem; }
+    input { width: 100%; background: var(--input); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: .55rem .65rem; margin-bottom: .9rem; }
+    button { cursor: pointer; border: none; border-radius: 6px; padding: .5rem .95rem; font-weight: 600; }
+    .btn-primary { background: var(--accent); color: #0b1220; }
+    .btn-secondary { background: #334155; color: var(--text); }
+    .error { color: var(--danger); min-height: 1.2rem; margin-top: .5rem; font-size: .85rem; }
+
+    #system-section { display: none; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: .8rem; margin-bottom: 1rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem; }
+    .label { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; margin-bottom: .35rem; }
+    .value { font-size: 1.15rem; font-weight: 700; }
+    .sub { color: var(--muted); font-size: .78rem; margin-top: .3rem; }
+
+    .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--border); }
+    td { padding: .7rem .9rem; border-bottom: 1px solid #1f2937; font-family: Consolas, monospace; }
+    tr:last-child td { border-bottom: none; }
+
+    .status { color: var(--ok); font-size: .85rem; }
+    .toolbar { margin-bottom: .8rem; display: flex; justify-content: space-between; align-items: center; }
+
+    @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ErlBASIC System Stats</h1>
+    <div class="nav">
+      <a href="/a/admin/accounts">Accounts</a>
+      <a href="/a/admin/storage">Storage</a>
+      <a href="/a/admin/memory">Memory</a>
+      <a class="active" href="/a/system">System</a>
+    </div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:.8rem;align-items:center;">
+    <span id="logged-in-as" style="color:var(--muted);font-size:.85rem;"></span>
+    <button id="logout-btn" class="btn-secondary" style="display:none;" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<div id="login-section" class="container">
+  <h2 style="color:var(--accent);margin-bottom:1rem;">Login</h2>
+  <p style="color:var(--muted);margin-bottom:1rem;font-size:.85rem;">Use a privileged account (project 0 or 1).</p>
+  <label for="login-ppn">PPN (Project,Programmer)</label>
+  <input id="login-ppn" type="text" autocomplete="username">
+  <label for="login-password">Password</label>
+  <input id="login-password" type="password" autocomplete="current-password">
+  <button class="btn-primary" onclick="doLogin()">Login</button>
+  <div id="login-error" class="error"></div>
+</div>
+
+<div id="system-section" class="container">
+  <div class="toolbar">
+    <div class="status" id="refresh-status">Live refresh every 5 seconds</div>
+    <button class="btn-secondary" onclick="refreshStats()">Refresh Now</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Users Logged In</div><div class="value" id="users-logged">-</div></div>
+    <div class="card"><div class="label">Active Sessions</div><div class="value" id="sessions-active">-</div></div>
+    <div class="card"><div class="label">Total Users</div><div class="value" id="users-total">-</div></div>
+    <div class="card"><div class="label">Run Queue</div><div class="value" id="run-queue">-</div></div>
+
+    <div class="card"><div class="label">Node Memory</div><div class="value" id="mem-total">-</div><div class="sub" id="mem-breakdown">-</div></div>
+    <div class="card"><div class="label">Session Memory</div><div class="value" id="mem-session">-</div></div>
+    <div class="card"><div class="label">Storage Used</div><div class="value" id="storage-used">-</div><div class="sub" id="storage-detail">-</div></div>
+    <div class="card"><div class="label">Schedulers</div><div class="value" id="schedulers">-</div><div class="sub" id="otp-version">-</div></div>
+  </div>
+
+  <div class="table-card">
+    <table>
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody id="stats-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let authHeader = null;
+  let refreshTimer = null;
+  const AUTH_STORAGE_KEY = 'erlbasic_admin_auth';
+  const AUTH_USER_KEY = 'erlbasic_admin_user';
+
+  function persistAuth(ppn, header) {
+    sessionStorage.setItem(AUTH_STORAGE_KEY, header);
+    sessionStorage.setItem(AUTH_USER_KEY, ppn);
+  }
+
+  function clearPersistedAuth() {
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    sessionStorage.removeItem(AUTH_USER_KEY);
+  }
+
+  function bytes(v) {
+    const n = Number(v || 0);
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let x = n;
+    while (x >= 1024 && i < units.length - 1) { x /= 1024; i++; }
+    return x.toFixed(x >= 100 || i === 0 ? 0 : 1) + ' ' + units[i];
+  }
+
+  async function doLogin() {
+    const ppn = document.getElementById('login-ppn').value.trim();
+    const pw = document.getElementById('login-password').value;
+    const header = 'Basic ' + btoa(ppn + ':' + pw);
+    const resp = await fetch('/a/system/stats', { headers: { Authorization: header } });
+    if (!resp.ok) {
+      clearPersistedAuth();
+      document.getElementById('login-error').textContent = 'Invalid credentials or account is not privileged.';
+      return;
+    }
+
+    authHeader = header;
+    persistAuth(ppn, header);
+    document.getElementById('login-error').textContent = '';
+    showSystem('Logged in as [' + ppn + ']');
+    await refreshStats();
+    startAutoRefresh();
+  }
+
+  function showSystem(label) {
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('system-section').style.display = 'block';
+    document.getElementById('logged-in-as').textContent = label;
+    document.getElementById('logout-btn').style.display = '';
+  }
+
+  function logout() {
+    authHeader = null;
+    clearPersistedAuth();
+    stopAutoRefresh();
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').textContent = '';
+    document.getElementById('login-section').style.display = '';
+    document.getElementById('system-section').style.display = 'none';
+    document.getElementById('logged-in-as').textContent = '';
+    document.getElementById('logout-btn').style.display = 'none';
+  }
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    refreshTimer = setInterval(refreshStats, 5000);
+  }
+
+  function stopAutoRefresh() {
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+  }
+
+  async function tryRestoreSession() {
+    const storedHeader = sessionStorage.getItem(AUTH_STORAGE_KEY);
+    const storedUser = sessionStorage.getItem(AUTH_USER_KEY) || '';
+    if (!storedHeader) return;
+
+    const resp = await fetch('/a/system/stats', { headers: { Authorization: storedHeader } });
+    if (!resp.ok) {
+      clearPersistedAuth();
+      return;
+    }
+
+    authHeader = storedHeader;
+    showSystem(storedUser ? ('Logged in as [' + storedUser + ']') : 'Logged in');
+    renderStats(await resp.json());
+    startAutoRefresh();
+  }
+
+  async function refreshStats() {
+    if (!authHeader) return;
+    const resp = await fetch('/a/system/stats', { headers: { Authorization: authHeader } });
+    if (!resp.ok) {
+      logout();
+      return;
+    }
+    renderStats(await resp.json());
+  }
+
+  function renderStats(s) {
+    document.getElementById('users-logged').textContent = s.users_logged_in ?? 0;
+    document.getElementById('sessions-active').textContent = s.sessions_active ?? 0;
+    document.getElementById('users-total').textContent = s.users_total ?? 0;
+    document.getElementById('run-queue').textContent = s.run_queue ?? 0;
+
+    document.getElementById('mem-total').textContent = bytes(s.memory_total_bytes);
+    document.getElementById('mem-breakdown').textContent =
+      'proc ' + bytes(s.memory_processes_bytes) + ' | sys ' + bytes(s.memory_system_bytes);
+    document.getElementById('mem-session').textContent = bytes(s.session_memory_bytes);
+
+    document.getElementById('storage-used').textContent = bytes(s.storage_total_bytes);
+    document.getElementById('storage-detail').textContent =
+      (s.storage_files ?? 0) + ' files across ' + (s.storage_user_dirs ?? 0) + ' user dirs';
+
+    document.getElementById('schedulers').textContent =
+      (s.schedulers_online ?? '-') + ' / ' + (s.schedulers ?? '-');
+    document.getElementById('otp-version').textContent =
+      'OTP ' + (s.otp_release ?? '?') + ' | ' + (s.node ?? '?');
+
+    const rows = [
+      ['process_count', s.process_count],
+      ['process_limit', s.process_limit],
+      ['memory_binary_bytes', s.memory_binary_bytes],
+      ['memory_ets_bytes', s.memory_ets_bytes],
+      ['default_storage_limit_blocks', s.default_storage_limit_blocks],
+      ['default_memory_limit_kb', s.default_memory_limit_kb]
+    ];
+
+    const tbody = document.getElementById('stats-table');
+    tbody.innerHTML = '';
+    rows.forEach(([k, v]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + k + '</td><td>' + v + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('refresh-status').textContent =
+      'Last refresh: ' + new Date().toLocaleTimeString();
+  }
+
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  tryRestoreSession();
+</script>
+</body>
+</html>

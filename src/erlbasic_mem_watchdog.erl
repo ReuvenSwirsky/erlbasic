@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0, register_session/2, unregister_session/1,
-         try_register_session/4]).
+         try_register_session/4, get_stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 %% How often to poll registered processes (milliseconds).
@@ -35,6 +35,10 @@ register_session(Pid, LimitBytes) when is_pid(Pid), is_integer(LimitBytes), Limi
 try_register_session(Pid, LimitBytes, PPN, MaxSessions)
         when is_pid(Pid), is_atom(MaxSessions); is_pid(Pid), is_integer(MaxSessions) ->
     gen_server:call(?MODULE, {try_register, Pid, LimitBytes, PPN, MaxSessions}).
+
+%% Return current watchdog session statistics.
+get_stats() ->
+    gen_server:call(?MODULE, get_stats).
 
 %% Remove a connection process from watchdog supervision.
 unregister_session(Pid) when is_pid(Pid) ->
@@ -69,6 +73,22 @@ handle_call({try_register, Pid, LimitBytes, PPN, MaxSessions}, _From,
             end,
             {reply, ok, State#wd{sessions = Sessions2, ppn_counts = Counts2}}
     end;
+
+handle_call(get_stats, _From, #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
+    SessionCount = maps:size(Sessions),
+    ActiveUsers = maps:size(Counts),
+    SessionMemBytes = maps:fold(
+        fun(Pid, _Entry, Acc) ->
+            case process_info(Pid, memory) of
+                {memory, Mem} -> Acc + Mem;
+                _ -> Acc
+            end
+        end,
+        0,
+        Sessions),
+    {reply, #{active_sessions => SessionCount,
+              active_users => ActiveUsers,
+              session_memory_bytes => SessionMemBytes}, State};
 
 handle_call(_Req, _From, State) ->
     {reply, ok, State}.

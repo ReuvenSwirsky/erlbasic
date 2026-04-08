@@ -51,9 +51,10 @@
   <div>
     <h1>ErlBASIC Admin - Accounts</h1>
     <div class="nav">
-      <a class="active" href="/admin/accounts">Accounts</a>
-      <a href="/admin/storage">Storage Quotas</a>
-      <a href="/admin/memory">Memory Quotas</a>
+      <a class="active" href="/a/admin/accounts">Accounts</a>
+      <a href="/a/admin/storage">Storage Quotas</a>
+      <a href="/a/admin/memory">Memory Quotas</a>
+      <a href="/a/system">System</a>
     </div>
   </div>
   <div style="margin-left:auto; display:flex; align-items:center; gap:1rem;">
@@ -122,26 +123,42 @@
 let authHeader = null;
 let pwTarget = null;
 let allAccounts = [];
+const AUTH_STORAGE_KEY = 'erlbasic_admin_auth';
+const AUTH_USER_KEY = 'erlbasic_admin_user';
+
+function persistAuth(ppn, header) {
+  sessionStorage.setItem(AUTH_STORAGE_KEY, header);
+  sessionStorage.setItem(AUTH_USER_KEY, ppn);
+}
+
+function clearPersistedAuth() {
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  sessionStorage.removeItem(AUTH_USER_KEY);
+}
 
 async function doLogin() {
   const ppn = document.getElementById('login-ppn').value.trim();
   const password = document.getElementById('login-password').value;
   const header = 'Basic ' + btoa(ppn + ':' + password);
-  const resp = await fetch('/admin/users', { headers: { Authorization: header } });
+  const resp = await fetch('/a/admin/users', { headers: { Authorization: header } });
   if (resp.ok) {
     authHeader = header;
+    persistAuth(ppn, header);
     document.getElementById('login-section').style.display = 'none';
     document.getElementById('admin-section').style.display = 'block';
     document.getElementById('logged-in-as').textContent = 'Logged in as [' + ppn + ']';
     document.getElementById('logout-btn').style.display = '';
+    document.getElementById('login-error').textContent = '';
     await loadAccounts();
   } else {
+    clearPersistedAuth();
     document.getElementById('login-error').textContent = 'Invalid credentials or account is not privileged.';
   }
 }
 
 function logout() {
   authHeader = null;
+  clearPersistedAuth();
   document.getElementById('login-section').style.display = '';
   document.getElementById('admin-section').style.display = 'none';
   document.getElementById('logout-btn').style.display = 'none';
@@ -152,8 +169,27 @@ function logout() {
 
 document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
+async function tryRestoreSession() {
+  const storedHeader = sessionStorage.getItem(AUTH_STORAGE_KEY);
+  const storedUser = sessionStorage.getItem(AUTH_USER_KEY) || '';
+  if (!storedHeader) return;
+
+  const resp = await fetch('/a/admin/users', { headers: { Authorization: storedHeader } });
+  if (!resp.ok) {
+    clearPersistedAuth();
+    return;
+  }
+
+  authHeader = storedHeader;
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('admin-section').style.display = 'block';
+  document.getElementById('logged-in-as').textContent = storedUser ? ('Logged in as [' + storedUser + ']') : 'Logged in';
+  document.getElementById('logout-btn').style.display = '';
+  await loadAccounts();
+}
+
 async function loadAccounts() {
-  const resp = await fetch('/admin/users', { headers: { Authorization: authHeader } });
+  const resp = await fetch('/a/admin/users', { headers: { Authorization: authHeader } });
   const accounts = await resp.json();
   allAccounts = accounts;
   const tbody = document.getElementById('accounts-body');
@@ -218,6 +254,10 @@ async function createAccount() {
     document.getElementById('create-error').textContent = 'Username must be 16 characters or fewer.';
     return;
   }
+  if (username.length === 1) {
+    document.getElementById('create-error').textContent = 'Username must be at least 2 characters.';
+    return;
+  }
   if (username) {
     const uUp = username.toUpperCase();
     const dup = allAccounts.find(a => (a.username || '').toUpperCase() === uUp);
@@ -228,7 +268,7 @@ async function createAccount() {
     }
   }
   const body = new URLSearchParams({ project, programmer, password, username, name });
-  const resp = await fetch('/admin/users', {
+  const resp = await fetch('/a/admin/users', {
     method: 'POST',
     headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
     body
@@ -248,7 +288,7 @@ async function createAccount() {
 
 async function deleteAccount(project, programmer) {
   if (!confirm('Delete account [' + project + ',' + programmer + ']?')) return;
-  const resp = await fetch('/admin/users/' + project + '/' + programmer, { method: 'DELETE', headers: { Authorization: authHeader } });
+  const resp = await fetch('/a/admin/users/' + project + '/' + programmer, { method: 'DELETE', headers: { Authorization: authHeader } });
   if (resp.ok) await loadAccounts();
 }
 
@@ -270,7 +310,7 @@ async function submitPwChange() {
   if (password.toUpperCase() !== confirm.toUpperCase()) { errEl.textContent = 'Passwords do not match.'; return; }
   errEl.textContent = '';
   const body = new URLSearchParams({ password });
-  const resp = await fetch('/admin/users/' + pwTarget.project + '/' + pwTarget.programmer, {
+  const resp = await fetch('/a/admin/users/' + pwTarget.project + '/' + pwTarget.programmer, {
     method: 'PUT', headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' }, body
   });
   if (resp.ok) closePwModal();
@@ -278,6 +318,8 @@ async function submitPwChange() {
 
 document.getElementById('pw-modal').addEventListener('click', function(e) { if (e.target === this) closePwModal(); });
 function escapeHtml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+tryRestoreSession();
 </script>
 </body>
 </html>

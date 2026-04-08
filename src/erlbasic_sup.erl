@@ -33,8 +33,10 @@ start_cowboy() ->
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/ws", erlbasic_ws_handler, []},
-            {"/admin", erlbasic_admin_handler, []},
-            {"/admin/[...]", erlbasic_admin_handler, []},
+            {"/a/admin", erlbasic_admin_handler, []},
+            {"/a/admin/[...]", erlbasic_admin_handler, []},
+            {"/a/system", erlbasic_system_handler, []},
+            {"/a/system/[...]", erlbasic_system_handler, []},
             {"/:username", erlbasic_homepage_handler, []},
             {"/:username/", erlbasic_homepage_handler, []},
             {'_', erlbasic_http_handler, []}

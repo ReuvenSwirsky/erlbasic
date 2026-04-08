@@ -1,26 +1,26 @@
 %% @doc Cowboy HTTP handler for the ErlBASIC admin web interface.
 %%
-%% Routes (all under /admin/...):
-%%   GET  /admin[/]                   – serve admin.html
-%%   GET  /admin/accounts             – serve account admin page
-%%   GET  /admin/storage              – serve storage quota admin page
-%%   GET  /admin/memory               – serve memory quota admin page
-%%   GET  /admin/users                – JSON list of accounts  [auth required]
-%%   POST /admin/users                – create account         [auth required]
-%%   DELETE /admin/users/:p/:n        – delete account         [auth required]
-%%   PUT  /admin/users/:p/:n          – change password        [auth required]
-%%   GET  /admin/limits/projects      – JSON project limits    [auth required]
-%%   PUT  /admin/limits/projects/:p   – set project limit      [auth required]
-%%   DELETE /admin/limits/projects/:p – clear project limit    [auth required]
-%%   GET  /admin/limits/users         – JSON user overrides    [auth required]
-%%   PUT  /admin/limits/users/:p/:n   – set user override      [auth required]
-%%   DELETE /admin/limits/users/:p/:n – clear user override    [auth required]
-%%   GET  /admin/memory-limits/projects      – JSON project memory limits [auth required]
-%%   PUT  /admin/memory-limits/projects/:p   – set project memory limit   [auth required]
-%%   DELETE /admin/memory-limits/projects/:p – clear project memory limit [auth required]
-%%   GET  /admin/memory-limits/users         – JSON user memory overrides  [auth required]
-%%   PUT  /admin/memory-limits/users/:p/:n   – set user memory override    [auth required]
-%%   DELETE /admin/memory-limits/users/:p/:n – clear user memory override  [auth required]
+%% Routes (all under /a/admin/...):
+%%   GET  /a/admin[/]                   – serve admin.html
+%%   GET  /a/admin/accounts             – serve account admin page
+%%   GET  /a/admin/storage              – serve storage quota admin page
+%%   GET  /a/admin/memory               – serve memory quota admin page
+%%   GET  /a/admin/users                – JSON list of accounts  [auth required]
+%%   POST /a/admin/users                – create account         [auth required]
+%%   DELETE /a/admin/users/:p/:n        – delete account         [auth required]
+%%   PUT  /a/admin/users/:p/:n          – change password        [auth required]
+%%   GET  /a/admin/limits/projects      – JSON project limits    [auth required]
+%%   PUT  /a/admin/limits/projects/:p   – set project limit      [auth required]
+%%   DELETE /a/admin/limits/projects/:p – clear project limit    [auth required]
+%%   GET  /a/admin/limits/users         – JSON user overrides    [auth required]
+%%   PUT  /a/admin/limits/users/:p/:n   – set user override      [auth required]
+%%   DELETE /a/admin/limits/users/:p/:n – clear user override    [auth required]
+%%   GET  /a/admin/memory-limits/projects      – JSON project memory limits [auth required]
+%%   PUT  /a/admin/memory-limits/projects/:p   – set project memory limit   [auth required]
+%%   DELETE /a/admin/memory-limits/projects/:p – clear project memory limit [auth required]
+%%   GET  /a/admin/memory-limits/users         – JSON user memory overrides  [auth required]
+%%   PUT  /a/admin/memory-limits/users/:p/:n   – set user memory override    [auth required]
+%%   DELETE /a/admin/memory-limits/users/:p/:n – clear user memory override  [auth required]
 %%
 %% Authentication uses HTTP Basic Auth.  The username field must be the PPN in
 %% "Project,Programmer" notation (e.g. "1,1") and the password is the account
@@ -39,49 +39,49 @@ init(Req0, State) ->
 %% ===================================================================
 
 dispatch(<<"GET">>, P, Req, State)
-        when P =:= <<"/admin">>; P =:= <<"/admin/">>; P =:= <<"/admin/accounts">>; P =:= <<"/admin/accounts/">> ->
+        when P =:= <<"/a/admin">>; P =:= <<"/a/admin/">>; P =:= <<"/a/admin/accounts">>; P =:= <<"/a/admin/accounts/">> ->
     serve_html(accounts, Req, State);
 
 dispatch(<<"GET">>, P, Req, State)
-        when P =:= <<"/admin/storage">>; P =:= <<"/admin/storage/">> ->
+        when P =:= <<"/a/admin/storage">>; P =:= <<"/a/admin/storage/">> ->
     serve_html(storage, Req, State);
 
 dispatch(<<"GET">>, P, Req, State)
-        when P =:= <<"/admin/memory">>; P =:= <<"/admin/memory/">> ->
+        when P =:= <<"/a/admin/memory">>; P =:= <<"/a/admin/memory/">> ->
     serve_html(memory, Req, State);
 
-dispatch(Method, <<"/admin/users">>, Req, State) ->
+dispatch(Method, <<"/a/admin/users">>, Req, State) ->
     with_auth(Method, [], Req, State);
 
-dispatch(Method, <<"/admin/users/", Rest/binary>>, Req, State) ->
+dispatch(Method, <<"/a/admin/users/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_auth(Method, Parts, Req, State);
 
-dispatch(Method, <<"/admin/limits/projects">>, Req, State) ->
+dispatch(Method, <<"/a/admin/limits/projects">>, Req, State) ->
     with_limits_auth(Method, {projects, []}, Req, State);
 
-dispatch(Method, <<"/admin/limits/projects/", Rest/binary>>, Req, State) ->
+dispatch(Method, <<"/a/admin/limits/projects/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_limits_auth(Method, {projects, Parts}, Req, State);
 
-dispatch(Method, <<"/admin/limits/users">>, Req, State) ->
+dispatch(Method, <<"/a/admin/limits/users">>, Req, State) ->
     with_limits_auth(Method, {users, []}, Req, State);
 
-dispatch(Method, <<"/admin/limits/users/", Rest/binary>>, Req, State) ->
+dispatch(Method, <<"/a/admin/limits/users/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_limits_auth(Method, {users, Parts}, Req, State);
 
-dispatch(Method, <<"/admin/memory-limits/projects">>, Req, State) ->
+dispatch(Method, <<"/a/admin/memory-limits/projects">>, Req, State) ->
     with_limits_auth(Method, {memory_projects, []}, Req, State);
 
-dispatch(Method, <<"/admin/memory-limits/projects/", Rest/binary>>, Req, State) ->
+dispatch(Method, <<"/a/admin/memory-limits/projects/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_limits_auth(Method, {memory_projects, Parts}, Req, State);
 
-dispatch(Method, <<"/admin/memory-limits/users">>, Req, State) ->
+dispatch(Method, <<"/a/admin/memory-limits/users">>, Req, State) ->
     with_limits_auth(Method, {memory_users, []}, Req, State);
 
-dispatch(Method, <<"/admin/memory-limits/users/", Rest/binary>>, Req, State) ->
+dispatch(Method, <<"/a/admin/memory-limits/users/", Rest/binary>>, Req, State) ->
     Parts = binary:split(Rest, <<"/">>, [global]),
     with_limits_auth(Method, {memory_users, Parts}, Req, State);
 
@@ -142,7 +142,7 @@ parse_ppn_bin(Bin) ->
 %% API handlers
 %% ===================================================================
 
-%% GET /admin/users  – list all accounts as JSON
+%% GET /a/admin/users  – list all accounts as JSON
 handle_api(<<"GET">>, [], Req, State) ->
     case erlbasic_accounts:list_accounts() of
         {ok, Accounts} ->
@@ -155,7 +155,7 @@ handle_api(<<"GET">>, [], Req, State) ->
             reply(500, <<"Server Error">>, Req, State)
     end;
 
-%% POST /admin/users  – create account (URL-encoded body)
+%% POST /a/admin/users  – create account (URL-encoded body)
 handle_api(<<"POST">>, [], Req0, State) ->
     {ok, Body, Req} = cowboy_req:read_urlencoded_body(Req0),
     PBin = proplists:get_value(<<"project">>,    Body, <<>>),
@@ -170,6 +170,10 @@ handle_api(<<"POST">>, [], Req0, State) ->
                     case erlbasic_accounts:create_account(P, N, Pw, Name, ValidUsername) of
                         ok ->
                             reply_json(201, <<"{\"status\":\"created\"}">>, Req, State);
+                        {error, username_too_short} ->
+                            reply_json(400,
+                                <<"{\"error\":\"username must be at least 2 characters\"}">>,
+                                Req, State);
                         {error, reserved_username} ->
                             reply_json(400,
                                 <<"{\"error\":\"username is reserved\"}">>,
@@ -191,7 +195,7 @@ handle_api(<<"POST">>, [], Req0, State) ->
                 Req, State)
     end;
 
-%% DELETE /admin/users/:p/:n  – delete account
+%% DELETE /a/admin/users/:p/:n  – delete account
 handle_api(<<"DELETE">>, [PBin, NBin], Req, State) ->
     case {safe_int(PBin), safe_int(NBin)} of
         {{ok, P}, {ok, N}} ->
@@ -207,7 +211,7 @@ handle_api(<<"DELETE">>, [PBin, NBin], Req, State) ->
             reply(400, <<"Bad Request">>, Req, State)
     end;
 
-%% PUT /admin/users/:p/:n  – change password (URL-encoded body)
+%% PUT /a/admin/users/:p/:n  – change password (URL-encoded body)
 handle_api(<<"PUT">>, [PBin, NBin], Req0, State) ->
     {ok, Body, Req} = cowboy_req:read_urlencoded_body(Req0),
     Pw = proplists:get_value(<<"password">>, Body, <<>>),
@@ -449,9 +453,16 @@ validate_ppn_range(_, _, _, Req, State) ->
 
 validate_username(UsernameBin, Fun, Req, State) ->
     Trimmed = string:trim(UsernameBin),
-    case byte_size(Trimmed) =< 16 of
-        true -> Fun(Trimmed);
-        false ->
+    case Trimmed of
+        <<>> ->
+            Fun(Trimmed);
+        _ when byte_size(Trimmed) < 2 ->
+            reply_json(400,
+                <<"{\"error\":\"username must be at least 2 characters\"}">>,
+                Req, State);
+        _ when byte_size(Trimmed) =< 16 ->
+            Fun(Trimmed);
+        _ ->
             reply_json(400,
                 <<"{\"error\":\"username must be 16 characters or fewer\"}">>,
                 Req, State)
