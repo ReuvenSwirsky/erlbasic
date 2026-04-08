@@ -4,6 +4,40 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 8, 2026 - IF/THEN Line-Number Shorthand, Safer Syntax Failure Handling, and HGR2 Lunar Lander Example
+
+### Enhancements
+- Added parser support for `IF ... THEN <line>` and `IF ... THEN <line> ELSE <line>` shorthand, interpreted as implied `GOTO` targets.
+- Hardened connection handling so malformed interpreter return shapes with `syntax_errors` are surfaced as `?SYNTAX ERROR` instead of bubbling up as connection-level system errors.
+- Added a new WebSocket/HGR2 gameplay example: `examples/lunarlander.bas`.
+
+### Implementation
+- `src/erlbasic_parser.erl`:
+  - `parse_if_statement/1` now normalizes bare numeric THEN/ELSE branches to `GOTO <line>`.
+  - Added `normalize_if_branch_statement/1` helper.
+- `src/erlbasic_conn.erl`:
+  - `tcp_handle_basic/4` and `ws_handle_basic/4` now guard unexpected interpreter return shapes.
+  - Cases carrying `syntax_errors` are mapped to a user-facing `?SYNTAX ERROR` response rather than generic crash output.
+- `examples/lunarlander.bas`:
+  - New side-view LEM in `HGR2` with terrain, landing pad, fuel/speed HUD rows, and crash/landing outcomes.
+  - Added responsive key handling using buffered `GET` scans and `ON ... GOSUB` dispatch.
+
+### Documentation
+- Updated `Basic_Syntax.md`:
+  - Added IF shorthand documentation (`THEN 200` implied `GOTO`).
+  - Clarified DIR grouped output by file source.
+  - Updated storage path wording to the sandbox under `~/ErlUsers/`.
+- Updated `README.md`:
+  - Added Lunar Lander to examples.
+  - Corrected buffered demo example path.
+  - Added notes for DIR grouping and IF shorthand behavior.
+
+### Testing
+- Added EUnit coverage for IF shorthand parsing and runtime behavior.
+- Full test run passed (EUnit + smoke tests).
+
+---
+
 ## April 6, 2026 - Security Hardening for Public Deployment
 
 ### Enhancement

@@ -9,7 +9,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
 - Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
-- Graphics mode (WebSocket only): `HGR`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE` — 800×600 canvas, 16 colours
+- Graphics mode (WebSocket only): `HGR`, `HGR2`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `BUFFER`, `FLUSH`, `PGET`, `GETCHAR`, `SOUND`
 - Full expression engine: numeric operators, exponentiation, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
@@ -124,6 +124,8 @@ RUN
 - Browser WebSocket compression is enabled, but negotiated with `server_no_context_takeover` so successive prompt/output frames remain decodable during interactive sessions.
 - `SLEEP n` pauses for up to 30 seconds (maximum capped); other sessions are unaffected.
 - `SAVE`/`LOAD`/`SCRATCH`/`DIR` manage programs in the user's sandboxed directory.
+- `DIR` output is grouped by source (`Your files` and `Shared examples`) to distinguish personal files from bundled examples.
+- `IF ... THEN <line>` and `IF ... THEN <line> ELSE <line>` are accepted as shorthand for implied `GOTO` targets.
 - File I/O is sandboxed to the user directory; max 15 channels open simultaneously.
 - Absolute paths and `..` path traversal are rejected.
 
@@ -142,7 +144,8 @@ See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase is
 - [examples/enterprise.bas](examples/enterprise.bas) — Animated starship using `LOCATE`, `COLOR`, `SLEEP`, `TIMER`
 - [examples/graphics.bas](examples/graphics.bas) — Graphics demo: `HGR`, `PSET`, `LINE`, `RECT`, `CIRCLE` (WebSocket only)
 - [examples/hgr2demo.bas](examples/hgr2demo.bas) — Split-screen demo: `HGR2` 800×480 graphics above 4 text rows (WebSocket only)
-- [examples/dblbuff_demo.bas](examples/dblbuff_demo.bas) — Buffered-output demo: `BUFFER`, `FLUSH`, `PGET`, `GETCHAR` (WebSocket only)
+- [examples/bufffer.bas](examples/bufffer.bas) — Buffered-output demo: `BUFFER`, `FLUSH`, `PGET`, `GETCHAR` (WebSocket only)
+- [examples/lunarlander.bas](examples/lunarlander.bas) — Interactive side-view Lunar Lander in `HGR2` with thrust controls and pad landing physics
 - [examples/life.bas](examples/life.bas) — Graphics-mode Conway's Life
 - [examples/asciilife.bas](examples/asciilife.bas) — Text-mode Conway's Life using `#` for occupied cells
 - [examples/file_io.bas](examples/file_io.bas) — Sequential and random file I/O demo

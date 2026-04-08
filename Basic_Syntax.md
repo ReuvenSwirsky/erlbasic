@@ -58,7 +58,7 @@ DELETE 40-    - deletes from line 40 to the end
 
 Notes:
 - `CONT` without a prior break context raises `?CAN'T CONTINUE ERROR`.
-- Saved programs are stored under the user's home directory in `BASIC/<user-id>`.
+- Saved programs are stored in the current user's sandboxed storage directory under `~/ErlUsers/`.
 - If no user id is set for the session, `default` is used.
 
 ## Statements
@@ -355,7 +355,7 @@ SAVE myprog.bas
 ```
 
 Notes:
-- The file is saved to `~/BASIC/<user-id>/`.
+- The file is saved to the current user's program directory under `~/ErlUsers/`.
 - Filenames are normalized for safety.
 - Filenames (excluding extension) must not exceed 16 characters.
 - Filenames longer than 16 characters raise `?FILE NAME TOO LONG`.
@@ -372,7 +372,7 @@ LOAD myprog.bas
 ```
 
 Notes:
-- Files are loaded from `~/BASIC/<user-id>/`.
+- Files are loaded from the current user's program directory under `~/ErlUsers/`.
 - Absolute paths and names containing `..` are rejected.
 - Missing files raise `?PROGRAM NOT FOUND`.
 - Other read failures raise `?FILE ERROR`.
@@ -387,7 +387,7 @@ SCRATCH myprog.bas
 ```
 
 Notes:
-- Files are deleted from `~/BASIC/<user-id>/`.
+- Files are deleted from the current user's program directory under `~/ErlUsers/`.
 - Absolute paths and names containing `..` are rejected.
 - Example files (in the shared `examples/` directory) cannot be deleted with `SCRATCH`.
 - Missing files raise `?PROGRAM NOT FOUND`.
@@ -402,8 +402,8 @@ DIR
 ```
 
 Notes:
-- Lists files from `~/BASIC/<user-id>/`.
-- `DIR` shows personal files separately from the shared example programs.
+- Lists files from the current user's program directory under `~/ErlUsers/`.
+- `DIR` shows personal files separately from the shared example programs using labeled sections (`Your files` and `Shared examples`).
 - If no files exist, no filenames are printed.
 
 ### DATA
