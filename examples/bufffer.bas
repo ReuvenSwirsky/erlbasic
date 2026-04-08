@@ -1,17 +1,17 @@
-10 REM DBLBUFF_DEMO.BAS - Double-buffer, FLUSH, PGET, GETCHAR demo
+10 REM  BUFFER, FLUSH, PGET, GETCHAR demo
 20 REM
 30 REM Demonstrates:
-40 REM   DBLBUFF ON/OFF  - batch graphics frames into one WebSocket message
+40 REM   BUFFER ON/OFF   - batch output and send only on FLUSH
 50 REM   FLUSH           - send buffered frames to the browser at a chosen point
 60 REM   PGET (x,y), v  - read palette index of a canvas pixel
 70 REM   GETCHAR r,c, s$ - read a character from a terminal cell
 80 REM
 90 REM ================================================================
-100 REM PART 1: DBLBUFF + FLUSH  (fill screen with colour bars)
+100 REM PART 1: BUFFER + FLUSH  (fill screen with colour bars)
 110 REM ================================================================
-120 PRINT "Part 1: Drawing 16 colour bars with DBLBUFF + FLUSH ..."
+120 PRINT "Part 1: Drawing 16 colour bars with BUFFER + FLUSH ..."
 130 PRINT "  All 16 RECT commands are batched and sent in one message."
-140 DBLBUFF ON
+140 BUFFER ON
 150 HGR
 160 LET BARW = 50
 170 FOR C = 0 TO 15
@@ -31,7 +31,7 @@
 310 PGET (725, 300), P14
 320 PGET (125, 300), P2
 330 TEXT
-340 DBLBUFF OFF
+340 BUFFER OFF
 350 PRINT "Part 2: PGET - reading pixels from the canvas ..."
 360 PRINT "  Bar 14 centre (yellow, expect 14): "; P14
 370 PRINT "  Bar  2 centre (green,  expect  2): "; P2
@@ -58,12 +58,12 @@
 580 SLEEP 3
 590 REM
 600 REM ================================================================
-610 REM PART 4: Smooth animation via DBLBUFF + FLUSH
+610 REM PART 4: Smooth animation via BUFFER + FLUSH
 620 REM ================================================================
 630 PRINT "Part 4: Animated diagonal gradient (20 frames x 200 ms = 4 s) ..."
 640 PRINT "  Watch the canvas: each frame is drawn, flushed, THEN paused."
 650 SLEEP 2
-660 DBLBUFF ON
+660 BUFFER ON
 670 HGR
 680 FOR FRAME = 0 TO 19
 690   REM  Draw the full 800x600 grid of coloured rectangles for this frame
@@ -79,7 +79,7 @@
 790 NEXT FRAME
 800 REM
 810 TEXT
-820 DBLBUFF OFF
+820 BUFFER OFF
 830 PRINT ""
 840 PRINT "Part 4 complete.  Demo finished!"
 850 END

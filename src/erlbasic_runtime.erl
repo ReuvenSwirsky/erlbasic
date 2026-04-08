@@ -55,7 +55,7 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
     after 0 ->
         ok
     end,
-    %% Periodic flush for output during loops — suppressed in double-buffer mode
+    %% Periodic flush for output during loops — suppressed in buffer mode
     NewAcc = case should_flush_output() andalso not State#state.dblbuff andalso (Count rem ?FLUSH_OUTPUT_EVERY =:= 0) andalso (Acc =/= []) of
         true ->
             flush_output(Acc),
@@ -121,8 +121,8 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 case NextState#state.pending_input of
                     undefined ->
                         run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc);
-                    _ ->
-                        case should_flush_output() of
+                    PendingInput ->
+                        case should_flush_output() andalso should_flush_for_pending_input(PendingInput) of
                             true ->
                                 flush_output(NewAcc),
                                 {NextState, []};
@@ -145,8 +145,8 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 case NextState#state.pending_input of
                     undefined ->
                         run_program_lines(Program, TargetPc, NextState, NextLoopStack, NextCallStack, NewAcc);
-                    _ ->
-                        case should_flush_output() of
+                    PendingInput ->
+                        case should_flush_output() andalso should_flush_for_pending_input(PendingInput) of
                             true ->
                                 flush_output(NewAcc),
                                 {NextState, []};
@@ -656,6 +656,8 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
+                    %% BUFFER mode still flushes before SLEEP so paused frames/text are visible.
+                    erlang:put(explicit_flush_requested, true),
                     Ms = min(300000, max(0, trunc(Value * 1000))),
                     receive
                         interrupt             -> erlang:put(interrupted, true);
@@ -692,14 +694,14 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             %% No-op on non-WebSocket connections (nothing is buffered anyway).
             erlang:put(explicit_flush_requested, true),
             {continue, State, LoopStack, CallStack, []};
-        {dblbuff, on} ->
+        {buffer_mode, on} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
                     {continue, State#state{dblbuff = true}, LoopStack, CallStack, []};
                 _ ->
                     handle_runtime_error(ws_only, LineNumber, State, Pc, LoopStack, CallStack)
             end;
-        {dblbuff, off} ->
+        {buffer_mode, off} ->
             {continue, State#state{dblbuff = false}, LoopStack, CallStack, []};
         {pget, XExpr, YExpr, Target} ->
             case erlang:get(erlbasic_conn_type) of
@@ -1146,35 +1148,34 @@ output_contains_newline(OutputParts) ->
 output_contains_control_frame(OutputParts) ->
     lists:any(fun part_is_control_frame/1, OutputParts).
 
-%% In dblbuff mode, drawing primitives are buffered; only mode-change/query
-%% control frames (HGR, HGR2, TEXT, GCLS, sound, PGET) trigger an immediate flush.
-output_contains_non_drawing_control_frame(OutputParts) ->
-    lists:any(fun part_is_non_drawing_control_frame/1, OutputParts).
-
-part_is_non_drawing_control_frame(Part) ->
-    Bin = iolist_to_binary(Part),
-    case Bin of
-        <<2, "GFX:PSET:",   _/binary>> -> false;
-        <<2, "GFX:LINE:",   _/binary>> -> false;
-        <<2, "GFX:LINETO:", _/binary>> -> false;
-        <<2, "GFX:RECT:",   _/binary>> -> false;
-        <<2, "GFX:CIRCLE:", _/binary>> -> false;
-        <<2, _/binary>>                -> true;
-        _                              -> false
-    end.
-
 %% Decide whether accumulated output should be flushed immediately.
 %% ExplicitFlush: set by the FLUSH statement.
-%% In dblbuff mode: flush on explicit FLUSH, newlines, or non-drawing control frames.
+%% In buffer mode: flush only on explicit FLUSH.
 %% In normal mode:  flush on newlines or any control frame (existing behaviour).
 needs_flush(Output, _Dblbuff, true) ->
     %% Explicit FLUSH always drains the buffer
     _ = Output,
     true;
 needs_flush(Output, true, false) ->
-    output_contains_newline(Output) orelse output_contains_non_drawing_control_frame(Output);
+    _ = Output,
+    false;
 needs_flush(Output, false, false) ->
     output_contains_newline(Output) orelse output_contains_control_frame(Output).
+
+%% In BUFFER mode, still flush when execution is waiting for interactive input
+%% that should present prior output immediately.
+should_flush_for_pending_input(PendingInput) when is_list(PendingInput) ->
+    true;
+should_flush_for_pending_input({input_line, _Target, _Continuation}) ->
+    true;
+should_flush_for_pending_input({sleep_keypress, _Continuation}) ->
+    true;
+should_flush_for_pending_input({get_nb, _Target, _Continuation}) ->
+    false;
+should_flush_for_pending_input({getkey, _Target, _Continuation}) ->
+    false;
+should_flush_for_pending_input(_Other) ->
+    true.
 
 part_contains_newline(Part) ->
     Bin = iolist_to_binary(Part),
@@ -1230,12 +1231,42 @@ flush_output(Acc) ->
                 undefined ->
                     ok;
                 Pid ->
-                    lists:foreach(fun(Text) -> Pid ! {output, Text} end, Output)
+                    Packed = pack_websocket_output(Output),
+                    lists:foreach(fun(Text) -> Pid ! {output, Text} end, Packed)
             end;
         Socket ->
             %% TCP mode - send directly to socket
             lists:foreach(fun(Text) -> gen_tcp:send(Socket, Text) end, Output)
     end.
+
+%% Batch consecutive graphics control frames into a single websocket frame.
+%% This drastically reduces per-frame overhead for large BUFFER+FLUSH updates.
+pack_websocket_output(Output) ->
+    lists:reverse(pack_websocket_output(Output, [], [])).
+
+pack_websocket_output([], AccRev, []) ->
+    AccRev;
+pack_websocket_output([], AccRev, GfxCmdsRev) ->
+    [make_gfx_batch_frame(GfxCmdsRev) | AccRev];
+pack_websocket_output([Text | Rest], AccRev, GfxCmdsRev) ->
+    Bin = iolist_to_binary(Text),
+    case Bin of
+        <<2, "GFX:", Cmd/binary>> ->
+            pack_websocket_output(Rest, AccRev, [Cmd | GfxCmdsRev]);
+        _ ->
+            NextAccRev =
+                case GfxCmdsRev of
+                    [] -> AccRev;
+                    _ -> [make_gfx_batch_frame(GfxCmdsRev) | AccRev]
+                end,
+            pack_websocket_output(Rest, [Bin | NextAccRev], [])
+    end.
+
+make_gfx_batch_frame([SingleCmd]) ->
+    <<2, "GFX:", SingleCmd/binary>>;
+make_gfx_batch_frame(GfxCmdsRev) ->
+    Joined = iolist_to_binary(lists:join(<<"\n">>, lists:reverse(GfxCmdsRev))),
+    <<2, "GFXB:", Joined/binary>>.
 
 render_print_items(Items, Vars, Funcs, StartCol) ->
     render_print_items(Items, Vars, Funcs, StartCol, [], StartCol).

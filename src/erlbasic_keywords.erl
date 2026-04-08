@@ -29,7 +29,7 @@ list_keywords() ->
         "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
         "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "GETCHAR", "SLEEP", "SOUND", "TIMER", "CHAIN",
         "OPEN", "CLOSE", "WRITE", "FIELD", "PUT", "AS", "APPEND", "RANDOM", "OUTPUT",
-        "TRON", "TROFF", "FLUSH", "DBLBUFF", "PGET"
+        "TRON", "TROFF", "FLUSH", "BUFFER", "PGET"
     ].
 
 reserved_only_keywords() ->

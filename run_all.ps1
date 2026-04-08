@@ -45,6 +45,15 @@ escript perf_tests/perf_runner.escript $PSScriptRoot
 if ($LASTEXITCODE -ne 0) { throw "Performance tests failed" }
 Write-Host ""
 
+# ── WebSocket graphics send-path benchmark ──────────────────────────────────
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "WS GRAPHICS BENCHMARK" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+
+escript perf_tests/ws_graphics_benchmark.escript $PSScriptRoot
+if ($LASTEXITCODE -ne 0) { throw "WebSocket graphics benchmark failed" }
+Write-Host ""
+
 # ── Textlife benchmark (saves history) ────────────────────────────────────────
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "TEXTLIFE BENCHMARK (100 generations)" -ForegroundColor Cyan

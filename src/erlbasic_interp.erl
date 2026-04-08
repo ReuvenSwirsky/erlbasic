@@ -523,12 +523,12 @@ execute_statement_single(Command, State) ->
         {flush_stmt} ->
             %% In immediate mode there is no accumulator, so FLUSH is a no-op.
             {State, []};
-        {dblbuff, on} ->
+        {buffer_mode, on} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket -> {State#state{dblbuff = true}, []};
                 _         -> {State, [erlbasic_eval:format_runtime_error(ws_only)]}
             end;
-        {dblbuff, off} ->
+        {buffer_mode, off} ->
             {State#state{dblbuff = false}, []};
         {pget, XExpr, YExpr, Target} ->
             case erlang:get(erlbasic_conn_type) of

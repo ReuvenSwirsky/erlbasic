@@ -5,7 +5,9 @@
 
 %% Called by Cowboy when the HTTP request arrives; upgrade to WebSocket.
 init(Req, State) ->
-    {cowboy_websocket, Req, State, #{idle_timeout => infinity}}.
+    %% Enable permessage-deflate when supported by the browser to reduce
+    %% over-the-wire size of graphics-heavy frame streams.
+    {cowboy_websocket, Req, State, #{idle_timeout => infinity, compress => true}}.
 
 %% Called once the WebSocket handshake is complete.
 websocket_init(_State) ->

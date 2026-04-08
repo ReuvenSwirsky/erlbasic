@@ -126,6 +126,12 @@ sound_parse_and_validate_test() ->
         erlbasic_parser:parse_statement("SOUND 0,120,10,8")),
     ?assertEqual(ok, erlbasic_parser:validate_program_line("SOUND 0,120,10,8")).
 
+buffer_parse_and_validate_test() ->
+    ?assertEqual({buffer_mode, on}, erlbasic_parser:parse_statement("BUFFER ON")),
+    ?assertEqual({buffer_mode, off}, erlbasic_parser:parse_statement("BUFFER OFF")),
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("BUFFER ON")),
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("BUFFER OFF")).
+
 sound_immediate_requires_websocket_test() ->
     PrevConnType = erlang:get(erlbasic_conn_type),
     erlang:put(erlbasic_conn_type, tcp),

@@ -328,6 +328,19 @@
       }
     }
 
+    function handleGraphicsBatch(batchText) {
+      if (!batchText) {
+        return;
+      }
+      const cmds = batchText.split('\n');
+      for (let i = 0; i < cmds.length; i += 1) {
+        const cmd = cmds[i];
+        if (cmd.length > 0) {
+          handleGraphicsCommand(cmd);
+        }
+      }
+    }
+
     // Handle TXT: control frames (GETCHAR row/col queries from the server)
     function handleTextQuery(cmd) {
       const parts = cmd.split(':');
@@ -469,6 +482,7 @@
         if (cmd === 'CHAR_MODE_ON')  { charMode = true; }
         if (cmd === 'CHAR_MODE_OFF') { charMode = false; inputBuffer = ''; }
         if (cmd.startsWith('GFX:')) { handleGraphicsCommand(cmd.slice(4)); }
+        if (cmd.startsWith('GFXB:')) { handleGraphicsBatch(cmd.slice(5)); }
         if (cmd.startsWith('SND:')) { handleSoundCommand(cmd.slice(4)); }
         if (cmd.startsWith('TXT:')) { handleTextQuery(cmd.slice(4)); }
         return;

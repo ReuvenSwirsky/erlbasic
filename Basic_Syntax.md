@@ -513,22 +513,24 @@ Notes:
 - `TROFF` turns trace mode off.
 - Works in immediate mode and in stored programs.
 
-### DBLBUFF
+### BUFFER
 
-Enables or disables double-buffer mode for WebSocket sessions.
+Enables or disables buffered output mode for WebSocket sessions.
 
 ```text
-DLBUFF ON
-DLBUFF OFF
+BUFFER ON
+BUFFER OFF
 ```
 
 Notes:
-- In double-buffer mode, graphics drawing commands (`PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`) are accumulated in the server's output buffer instead of being sent as individual WebSocket frames.
-- Mode-change commands (`HGR`, `HGR2`, `TEXT`, `GCLS`) and query commands (`PGET`, `GETCHAR`) still flush immediately.
-- The periodic automatic flush (every 100 program lines) is suppressed while double-buffer is on.
-- Use `FLUSH` to send the accumulated buffer to the browser at the desired sync point (e.g. once per animation frame or once per generation).
-- `DBLBUFF ON` raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
-- `DBLBUFF OFF` is always safe to call; it also re-enables the automatic flushing.
+- In `BUFFER ON` mode, output is accumulated and not sent incrementally.
+- This applies to both text and graphics output.
+- Use `FLUSH` to send the accumulated buffer to the browser at the desired sync point.
+- Automatic/implicit flushes are suppressed while buffered mode is on.
+- The runtime still flushes before `INPUT` prompts and before `SLEEP` waits, so users see pending output before interaction/pauses.
+- `GET` and `GETKEY` do not force a flush.
+- `BUFFER ON` raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
+- `BUFFER OFF` is always safe to call and returns to normal incremental output behaviour.
 
 ### FLUSH
 
@@ -539,21 +541,21 @@ FLUSH
 ```
 
 Notes:
-- Useful in double-buffer mode to control exactly when accumulated graphics output is sent.
+- In `BUFFER ON` mode, `FLUSH` is the sync point that transmits accumulated output.
 - In normal (non-buffered) mode, `FLUSH` is a no-op because output is already sent incrementally.
 - In immediate mode, `FLUSH` is also a no-op.
 
-Typical usage with `DBLBUFF`:
+Typical usage with `BUFFER`:
 
 ```text
-10 DBLBUFF ON
+10 BUFFER ON
 20 HGR
 30 FOR I = 0 TO 799
 40   PSET (I, 300), 10
 50 NEXT I
 60 FLUSH
 70 TEXT
-80 DBLBUFF OFF
+80 BUFFER OFF
 ```
 
 ### PGET

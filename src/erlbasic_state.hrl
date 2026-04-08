@@ -18,5 +18,5 @@
     trace_enabled = false,      % TRON/TROFF runtime line tracing
     graphics_mode = false,      % false | hgr | hgr2 — active graphics mode (WebSocket only)
     graphics_pen = undefined,   % {X, Y} - last graphics endpoint (for LINETO)
-    dblbuff = false             % true when double-buffer mode is on (WebSocket only)
+    dblbuff = false             % true when BUFFER mode is on (WebSocket only)
 }).

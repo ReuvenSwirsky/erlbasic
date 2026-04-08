@@ -18,7 +18,7 @@
 180 REM
 190 REM Switch to graphics mode
 200 PRINT "Starting simulation..."
-205 DBLBUFF ON
+205 BUFFER ON
 210 HGR
 220 REM
 230 REM Main simulation loop
@@ -55,7 +55,7 @@
 570     NEXT X
 580   NEXT Y
 590 NEXT GEN
-595 DBLBUFF OFF
+595 BUFFER OFF
 640 REM
 650 REM End simulation
 660 TEXT

@@ -605,19 +605,19 @@ parse_sleep_statement(Trimmed) ->
         nomatch ->
             case re:run(Trimmed, "(?i)^SLEEP$", [{capture, none}]) of
                 match   -> {sleep_keypress};
-                nomatch -> parse_flush_dblbuff_statement(Trimmed)
+                nomatch -> parse_flush_buffer_statement(Trimmed)
             end
     end.
 
-parse_flush_dblbuff_statement(Trimmed) ->
+parse_flush_buffer_statement(Trimmed) ->
     case re:run(Trimmed, "(?i)^FLUSH$", [{capture, none}]) of
         match -> {flush_stmt};
         nomatch ->
-            case re:run(Trimmed, "(?i)^DBLBUFF\\s+(ON|OFF)$", [{capture, [1], list}]) of
+            case re:run(Trimmed, "(?i)^BUFFER\\s+(ON|OFF)$", [{capture, [1], list}]) of
                 {match, [OnOff]} ->
                     case string:to_upper(OnOff) of
-                        "ON"  -> {dblbuff, on};
-                        "OFF" -> {dblbuff, off}
+                        "ON"  -> {buffer_mode, on};
+                        "OFF" -> {buffer_mode, off}
                     end;
                 nomatch -> parse_sound_statement(Trimmed)
             end
@@ -982,9 +982,9 @@ validate_statement(Stmt) ->
             ok;
         {flush_stmt} ->
             ok;
-        {dblbuff, on} ->
+        {buffer_mode, on} ->
             ok;
-        {dblbuff, off} ->
+        {buffer_mode, off} ->
             ok;
         {pget, XExpr, YExpr, Target} ->
             case validate_expr_pair(XExpr, YExpr) of
