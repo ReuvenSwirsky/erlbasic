@@ -1,8 +1,8 @@
 # BASIC Syntax Reference
 
-This document describes the currently supported syntax for erlbasic.
+This document lists the BASIC and REPL commands currently implemented in erlbasic.
 
-## Program Structure
+## Program Line Structure
 
 A stored program line starts with a numeric line number:
 
@@ -13,987 +13,639 @@ A stored program line starts with a numeric line number:
 
 Rules:
 - Line numbers are integers.
-- Entering a line number with no code deletes that line:
+- Entering only a line number deletes that line from the stored program.
+- Multiple statements can be placed on one line using `:`.
+- `REM` comments consume the rest of the statement text.
 
+## REPL Commands (Immediate Mode)
+
+These commands are entered without a line number.
+
+### CHAIN
+
+Loads and runs another program immediately.
+
+Syntax:
+- `CHAIN <name>`
+
+Example:
 ```text
-20
+CHAIN demo
 ```
 
-## REPL Commands
+### CONT
 
-These commands can be entered without a line number:
+Continues execution after a Ctrl-C break.
 
-- `LIST` - prints all stored program lines in numeric order.
-- `LIST <line>` - prints a single line.
-- `LIST <start>-<end>` - prints lines in the given range.
-- `LIST -<end>` - prints from the beginning to the specified line.
-- `LIST <start>-` - prints from the specified line to the end.
-- `DELETE <line>` - deletes a single line.
-- `DELETE <start>-<end>` - deletes lines in the given range.
-- `DELETE -<end>` - deletes from the beginning to the specified line.
-- `DELETE <start>-` - deletes from the specified line to the end.
-- `RUN` - executes the stored program.
-- `CONT` - continues execution after a `BREAK` caused by Ctrl-C during `RUN`.
-- `NEW` - clears the stored program.
-- `DIR` - lists saved program files for the current user.
-- `SAVE <name>` - saves the current stored program to a file.
-- `LOAD <name>` - loads a saved program file into memory.
-- `SCRATCH <name>` - deletes a saved program file from the user's directory.
-- `RENUM [start[,increment]]` - renumbers stored program lines in order (defaults: `10,10`) and updates direct `GOTO`/`GOSUB` line-number references.
-- `QUIT` - disconnects from the TCP session.
+Syntax:
+- `CONT`
+
+Notes:
+- Requires a valid break context.
+
+### DELETE
+
+Deletes lines from the current stored program.
+
+Syntax:
+- `DELETE <line>`
+- `DELETE <start>-<end>`
+- `DELETE -<end>`
+- `DELETE <start>-`
 
 Examples:
 ```text
-LIST          - lists entire program
-LIST 100      - lists line 100 only
-LIST 10-50    - lists lines 10 through 50
-LIST -30      - lists from beginning through line 30
-LIST 40-      - lists from line 40 to the end
-
-DELETE 100    - deletes line 100
-DELETE 10-50  - deletes lines 10 through 50
-DELETE -30    - deletes from beginning through line 30
-DELETE 40-    - deletes from line 40 to the end
+DELETE 100
+DELETE 100-200
+DELETE -50
+DELETE 500-
 ```
-
-Notes:
-- `CONT` without a prior break context raises `?CAN'T CONTINUE ERROR`.
-- Saved programs are stored in the current user's sandboxed storage directory under `~/ErlUsers/`.
-- If no user id is set for the session, `default` is used.
-
-## Statements
-
-Statements can be used in immediate mode (no line number) and in stored programs, unless noted.
-
-### LET
-
-Assigns an expression to a variable.
-
-```text
-LET X = 42
-LET NAME = "ALICE"
-```
-
-Array assignment is also supported:
-
-```text
-LET A(0) = 10
-LET GRID(1,2) = 42
-LET CUBE(1,1,1) = 99
-```
-
-Variable rules:
-- Variable names: `[A-Za-z][A-Za-z0-9_]*` with optional trailing `$` for string-style names, `%` for integer-style names, or `&` for byte-style names
-- Byte variables (`&` suffix) store integers clamped to 0-255 range
-- Variable lookup is case-insensitive (`X`, and `x` refer to the same variable).
-- Reserved language keywords cannot be used as variable names (for example `PRINT`, `FOR`, `MOD`, `TIMER`, `STRING$`).
-
-Examples:
-
-```text
-LET A$ = "HELLO"
-PRINT A$
-LET I% = 42
-PRINT I%
-LET B& = 200
-PRINT B&
-LET B& = 300
-PRINT B&
-REM Prints 255 (clamped to byte range)
-
-LET PRINT = 1
-REM Raises ?RESERVED WORD ERROR
-```
-
-### REM
-
-Adds a comment. The interpreter ignores the rest of the statement.
-
-```text
-REM THIS IS A COMMENT
-REM DRAW FLAG: RED/WHITE STRIPES
-```
-
-Notes:
-- `REM` is valid in immediate mode and stored program lines.
-- Any `:` after `REM` is treated as comment text, not a statement separator.
-
-### DEF FN
-
-Defines a user function (GW-BASIC style) for use in expressions.
-
-```text
-DEF FNQ(X)=X*X+1
-PRINT FNQ(3)
-```
-
-Notes:
-- Function names use `FN` prefix (for example, `FNQ`, `FNSCORE`).
-- Parameter is optional in this interpreter (`DEF FNPI=3.14159` style), but standard usage is one parameter.
-- Function names and parameter names are case-insensitive.
-
-### PRINT
-
-Prints an expression value.
-
-```text
-PRINT X
-PRINT "HELLO"
-PRINT 123
-? X
-```
-
-`?` is accepted as a shorthand synonym for `PRINT`.
-
-`PRINT` also supports separator control between items:
-
-```text
-PRINT "A", "B"
-PRINT "A"; "B"
-PRINT "A";
-PRINT "B"
-```
-
-Notes:
-- `,` advances to the next print zone (14 columns).
-- `;` concatenates adjacent output with no extra spacing.
-- A trailing `;` suppresses newline so the next `PRINT` continues on the same line.
-
-### PRINT USING
-
-Formats values with a format expression.
-
-```text
-PRINT USING "###.##"; 12.3
-PRINT USING "&"; "HELLO"; "!"
-```
-
-Supported format forms:
-- Numeric mask: `#` with optional decimal point (for example `###`, `###.##`).
-- String slot: `&` (replaces the first `&` with the value text).
-
-Notes:
-- The format expression must evaluate to a string.
-- Non-numeric values used with numeric masks raise `?TYPE MISMATCH ERROR`.
-- Separators `,` and `;` after formatted items follow the same spacing/newline rules as `PRINT`.
-
-### INPUT
-
-Reads a value from the user and stores it in a variable.
-
-```text
-INPUT N
-INPUT A$
-INPUT A(3)
-```
-
-Notes:
-- Numeric variables parse the entered text as an integer expression.
-- Variables ending in `$` store the entered text as a string.
-- Variables ending in `%` behave like integer-style numeric variables.
-- Variables ending in `&` behave like byte variables (values clamped to 0-255).
-- During `RUN`, program execution pauses until a value is entered.
-- On browser WebSocket sessions, `INPUT` remains compatible with compressed transport; the server negotiates compression without server-side context takeover so prompts and replies stay stable across successive frames.
-
-### LOCATE
-
-Moves the cursor to a row and column.
-
-```text
-LOCATE 5, 10
-```
-
-Notes:
-- Row and column expressions are evaluated and normalized to integers.
-- Minimum position is row `1`, column `1`.
-- Cursor movement is supported for WebSocket/xterm sessions.
-- On telnet/TCP sessions, `LOCATE` raises `?TTY DOESN'T SUPPORT CURSOR MOVEMENT`.
-
-### COLOR
-
-Sets the text foreground and optionally background color.
-
-```text
-COLOR 14
-COLOR 14, 1
-COLOR 7, 0
-```
-
-Notes:
-- Foreground values 0–15 follow the standard GW-BASIC palette (0=black, 1=blue, 2=green, 3=cyan, 4=red, 5=magenta, 6=brown, 7=white, 8–15=bright variants).
-- Background values 0–7 (same palette, no bright variants).
-- On WebSocket/xterm sessions the appropriate ANSI SGR escape is emitted.
-- On telnet/TCP sessions `COLOR` is silently ignored.
-
-### HGR
-
-Enters high-resolution graphics mode (800×600 with 16 colors).
-
-```text
-HGR
-```
-
-Notes:
-- On WebSocket sessions, hides the terminal and displays a graphics canvas.
-- On telnet/TCP sessions, `HGR` is silently ignored.
-- The graphics canvas is cleared to black when entering graphics mode.
-
-### HGR2
-
-Enters split-screen graphics mode: 800×480 graphics canvas overlaying the top 21 terminal rows, with the bottom 4 rows remaining as a scrollable text area.
-
-```text
-HGR2
-```
-
-Notes:
-- On WebSocket sessions, displays an 800×480 canvas above rows 22–25 of the terminal.
-- The scroll region is restricted to rows 22–25; `PRINT` and `LOCATE` output goes there.
-- `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, and `GCLS` all work in HGR2 mode; y coordinates range from 0 to 479.
-- `TEXT` restores full-screen text mode and resets the scroll region.
-- On telnet/TCP sessions, `HGR2` is silently ignored.
-- See `examples/hgr2demo.bas` for a complete split-screen demo.
-
-### TEXT
-
-Returns to text mode from graphics mode.
-
-```text
-TEXT
-```
-
-Notes:
-- On WebSocket sessions, hides the graphics canvas and restores the terminal.
-- On telnet/TCP sessions, `TEXT` is silently ignored.
-
-### PSET
-
-Sets a pixel at coordinates (x, y) to the specified color.
-
-```text
-PSET (100, 200), 14
-PSET (X, Y), C
-```
-
-Notes:
-- Coordinates are 0-based: x ∈ [0, 799], y ∈ [0, 599].
-- Color values 0–15 use the EGA/VGA palette.
-- Only works in graphics mode (after `HGR`).
-- On telnet/TCP sessions, `PSET` is silently ignored.
-
-### LINE
-
-Draws a line from (x1, y1) to (x2, y2) in the specified color.
-
-```text
-LINE (10, 10)-(100, 100), 15
-LINE (X1, Y1)-(X2, Y2), C
-```
-
-Notes:
-- Coordinates are 0-based.
-- Color values 0–15 use the EGA/VGA palette.
-- Only works in graphics mode (after `HGR`).
-- Sets the graphics pen position to the endpoint (x2, y2) for use with `LINETO`.
-
-### LINETO
-
-Draws a line from the previous graphics endpoint to (x, y) in the specified color.
-
-```text
-LINETO (50, 100), 12
-LINETO (X, Y), C
-```
-
-Notes:
-- Requires a previous `LINE` or `LINETO` command to establish the starting point.
-- Raises `?NO PREVIOUS LINE` error if no previous line has been drawn since `HGR`.
-- Coordinates are 0-based.
-- Color values 0–15 use the EGA/VGA palette.
-- Only works in graphics mode (after `HGR`).
-- Sets the graphics pen position to the endpoint (x, y) for subsequent `LINETO` commands.
-
-### RECT
-
-Draws a filled rectangle from (x1, y1) to (x2, y2) in the specified color.
-
-```text
-RECT (10, 10)-(100, 100), 15
-RECT (X1, Y1)-(X2, Y2), C
-```
-
-Notes:
-- Coordinates are 0-based and inclusive.
-- Color values 0–15 use the EGA/VGA palette.
-- Only works in graphics mode (after `HGR`).
-- On telnet/TCP sessions, `RECT` is silently ignored.
-- Much faster than drawing multiple lines for filled areas.
-
-### CIRCLE
-
-Draws a circle centered at (x, y) with the specified radius and color.
-
-```text
-CIRCLE (320, 240), 50, 12
-CIRCLE (X, Y), R, C
-```
-
-Notes:
-- Coordinates are 0-based.
-- Radius is in pixels.
-- Color values 0–15 use the EGA/VGA palette.
-- Only works in graphics mode (after `HGR`).
-- On telnet/TCP sessions, `CIRCLE` is silently ignored.
-
-### SAVE
-
-Saves the current stored program to disk.
-
-```text
-SAVE DEMO
-SAVE myprog.bas
-```
-
-Notes:
-- The file is saved to the current user's program directory under `~/ErlUsers/`.
-- Filenames are normalized for safety.
-- Filenames (excluding extension) must not exceed 16 characters.
-- Filenames longer than 16 characters raise `?FILE NAME TOO LONG`.
-- Absolute paths and names containing `..` are rejected.
-- File write failures raise `?FILE ERROR`.
-
-### LOAD
-
-Loads a saved program from disk, replacing the current stored program.
-
-```text
-LOAD DEMO
-LOAD myprog.bas
-```
-
-Notes:
-- Files are loaded from the current user's program directory under `~/ErlUsers/`.
-- Absolute paths and names containing `..` are rejected.
-- Missing files raise `?PROGRAM NOT FOUND`.
-- Other read failures raise `?FILE ERROR`.
-
-### SCRATCH
-
-Deletes a saved program file from the user's directory.
-
-```text
-SCRATCH DEMO
-SCRATCH myprog.bas
-```
-
-Notes:
-- Files are deleted from the current user's program directory under `~/ErlUsers/`.
-- Absolute paths and names containing `..` are rejected.
-- Example files (in the shared `examples/` directory) cannot be deleted with `SCRATCH`.
-- Missing files raise `?PROGRAM NOT FOUND`.
-- Other file errors raise `?FILE ERROR`.
 
 ### DIR
 
-Lists saved program files for the current user.
+Lists available user programs and shared examples.
 
+Syntax:
+- `DIR`
+
+### LIST
+
+Lists stored program lines.
+
+Syntax:
+- `LIST`
+- `LIST <line>`
+- `LIST <start>-<end>`
+- `LIST -<end>`
+- `LIST <start>-`
+
+Examples:
 ```text
-DIR
+LIST
+LIST 100
+LIST 100-200
+LIST -50
+LIST 500-
 ```
 
-Notes:
-- Lists files from the current user's program directory under `~/ErlUsers/`.
-- `DIR` shows personal files separately from the shared example programs using labeled sections (`Your files` and `Shared examples`).
-- If no files exist, no filenames are printed.
+### LOAD
 
-### DATA
+Loads a program file into memory (replacing current program).
 
-Declares literal values that can be consumed sequentially by `READ`.
+Syntax:
+- `LOAD <name>`
 
+### NEW
+
+Clears the current stored program.
+
+Syntax:
+- `NEW`
+
+### QUIT
+
+Disconnects the current session.
+
+Syntax:
+- `QUIT`
+
+### RENUM
+
+Renumbers stored lines and rewrites direct `GOTO`/`GOSUB` line references.
+
+Syntax:
+- `RENUM`
+- `RENUM <start>`
+- `RENUM <start>,<increment>`
+
+Defaults:
+- `start = 10`
+- `increment = 10`
+
+Examples:
 ```text
-DATA 10, 20, "HELLO"
+RENUM
+RENUM 100
+RENUM 100,5
 ```
 
-Notes:
-- `DATA` is used by `READ` during program execution.
-- Items are consumed in program order.
+### RUN
 
-### READ
+Runs current program, or loads-and-runs a file.
 
-Reads one or more values from `DATA` into variables.
+Syntax:
+- `RUN`
+- `RUN <name>`
 
-```text
-READ A, B, NAME$
-READ A(0), GRID(1,2)
-READ CUBE(0,0,0)
-```
+### SAVE
 
-Notes:
-- String variables (ending in `$`) receive text values.
-- Numeric variables receive numeric values.
-- Reading past available `DATA` raises `?OUT OF DATA ERROR`.
+Saves the current stored program.
 
-### GET
+Syntax:
+- `SAVE <name>`
 
-Reads one character from the keyboard buffer into a string variable (non-blocking).
+### SCRATCH
 
-```text
-GET A$
-```
+Deletes a saved program file.
 
-Notes:
-- If the keyboard buffer is empty, the variable is set to `""` and execution continues immediately.
-- The connection layer yields for up to 10 ms before resuming, so a polling loop runs cooperatively at ~100 Hz without spinning the CPU.
-- On WebSocket sessions, the browser switches to char mode so individual keystrokes arrive immediately without waiting for Enter.
+Syntax:
+- `SCRATCH <name>`
 
-Typical usage:
+## BASIC Statements
 
-```text
-10 GET A$
-20 IF A$ = "" THEN 10
-30 PRINT "KEY: "; A$
-```
+Statements below are listed in alphabetical order by command name. Unless noted otherwise, they work both in immediate mode and in stored program lines.
 
-### GETKEY
-
-Blocks until one character is available in the keyboard buffer, then assigns it to a string variable.
-
-```text
-GETKEY A$
-```
-
-Notes:
-- Execution suspends until a keystroke arrives; no CPU is consumed while waiting.
-- On WebSocket sessions, the browser switches to char mode for the duration of the wait.
-- Any extra characters received with the keystroke are stored in an internal buffer and consumed by subsequent `GET` or `GETKEY` calls.
-
-### SLEEP
-
-Pauses execution for the specified number of seconds (DEC BASIC).
-
-```text
-SLEEP 1
-SLEEP 0.5
-```
-
-Notes:
-- The argument is a numeric expression (integer or float).
-- Fractional seconds are supported (e.g., `SLEEP 0.25` pauses for 250 ms).
-- Negative values are treated as zero (no pause).
-- Values greater than 30 are capped to 30 seconds.
-- The Erlang scheduler is yielded during the sleep; other connections continue unaffected.
-- Passing a string raises `?TYPE MISMATCH ERROR`.
-
-### SOUND
-
-Atari BASIC-style sound control.
-
-```text
-SOUND channel, pitch, distortion, volume
-```
-
-Notes:
-- `channel` is clamped to `0..3`.
-- `pitch` is clamped to `0..255`.
-- `distortion` is clamped to `0..15`.
-- `volume` is clamped to `0..15` (`0` silences the channel).
-- `SOUND` is only supported on the browser WebSocket client.
-- On non-WebSocket terminals, `SOUND` raises `?SOUND NOT SUPPORTED ON TTY`.
-
-### TRON / TROFF
-
-Enables or disables line tracing during `RUN`.
-
-```text
-TRON
-TROFF
-```
-
-Notes:
-- `TRON` turns on trace mode.
-- While trace mode is on, each executed program line emits a trace marker like `[120]` before that line runs.
-- `TROFF` turns trace mode off.
-- Works in immediate mode and in stored programs.
+Scope notes:
+- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON ERROR GOTO`, `RESUME`) are intended for stored program execution.
+- `INPUT`, `GET`, `GETKEY`, `SLEEP`, `PGET`, and `GETCHAR` may pause execution waiting for input or browser replies.
 
 ### BUFFER
 
-Enables or disables buffered output mode for WebSocket sessions.
+Controls double-buffered output mode (WebSocket sessions).
 
+Syntax:
+- `BUFFER ON`
+- `BUFFER OFF`
+
+### CHAIN
+
+In program execution, loads another program and continues execution from that new program.
+
+Syntax:
+- `CHAIN <string-expression>`
+
+Examples:
 ```text
-BUFFER ON
-BUFFER OFF
+CHAIN "nextprog"
+CHAIN FILE$
 ```
 
-Notes:
-- In `BUFFER ON` mode, output is accumulated and not sent incrementally.
-- This applies to both text and graphics output.
-- Use `FLUSH` to send the accumulated buffer to the browser at the desired sync point.
-- Automatic/implicit flushes are suppressed while buffered mode is on.
-- The runtime still flushes before `INPUT` prompts and before `SLEEP` waits, so users see pending output before interaction/pauses.
-- `GET` and `GETKEY` do not force a flush.
-- `BUFFER ON` raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
-- `BUFFER OFF` is always safe to call and returns to normal incremental output behaviour.
+### CIRCLE
 
-### FLUSH
+Draws a circle in graphics mode.
 
-Forces an immediate flush of the accumulated output buffer to the browser.
+Syntax:
+- `CIRCLE (<x>,<y>),<radius>,<color>`
 
+Example:
 ```text
-FLUSH
+CIRCLE (320,240),50,12
 ```
 
-Notes:
-- In `BUFFER ON` mode, `FLUSH` is the sync point that transmits accumulated output.
-- In normal (non-buffered) mode, `FLUSH` is a no-op because output is already sent incrementally.
-- In immediate mode, `FLUSH` is also a no-op.
+### CLS
 
-Typical usage with `BUFFER`:
+Clears the text display.
 
+Syntax:
+- `CLS`
+
+### CLOSE
+
+Closes file channels.
+
+Syntax:
+- `CLOSE`
+- `CLOSE #<channel>`
+- `CLOSE #<channel>,#<channel>,...`
+
+Examples:
 ```text
-10 BUFFER ON
-20 HGR
-30 FOR I = 0 TO 799
-40   PSET (I, 300), 10
-50 NEXT I
-60 FLUSH
-70 TEXT
-80 BUFFER OFF
+CLOSE
+CLOSE #1
+CLOSE #1,#2,#3
 ```
 
-### PGET
+### COLOR
 
-Reads the palette index of a single pixel from the graphics canvas.
+Sets text foreground/background color.
 
+Syntax:
+- `COLOR <fg>`
+- `COLOR <fg>,<bg>`
+
+### DATA
+
+Defines literal data items for `READ`.
+
+Syntax:
+- `DATA`
+- `DATA <item>,<item>,...`
+
+Examples:
 ```text
-PGET (X, Y), VAR
+DATA 10,20,30
+DATA "ALPHA","BETA",99
 ```
 
-Notes:
-- Assigns the EGA palette index (`0..15`) of the pixel at `(X, Y)` to `VAR`.
-- Returns `-1` if the pixel colour does not exactly match any palette entry.
-- Valid only in graphics mode (`HGR` or `HGR2`); raises `?NO GRAPHICS MODE` otherwise.
-- In `HGR` mode, `Y` must be in `0..599`. In `HGR2` mode, `Y` must be in `0..479`.
-- Out-of-range coordinates raise `?ILLEGAL FUNCTION CALL`.
-- WebSocket only; raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
-- Execution suspends briefly while the browser reads the canvas pixel and responds.
+### DEF FN
 
+Defines a user function.
+
+Syntax:
+- `DEF FN<name>=<expr>`
+- `DEF FN<name>(<arg>)=<expr>`
+
+Examples:
 ```text
-100 HGR
-110 PSET (100, 100), 14
-120 PGET (100, 100), C
-130 PRINT C          ' prints 14
-```
-
-### GETCHAR
-
-Reads the character displayed at a terminal cell.
-
-```text
-GETCHAR ROW, COL, VAR$
-```
-
-Notes:
-- Assigns the character at terminal position `(ROW, COL)` to `VAR$` as a one-character string.
-- Returns `""` (empty string) for cells that have not been written or contain code-point `0`.
-- In text mode, `ROW` must be `1..25` and `COL` must be `1..80`.
-- In `HGR2` mode, only the text rows `22..25` are accessible (`ROW` must be `22..25`).
-- Not valid in full `HGR` mode (no visible text rows); raises `?ILLEGAL FUNCTION CALL`.
-- WebSocket only; raises `?WEBSOCKET ONLY` on telnet/TCP sessions.
-- Execution suspends briefly while the browser reads the xterm buffer and responds.
-
-```text
-10 LOCATE 5, 10
-20 PRINT "A"
-30 GETCHAR 5, 10, C$
-40 PRINT C$           ' prints A
-```
-
-### END
-
-Stops execution of a running stored program.
-
-```text
-END
+DEF FNQ(X)=X*X+1
+DEF FNPI=3.14159
 ```
 
 ### DIM
 
-Declares 1D, 2D, or 3D arrays and their upper bounds.
+Declares one or more arrays.
 
+Syntax:
+- `DIM A(<d1>)`
+- `DIM A(<d1>,<d2>)`
+- `DIM A(<d1>,<d2>,<d3>)`
+- `DIM A(...),B(...),...`
+
+Examples:
 ```text
 DIM A(10)
-DIM M(5,5), N$(3)
-DIM CUBE(2,2,2)
+DIM GRID(10,10)
+DIM CUBE(4,4,4),NAMES$(50)
 ```
+
+### END
+
+Stops program execution.
+
+Syntax:
+- `END`
+
+### FIELD
+
+Defines fixed-length string fields for a random-access channel.
+
+Syntax:
+- `FIELD #<channel>, <len-expr> AS <string-var>, <len-expr> AS <string-var>, ...`
+
+Example:
+```text
+FIELD #1, 20 AS NAME$, 4 AS AGE$
+```
+
+### FLUSH
+
+Forces buffered output to flush.
+
+Syntax:
+- `FLUSH`
+
+### FOR
+
+Starts a counted loop.
+
+Syntax:
+- `FOR <var>=<start> TO <end>`
+- `FOR <var>=<start> TO <end> STEP <step>`
+
+Example:
+```text
+FOR I=1 TO 10 STEP 2
+```
+
+### GET
+
+Two implemented forms:
+
+Syntax:
+- `GET <target>`
+- `GET #<channel>, <record-expr>`
 
 Notes:
-- Indices are zero-based (`0..upper_bound`).
-- One-, two-, and three-dimensional arrays are supported.
-- Using an index outside the declared bounds raises `?SUBSCRIPT OUT OF RANGE`.
+- `GET <target>` reads one character (non-blocking keyboard input behavior).
+- `GET #...` reads a random-access record from an open file channel.
 
-### IF ... THEN ... [ELSE ...]
+### GETCHAR
 
-Conditional statement.
+Reads character at a text cell position into a target variable (WebSocket text area behavior).
 
-```text
-IF X = 10 THEN PRINT "TEN"
-IF X > 0 THEN PRINT "POS" ELSE PRINT "NONPOS"
-```
+Syntax:
+- `GETCHAR <row>,<col>,<target>`
 
-THEN/ELSE bodies can contain one statement or multiple statements separated by `:`.
+### GETKEY
 
-```text
-IF X = 1 THEN LET Y = 7 : PRINT Y ELSE PRINT 0
-```
+Reads one key (blocking behavior) into a target variable.
 
-A bare line number is accepted as shorthand for `GOTO`:
+Syntax:
+- `GETKEY <target>`
 
-```text
-IF X = 1 THEN 200
-IF X = 0 THEN 100 ELSE 300
-```
+### GOSUB
 
-These are interpreted as:
+Calls a subroutine at target line.
 
-```text
-IF X = 1 THEN GOTO 200
-IF X = 0 THEN GOTO 100 ELSE GOTO 300
-```
-
-### FOR ... TO ... [STEP ...]
-
-Loop statement (intended for program execution with `RUN`).
-
-```text
-FOR I = 1 TO 10
-PRINT I
-NEXT
-```
-
-With explicit step:
-
-```text
-FOR I = 10 TO 1 STEP -1
-PRINT I
-NEXT I
-```
-
-Notes:
-- If `STEP` is omitted, step defaults to `1`.
-- A step of `0` is normalized to `1`.
+Syntax:
+- `GOSUB <line-expr>`
 
 ### GOTO
 
-Jumps to a target line number during `RUN`.
+Jumps to target line.
 
-```text
-GOTO 200
-```
+Syntax:
+- `GOTO <line-expr>`
 
-### GOSUB / RETURN
+### HGR
 
-Calls a subroutine line and returns to the line after `GOSUB`.
+Enters graphics mode.
 
-```text
-10 GOSUB 100
-20 PRINT "BACK"
-30 END
-100 PRINT "SUB"
-110 RETURN
-```
+Syntax:
+- `HGR`
 
-Notes:
-- Executing `RETURN` without an active `GOSUB` stack raises `?RETURN WITHOUT GOSUB ERROR`.
+### HGR2
 
-### ON...GOSUB / ON...GOTO
+Enters split graphics/text mode.
 
-Computed jump statements that select a target from a list based on an index expression.
+Syntax:
+- `HGR2`
 
-```text
-ON <expr> GOSUB line1, line2, line3, ...
-ON <expr> GOTO line1, line2, line3, ...
-```
+### IF ... THEN ... ELSE
 
-The expression is evaluated and used as a 1-based index into the list of target line numbers:
-- If the value is 1, jump to the first target
-- If the value is 2, jump to the second target
-- And so on...
+Conditional statement.
 
-If the index is less than 1 or greater than the number of targets, the statement is ignored and execution continues with the next statement.
+Syntax:
+- `IF <condition> THEN <statement>`
+- `IF <condition> THEN <statement> ELSE <statement>`
+- `IF <condition> THEN <line-number>`
+- `IF <condition> THEN <line-number> ELSE <line-number>`
 
 Examples:
-
 ```text
-10 LET X = 2
-20 ON X GOSUB 100, 200, 300
-30 PRINT "BACK"
-40 END
-100 PRINT "SUB1" : RETURN
-200 PRINT "SUB2" : RETURN
-300 PRINT "SUB3" : RETURN
-REM Output: SUB2, BACK
+IF X>0 THEN PRINT "POS"
+IF X=0 THEN 500 ELSE 900
 ```
 
-```text
-10 LET CHOICE = 3
-20 ON CHOICE GOTO 100, 200, 300
-30 PRINT "SKIP"
-100 PRINT "FIRST" : END
-200 PRINT "SECOND" : END
-300 PRINT "THIRD" : END
-REM Output: THIRD
-```
+### INPUT
 
-Notes:
-- `ON...GOSUB` pushes a return address onto the call stack, just like `GOSUB`
-- `ON...GOTO` performs an unconditional jump, just like `GOTO`
-- Out-of-range indices (≤ 0 or > number of targets) continue to the next statement
-- The index expression is evaluated as an integer (fractional parts are truncated)
+Reads one or more comma-separated values from user input.
 
-### NEXT [var]
+Syntax:
+- `INPUT <target>`
+- `INPUT <target>,<target>,...`
 
-Advances the active FOR loop.
+Targets may be scalar variables or array elements.
 
-```text
-NEXT
-NEXT I
-```
+### INPUT #
 
-### ON ERROR GOTO / RESUME
+Reads one or more values from a file channel.
 
-Error handling statements that allow programs to trap runtime errors and recover gracefully.
+Syntax:
+- `INPUT #<channel>, <target>`
+- `INPUT #<channel>, <target>,<target>,...`
 
-#### Setting an Error Handler
+### INPUT LINE
 
-```text
-ON ERROR GOTO line
-```
+Reads an entire input line (unparsed) into a target.
 
-Sets an error handler at the specified line number. When a runtime error occurs, execution jumps to the handler instead of stopping the program.
+Syntax:
+- `INPUT LINE <target>`
 
-```text
-ON ERROR GOTO 0
-```
+### LET
 
-Disables error handling and restores default behavior (stop on error).
+Assignment statement.
 
-#### RESUME Statements
+Syntax:
+- `LET <target>=<expr>`
+- `<target>=<expr>` (implicit `LET` form)
 
-Used within an error handler to continue execution after handling an error.
-
-```text
-RESUME
-RESUME 0
-```
-
-Retries the statement that caused the error. Useful when the error handler fixes the problem.
-
-```text
-RESUME NEXT
-```
-
-Continues execution with the statement immediately after the one that caused the error. Most common form.
-
-```text
-RESUME line
-```
-
-Continues execution at a specific line number.
-
-#### Error Variables
-
-Two special variables are automatically set when an error occurs:
-
-- `ERR` - Error code number (integer)
-- `ERL` - Line number where the error occurred (integer)
-
-Error codes follow GW-BASIC conventions:
-- 1 = NEXT WITHOUT FOR
-- 2 = SYNTAX ERROR
-- 3 = RETURN WITHOUT GOSUB
-- 4 = OUT OF DATA
-- 5 = ILLEGAL FUNCTION CALL
-- 11 = DIVISION BY ZERO
-- 13 = TYPE MISMATCH
-- 17 = CAN'T CONTINUE
-- 20 = RESUME WITHOUT ERROR
-
-Example:
-
-```text
-10 ON ERROR GOTO 1000
-20 PRINT "Starting"
-30 X = 1 / 0
-40 PRINT "After error"
-50 END
-1000 REM Error handler
-1010 PRINT "Error"; ERR; "at line"; ERL
-1020 RESUME NEXT
-```
-
-Output:
-```text
-Starting
-Error11at line30
-After error
-Program ended
-```
-
-Notes:
-- Using `RESUME` outside an error handler raises `?RESUME WITHOUT ERROR`
-- Error handlers remain active until disabled with `ON ERROR GOTO 0`
-- Errors within error handlers are not caught and will stop the program
-
-## Multiple Statements on One Line
-
-Top-level statement chaining is supported using `:` for non-IF lines:
-
-```text
-LET A = 5 : PRINT A
-```
-
-Inside IF branches, chaining is also supported:
-
-```text
-IF A = 5 THEN PRINT "YES" : LET B = 9 ELSE PRINT "NO"
-```
-
-A colon inside a quoted string does not split statements:
-
-```text
-PRINT "A:B"
-```
-
-## Expressions
-
-Supported expression forms:
-- Integer literal: `123`
-- Floating-point literal: `3.14`, `.5`
-- Quoted string literal: `"HELLO"`
-- Variable reference: `X`
-- Array reference: `A(I)`, `M(I,J)`, `CUBE(I,J,K)`
-- Arithmetic with numbers and variables: `+`, `-`, `*`, `/`, `^`, parentheses, unary `+`/`-`
-- GW-BASIC-compatible numeric operators:
-	- Integer division: `\\`
-	- Modulus: `MOD`
-- Logical/Bitwise operators (work on integers as bitwise, on boolean values as logical):
-	- `AND` - Bitwise/logical AND
-	- `OR` - Bitwise/logical OR
-	- `XOR` - Bitwise/logical XOR
-	- `NOT` - Bitwise/logical NOT
-- Built-in numeric functions (case-insensitive):
-	- Single-argument: `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATN`, `CEIL`, `COS`, `DEG`, `EXP`, `FIX`, `FLOOR`, `INT`, `LN`, `LOG`, `RAD`, `SGN`, `SIN`, `SQR`, `SQRT`, `TAN`, `VAL`
-	- Two-argument: `ATAN2`, `POW`
-	- Zero-argument: `PI`, `RND`, `TIMER`
-- Built-in string functions (case-insensitive):
-	- `LEFT$(text, n)`
-	- `RIGHT$(text, n)`
-	- `MID$(text, start[, n])` (1-based start index)
-	- `INSTR([start,] text, pattern)` (1-based position, `0` if not found)
-	- `LEN(text)`
-	- `ASC(text)`
-	- `CHR$(code)`
-	- `STR$(number)`
-	- `SPACE$(n)`
-	- `STRING$(n, code_or_text)`
-	- `POS([expr])` (current print column, 1-based)
-	- `DATE$()` (local date in `MM-DD-YYYY`)
-	- `TIME$()` (local time in `HH:MM:SS`)
-	- `TERM$()` (`"XTERM"` for WebSocket terminal sessions, `"TELNET"` for TCP/telnet sessions)
-- User-defined function calls with `DEF FN...` syntax: `FNQ(3)`
+Targets may be scalar variables or array elements.
 
 Examples:
-
 ```text
-LET X = 2 + 3 * 4
-PRINT (X - 2) / 3
-PRINT SIN(PI() / 2)
-PRINT SQRT(16)
-PRINT LEFT$("HELLO", 2)
-PRINT MID$("HELLO", 2, 3)
-PRINT INSTR("ABCDE", "CD")
-PRINT SPACE$(5) + "X"
-PRINT POS(0)
-PRINT STRING$(5, 42)
-PRINT DATE$()
-PRINT TIME$()
-PRINT TERM$()
+LET X=42
+TOTAL=TOTAL+1
+LET A(3,2)=99
 ```
 
-Function behavior notes:
-- `INSTR(text, pattern)` searches from position 1.
-- `INSTR(start, text, pattern)` starts search at 1-based `start`.
-- `INSTR` returns `0` when no match is found.
-- `SPACE$(n)` returns a string of `n` spaces.
-- `POS([expr])` returns the current `PRINT` column (1-based). The argument is accepted for GW-BASIC compatibility and ignored.
+### LINE
 
-Undefined variables evaluate to `0`.
+Draws a line segment in graphics mode.
 
-GW-BASIC / DEC BASIC alignment notes:
-- `TIMER` returns the number of seconds elapsed since midnight as a floating-point number, matching GW-BASIC behaviour.
-- `^` binds tighter than unary `-`, so `-2^2` evaluates as `-(2^2)` and yields `-4`.
-- `/` performs floating-point division.
-- `\\` performs integer division.
-- `MOD` returns remainder.
-- `RND` behavior follows DEC BASIC / GW-BASIC syntax:
-	- `RND` or `RND(x)` with `x > 0`: returns next pseudo-random value in range [0, 1).
-	- `RND(0)`: returns the previous random value (allows repeating the last result).
-	- `RND(x)` with `x < 0`: reseeds the random number generator deterministically from `x` and returns the first value from that seed. Same negative value produces same sequence.
-- Random number examples:
-	```text
-	10 PRINT RND          ' Random value
-	20 PRINT RND(1)       ' Another random value
-	30 PRINT RND(0)       ' Repeat last value
-	40 PRINT RND(-42)     ' Seed and get value
-	50 PRINT RND(-42)     ' Same seed = same value
-	60 PRINT INT(RND*100) ' Random 0-99
-	```
-- Runtime math errors use GW-BASIC-style messages and stop `RUN`:
-	- `?DIVISION BY ZERO ERROR`
-	- `?ILLEGAL FUNCTION CALL`
-	- `?OUT OF DATA ERROR`
-	- `?SUBSCRIPT OUT OF RANGE`
-	- `?TYPE MISMATCH ERROR`
-	- `?CAN'T CONTINUE ERROR`
-	- `?RETURN WITHOUT GOSUB ERROR`
+Syntax:
+- `LINE (<x1>,<y1>)-(<x2>,<y2>),<color>`
 
-## Conditions
+### LINE INPUT #
 
-Supported comparison operators in IF conditions:
-- `=`
-- `<>`
-- `<`
-- `>`
-- `<=`
-- `>=`
+Reads a full raw line from a file channel into a target.
+
+Syntax:
+- `LINE INPUT #<channel>, <target>`
+
+### LINETO
+
+Draws from previous graphics pen position to new point.
+
+Syntax:
+- `LINETO (<x>,<y>),<color>`
+
+### LOCATE
+
+Moves cursor to row/column.
+
+Syntax:
+- `LOCATE <row>,<col>`
+
+### NEXT
+
+Advances a `FOR` loop.
+
+Syntax:
+- `NEXT`
+- `NEXT <var>`
+
+### ON ... GOSUB
+
+Computed subroutine dispatch.
+
+Syntax:
+- `ON <expr> GOSUB <line>,<line>,...`
+
+### ON ... GOTO
+
+Computed jump dispatch.
+
+Syntax:
+- `ON <expr> GOTO <line>,<line>,...`
+
+### ON ERROR GOTO
+
+Enables runtime error trap target.
+
+Syntax:
+- `ON ERROR GOTO <line-expr>`
+
+### OPEN
+
+Opens a file channel.
+
+Syntax:
+- `OPEN <path-expr> FOR INPUT AS #<channel>`
+- `OPEN <path-expr> FOR OUTPUT AS #<channel>`
+- `OPEN <path-expr> FOR APPEND AS #<channel>`
+- `OPEN <path-expr> FOR RANDOM AS #<channel>`
+- `OPEN <path-expr> FOR <mode> AS #<channel> LEN=<record-len-expr>`
+
+Modes:
+- `INPUT`
+- `OUTPUT`
+- `APPEND`
+- `RANDOM`
+
+### PGET
+
+Reads pixel palette index into target.
+
+Syntax:
+- `PGET (<x>,<y>),<target>`
+
+### PRINT
+
+Prints items.
+
+Syntax:
+- `PRINT`
+- `PRINT <item-list>`
+- `? <item-list>` (alias)
+
+Item separator options:
+- `,` zone separator
+- `;` concatenation/no spacing
+- trailing `;` suppresses newline
 
 Examples:
-
 ```text
-IF X <> 0 THEN PRINT "NONZERO"
-IF NAME = "ALICE" THEN PRINT "HI"
-IF X > 5 AND Y < 10 THEN PRINT "IN RANGE"
-IF A = 1 OR B = 1 THEN PRINT "ONE IS SET"
-IF NOT (X = 0) THEN PRINT "NOT ZERO"
+PRINT "A", "B"
+PRINT "A";"B";
+? X
 ```
 
-Logical operators (`AND`, `OR`, `XOR`, `NOT`) can be used in conditions and work as expected:
-- `AND` - Both conditions must be true
-- `OR` - At least one condition must be true  
-- `XOR` - Exactly one condition must be true (exclusive or)
-- `NOT` - Negates the condition
+### PRINT #
 
-Bitwise operations on integers:
+Prints to file channel.
 
-```text
-LET A = 12 AND 10    REM Bitwise AND: 12 (1100) AND 10 (1010) = 8 (1000)
-LET B = 12 OR 3      REM Bitwise OR: 12 (1100) OR 3 (0011) = 15 (1111)
-LET C = 12 XOR 10    REM Bitwise XOR: 12 (1100) XOR 10 (1010) = 6 (0110)
-LET D = NOT 0        REM Bitwise NOT: NOT 0 = -1 (two's complement)
-```
+Syntax:
+- `PRINT #<channel>`
+- `PRINT #<channel>, <item-list>`
 
-If no comparison operator is present, truthiness is used:
-- Integer: true if not `0`
-- String: true if not empty/whitespace
+### PRINT USING
 
+Formatted print.
 
+Syntax:
+- `PRINT USING <format-expr>; <item-list>`
+
+Supported format placeholders:
+- `#` numeric mask (with optional decimal point)
+- `&` string insertion
+
+### PSET
+
+Sets a pixel in graphics mode.
+
+Syntax:
+- `PSET (<x>,<y>),<color>`
+
+### PUT #
+
+Writes random-access record to file channel.
+
+Syntax:
+- `PUT #<channel>, <record-expr>`
+
+### READ
+
+Reads values from `DATA` stream into targets.
+
+Syntax:
+- `READ <target>`
+- `READ <target>,<target>,...`
+
+### RECT
+
+Draws filled rectangle in graphics mode.
+
+Syntax:
+- `RECT (<x1>,<y1>)-(<x2>,<y2>),<color>`
+
+### REM
+
+Comment statement.
+
+Syntax:
+- `REM`
+- `REM <text>`
+
+### RESUME
+
+Error handler resume control.
+
+Syntax:
+- `RESUME`
+- `RESUME 0`
+- `RESUME NEXT`
+- `RESUME <line-expr>`
+
+### RETURN
+
+Returns from `GOSUB`.
+
+Syntax:
+- `RETURN`
+
+### SLEEP
+
+Pause execution.
+
+Syntax:
+- `SLEEP`
+- `SLEEP <seconds-expr>`
+
+Notes:
+- `SLEEP` with no argument waits for a keypress.
+- `SLEEP <seconds-expr>` pauses for that duration (bounded internally).
+
+### SOUND
+
+Emits sound command.
+
+Syntax:
+- `SOUND <voice>,<pitch>,<distortion>,<volume>`
+
+### TEXT
+
+Returns to text mode.
+
+Syntax:
+- `TEXT`
+
+### TRON
+
+Turns trace output on.
+
+Syntax:
+- `TRON`
+
+### TROFF
+
+Turns trace output off.
+
+Syntax:
+- `TROFF`
+
+### WRITE #
+
+Writes comma-separated values to file channel in WRITE format.
+
+Syntax:
+- `WRITE #<channel>`
+- `WRITE #<channel>, <expr>,<expr>,...`
+
+## Notes
+
+- Variable names are case-insensitive and may include optional suffixes `$`, `%`, or `&`.
+- Reserved words cannot be used as variable names.
+- Arrays support 1, 2, or 3 dimensions.
+- `FOR` loop control variables are numeric variable forms.
+- Many graphics-oriented statements require WebSocket mode and active graphics mode.
