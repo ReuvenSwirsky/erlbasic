@@ -164,11 +164,28 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
             %% Flush final output
             FinalOutput = sound_stop_output() ++ lists:reverse(Output) ++ TraceAcc,
             flush_output(FinalOutput),
+            %% Clear all runtime state as other BASICs do on END:
+            %% variables, user functions, data pointer, open files,
+            %% error handler, keyboard buffer, and continuation context.
+            EndedState = State#state{
+                vars          = #{},
+                funcs         = #{},
+                data_items    = collect_program_data(State#state.prog),
+                data_index    = 1,
+                continue_ctx  = undefined,
+                open_files    = #{},
+                error_handler = undefined,
+                error_resume_pc = undefined,
+                error_code    = 0,
+                error_line    = 0,
+                char_buffer   = [],
+                print_col     = 0
+            },
             case should_flush_output() of
                 true ->
-                    {State, ["Program ended\r\n"]};
+                    {EndedState, ["Program ended\r\n"]};
                 false ->
-                    {State, lists:reverse(["Program ended\r\n" | FinalOutput])}
+                    {EndedState, lists:reverse(["Program ended\r\n" | FinalOutput])}
             end;
         {chain, NewState, Output} ->
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
