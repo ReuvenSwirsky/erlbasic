@@ -1,6 +1,7 @@
 -module(erlbasic_eunit_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("erlbasic_state.hrl").
 
 validate_program_line_ok_test() ->
     ?assertEqual(ok, erlbasic_parser:validate_program_line("PRINT \"HELLO\"")), 
@@ -1556,6 +1557,147 @@ ws_down_error_is_reported_as_crash_test() ->
     {reply, {text, Utf8}, _} = erlbasic_ws_handler:websocket_info({'DOWN', make_ref(), process, Pid, badarg}, State),
     Text = binary_to_list(Utf8),
     ?assertEqual(match, re:run(Text, "Interpreter crashed - badarg", [{capture, none}])).
+
+%% -------------------------------------------------------------------------
+%% MML parser tests
+%% -------------------------------------------------------------------------
+
+mml_empty_string_test() ->
+    ?assertEqual({ok, [], unchanged}, erlbasic_mml:parse("")).
+
+mml_single_note_test() ->
+    {ok, [{Hz, _Play, Total}], unchanged} = erlbasic_mml:parse("A"),
+    %% A4 = 440 Hz, default L4 at T120 = 500 ms
+    ?assertEqual(440, Hz),
+    ?assertEqual(500, Total).
+
+mml_sharp_flat_test() ->
+    {ok, [{HzSharp, _, _}], unchanged} = erlbasic_mml:parse("A#"),
+    {ok, [{HzFlat,  _, _}], unchanged} = erlbasic_mml:parse("B-"),
+    %% A# and B- (B-flat) are enharmonic equivalents — same pitch
+    ?assertEqual(HzSharp, HzFlat),
+    ?assert(HzSharp > 440).
+
+mml_octave_change_test() ->
+    {ok, [{Hz4, _, _}], unchanged} = erlbasic_mml:parse("O4 A"),
+    {ok, [{Hz5, _, _}], unchanged} = erlbasic_mml:parse("O5 A"),
+    ?assertEqual(Hz4 * 2, Hz5).
+
+mml_octave_up_down_test() ->
+    {ok, [{HzBase, _, _}], unchanged} = erlbasic_mml:parse("O4 A"),
+    {ok, [{HzUp,   _, _}], unchanged} = erlbasic_mml:parse("O4 > A"),
+    {ok, [{HzDown, _, _}], unchanged} = erlbasic_mml:parse("O4 < A"),
+    ?assertEqual(HzBase * 2, HzUp),
+    %% Octave below is half frequency (allow 1 Hz rounding)
+    ?assert(abs(HzDown * 2 - HzBase) =< 1).
+
+mml_length_test() ->
+    {ok, [{_, _, WholeMs}], unchanged} = erlbasic_mml:parse("L1 A"),
+    {ok, [{_, _, HalfMs}],  unchanged} = erlbasic_mml:parse("L2 A"),
+    ?assertEqual(WholeMs, HalfMs * 2).
+
+mml_dotted_length_test() ->
+    {ok, [{_, _, NormalMs}], unchanged} = erlbasic_mml:parse("L4 A"),
+    {ok, [{_, _, DottedMs}], unchanged} = erlbasic_mml:parse("L4 A."),
+    ?assertEqual(round(NormalMs * 1.5), DottedMs).
+
+mml_tempo_test() ->
+    {ok, [{_, _, Slow}], unchanged} = erlbasic_mml:parse("T60 A"),
+    {ok, [{_, _, Fast}], unchanged} = erlbasic_mml:parse("T120 A"),
+    ?assertEqual(Slow, Fast * 2).
+
+mml_rest_test() ->
+    {ok, [{0, 0, Total}], unchanged} = erlbasic_mml:parse("P4"),
+    ?assert(Total > 0).
+
+mml_note_number_test() ->
+    %% N37 = MIDI 60 = C4 = 262 Hz
+    {ok, [{Hz, _, _}], unchanged} = erlbasic_mml:parse("N37"),
+    ?assert(abs(Hz - 262) =< 1).
+
+mml_rest_note_number_test() ->
+    {ok, [{0, 0, _Total}], unchanged} = erlbasic_mml:parse("N0").
+
+mml_multiple_notes_test() ->
+    {ok, Notes, unchanged} = erlbasic_mml:parse("CDEFGAB"),
+    ?assertEqual(7, length(Notes)).
+
+mml_background_mode_test() ->
+    {ok, _Notes, background} = erlbasic_mml:parse("MB A"),
+    {ok, _Notes2, foreground} = erlbasic_mml:parse("MB A MF").
+
+mml_articulation_test() ->
+    {ok, [{_HzN, PlayN, TotalN}], unchanged} = erlbasic_mml:parse("MN A"),
+    {ok, [{_HzL, PlayL, TotalL}], unchanged} = erlbasic_mml:parse("ML A"),
+    {ok, [{_HzS, PlayS, TotalS}], unchanged} = erlbasic_mml:parse("MS A"),
+    ?assertEqual(TotalN, TotalL),        %% total duration is always the same
+    ?assertEqual(TotalN, TotalS),
+    ?assert(PlayL > PlayN),              %% legato: full duration played
+    ?assert(PlayN > PlayS).             %% staccato: shorter than normal
+
+%% -------------------------------------------------------------------------
+%% PLAY parser / runtime tests (non-WebSocket path)
+%% -------------------------------------------------------------------------
+
+play_stmt_parses_test() ->
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("PLAY \"CDEFGAB\"")).
+
+play_stmt_invalid_test() ->
+    %% Missing expression — must be a syntax error
+    ?assertEqual(error, erlbasic_parser:validate_program_line("PLAY")).
+
+on_play_gosub_parses_test() ->
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("ON PLAY(5) GOSUB 100")).
+
+play_is_reserved_variable_test() ->
+    ?assertEqual({error, reserved_word},
+        erlbasic_parser:validate_program_line("LET PLAY = 1")).
+
+play_tty_error_test() ->
+    %% On a non-WebSocket connection PLAY reports an error
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("PLAY \"C\"", S0),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "NOT SUPPORTED ON TTY", [{capture, none}])).
+
+play_function_zero_on_tty_test() ->
+    %% PLAY(n) should return 0 when there is no background queue
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    erlang:erase(erlbasic_play_schedule),
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("PRINT PLAY(0)", S0),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "^0", [{capture, none}])).
+
+on_play_gosub_sets_state_test() ->
+    %% Verify ON PLAY(n) GOSUB stores handler in state without executing
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("ON PLAY(3) GOSUB 100", S0),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    ?assertMatch({_, _}, S1#state.on_play_gosub).
+
+on_play_gosub_cleared_by_end_test() ->
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("ON PLAY(3) GOSUB 100", S0),
+    %% Run a tiny program with END — state should be cleared
+    {S2, _} = erlbasic_interp:handle_input("10 END", S1),
+    {S3, _} = erlbasic_interp:handle_input("RUN", S2),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    ?assertEqual(undefined, S3#state.on_play_gosub),
+    ?assertEqual(-1, S3#state.on_play_return_depth).
 
 restore_env(Name, false) ->
     true = os:unsetenv(Name),
