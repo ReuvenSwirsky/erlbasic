@@ -12,13 +12,14 @@
     assign_target/4,
     declare_array/3,
     target_is_string/1,
+    target_is_float/1,
     normalize_int/1,
     format_runtime_error/1,
     format_runtime_error/2,
     error_code/1
 ]).
 
--define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%&]?$").
+-define(VAR_REFERENCE_PATTERN, "^[A-Za-z][A-Za-z0-9_]*[\\$%&#]?$").
 
 format_value(Value) when is_integer(Value) ->
     integer_to_list(Value) ++ "\r\n";
@@ -96,7 +97,11 @@ eval_expr_result(Expr, Vars) ->
                             Upper = string:to_upper(Trimmed),
                             case erlbasic_eval_arrays:is_string_var(Upper) of
                                 true -> {ok, maps:get(Upper, Vars, ""), Vars};
-                                false -> {ok, maps:get(Upper, Vars, 0), Vars}
+                                false ->
+                                    case erlbasic_eval_arrays:is_float_var(Upper) of
+                                        true -> {ok, maps:get(Upper, Vars, 0.0), Vars};
+                                        false -> {ok, maps:get(Upper, Vars, 0), Vars}
+                                    end
                             end;
                         nomatch ->
                             case erlbasic_eval_expr:eval_arith_expr(Trimmed, Vars) of
@@ -125,17 +130,46 @@ with_user_funcs(Funcs, Fun) ->
     end.
 
 assign_target({var_target, Var}, Value, Vars, _Funcs) ->
-    NormalizedValue = case erlbasic_eval_arrays:is_byte_var(Var) of
-        true -> erlbasic_eval_arrays:normalize_byte_value(Value);
-        false -> Value
-    end,
-    {ok, maps:put(Var, NormalizedValue, Vars)};
-assign_target({array_target, Var, IndexExprs}, Value, Vars, Funcs) ->
-    case eval_indices(IndexExprs, Vars, Funcs) of
-        {ok, Indices} ->
-            erlbasic_eval_arrays:put_array_value(Var, Indices, Value, Vars);
+    case normalize_assignment_value(Var, Value) of
+        {ok, NormalizedValue} ->
+            {ok, maps:put(Var, NormalizedValue, Vars)};
         {error, Reason} ->
             {error, Reason}
+    end;
+assign_target({array_target, Var, IndexExprs}, Value, Vars, Funcs) ->
+    case normalize_assignment_value(Var, Value) of
+        {ok, NormalizedValue} ->
+            case eval_indices(IndexExprs, Vars, Funcs) of
+                {ok, Indices} ->
+                    erlbasic_eval_arrays:put_array_value(Var, Indices, NormalizedValue, Vars);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+normalize_assignment_value(Var, Value) ->
+    case erlbasic_eval_arrays:is_string_var(Var) of
+        true ->
+            case is_list(Value) of
+                true -> {ok, Value};
+                false -> {error, type_mismatch}
+            end;
+        false ->
+            case is_number(Value) of
+                true ->
+                    case erlbasic_eval_arrays:is_byte_var(Var) of
+                        true -> {ok, erlbasic_eval_arrays:normalize_byte_value(Value)};
+                        false ->
+                            case erlbasic_eval_arrays:is_float_var(Var) of
+                                true -> {ok, erlbasic_eval_arrays:normalize_float_value(Value)};
+                                false -> {ok, Value}
+                            end
+                    end;
+                false ->
+                    {error, type_mismatch}
+            end
     end.
 
 declare_array(Name, Dims, Vars) when is_list(Dims) ->
@@ -153,6 +187,11 @@ target_is_string({var_target, Var}) ->
     erlbasic_eval_arrays:is_string_var(Var);
 target_is_string({array_target, Var, _}) ->
     erlbasic_eval_arrays:is_string_var(Var).
+
+target_is_float({var_target, Var}) ->
+    erlbasic_eval_arrays:is_float_var(Var);
+target_is_float({array_target, Var, _}) ->
+    erlbasic_eval_arrays:is_float_var(Var).
 
 format_runtime_error(division_by_zero) ->
     "?DIVISION BY ZERO ERROR\r\n";

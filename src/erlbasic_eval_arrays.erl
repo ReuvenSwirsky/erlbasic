@@ -10,7 +10,9 @@
     auto_array_dims/1,
     is_string_var/1,
     is_byte_var/1,
-    normalize_byte_value/1
+    is_float_var/1,
+    normalize_byte_value/1,
+    normalize_float_value/1
 ]).
 
 -define(ARRAYS_KEY, '$ARRAYS$').
@@ -90,7 +92,11 @@ write_array_meta(ArrayMeta, Name, Indices, Value) ->
             StoredValue =
                 case is_byte_var(Name) of
                     true -> normalize_byte_value(Value);
-                    false -> Value
+                    false ->
+                        case is_float_var(Name) of
+                            true -> normalize_float_value(Value);
+                            false -> Value
+                        end
                 end,
             Data0 = maps:get(data, ArrayMeta),
             Data1 = array:set(Index, StoredValue, Data0),
@@ -130,7 +136,11 @@ flat_index(_, _, _, _) ->
 default_scalar_value(Name) ->
     case is_string_var(Name) of
         true -> "";
-        false -> 0
+        false ->
+            case is_float_var(Name) of
+                true -> 0.0;
+                false -> 0
+            end
     end.
 
 is_string_var(Name) when is_list(Name) ->
@@ -139,11 +149,21 @@ is_string_var(Name) when is_list(Name) ->
 is_byte_var(Name) when is_list(Name) ->
     Name =/= [] andalso lists:last(Name) =:= $&.
 
+is_float_var(Name) when is_list(Name) ->
+    Name =/= [] andalso lists:last(Name) =:= $#.
+
 normalize_byte_value(Value) when is_integer(Value) ->
     clamp_byte(Value);
 normalize_byte_value(Value) when is_float(Value) ->
     clamp_byte(trunc(Value));
 normalize_byte_value(Value) ->
+    Value.
+
+normalize_float_value(Value) when is_integer(Value) ->
+    float(Value);
+normalize_float_value(Value) when is_float(Value) ->
+    Value;
+normalize_float_value(Value) ->
     Value.
 
 clamp_byte(N) when N < 0 ->

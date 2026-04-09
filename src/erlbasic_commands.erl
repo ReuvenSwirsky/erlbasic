@@ -568,7 +568,7 @@ normalize_keywords_for_list([Ch | Rest], CurrentRev, false, AccRev) when
     (Ch >= $A andalso Ch =< $Z) orelse
     (Ch >= $a andalso Ch =< $z) orelse
     (Ch >= $0 andalso Ch =< $9) orelse
-    Ch =:= $_ orelse Ch =:= $$ orelse Ch =:= $% ->
+    Ch =:= $_ orelse Ch =:= $$ orelse Ch =:= $% orelse Ch =:= $& orelse Ch =:= $# ->
     normalize_keywords_for_list(Rest, [Ch | CurrentRev], false, AccRev);
 normalize_keywords_for_list([Ch | Rest], CurrentRev, false, AccRev) ->
     NextAccRev = [Ch | [flush_word(CurrentRev) | AccRev]],

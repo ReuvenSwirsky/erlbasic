@@ -43,11 +43,20 @@ websocket_info({output, Text}, State) ->
     Utf8 = unicode:characters_to_binary(Text),
     {reply, {text, Utf8}, State};
 websocket_info({'DOWN', _MonRef, process, Pid, Reason}, State = #{conn := Pid}) ->
-    %% The interpreter process crashed
-    error_logger:error_msg("===== WebSocket interpreter process ~p CRASHED =====~nReason: ~p~n", [Pid, Reason]),
-    ErrorMsg = io_lib:format("\r\n?SYSTEM ERROR: Interpreter crashed - ~p\r\n", [Reason]),
-    Utf8 = unicode:characters_to_binary(ErrorMsg),
-    {reply, {text, Utf8}, State};
+    %% A normal/shutdown DOWN is expected for QUIT/BYE/session teardown.
+    case Reason of
+        normal ->
+            {stop, State};
+        shutdown ->
+            {stop, State};
+        {shutdown, _} ->
+            {stop, State};
+        _ ->
+            error_logger:error_msg("===== WebSocket interpreter process ~p CRASHED =====~nReason: ~p~n", [Pid, Reason]),
+            ErrorMsg = io_lib:format("\r\n?SYSTEM ERROR: Interpreter crashed - ~p\r\n", [Reason]),
+            Utf8 = unicode:characters_to_binary(ErrorMsg),
+            {reply, {text, Utf8}, State}
+    end;
 websocket_info(close, State) ->
     {stop, State};
 websocket_info(_Info, State) ->

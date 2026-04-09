@@ -270,7 +270,8 @@ ws_login_loop(WsPid, Attempts) ->
                     WsPid ! {output, "?Please say HELLO\r\n"},
                     ws_login_loop(WsPid, Attempts + 1);
                 _ -> %% logout or quit: at the OS prompt, both disconnect
-                    WsPid ! {output, "Bye\r\n"}
+                    WsPid ! {output, "Bye\r\n"},
+                    WsPid ! close
             end
     end.
 
@@ -355,7 +356,8 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
                             %% QUIT: disconnect entirely
                             erlang:erase(erlbasic_ppn),
                             erlbasic_mem_watchdog:unregister_session(self()),
-                            WsPid ! {output, "Goodbye\r\n"};
+                            WsPid ! {output, "Goodbye\r\n"},
+                            WsPid ! close;
                         {login, HelloResult} ->
                             %% HELLO/LOGIN/I: log off current user and start a new login
                             erlang:erase(erlbasic_ppn),

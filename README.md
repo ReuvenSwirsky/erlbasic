@@ -8,7 +8,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Browser WebSocket sessions use permessage-deflate compression with `server_no_context_takeover` for stable interactive `INPUT`/`GETKEY` traffic
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
-- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
 - Graphics mode (WebSocket only): `HGR`, `HGR2`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `BUFFER`, `FLUSH`, `PGET`, `GETCHAR`, `SOUND`
 - Full expression engine: numeric operators, exponentiation, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
@@ -117,6 +117,7 @@ RUN
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line (e.g. `20`) deletes that line from the program.
 - Ctrl-C during `RUN` triggers `BREAK`; `CONT` resumes from the break point.
+- `STOP` during `RUN` triggers `BREAK IN <line>`; `CONT` resumes after the `STOP` statement.
 - `TRON`/`TROFF` toggle runtime line tracing (`[line]` markers during `RUN`).
 - `LOCATE row, col` moves the cursor (WebSocket/xterm only; errors on telnet/TCP).
 - `COLOR fg[, bg]` sets text colour (0–15 fg, 0–7 bg). No-op on telnet/TCP.

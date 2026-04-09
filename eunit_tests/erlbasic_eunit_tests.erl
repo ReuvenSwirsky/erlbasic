@@ -186,6 +186,49 @@ run_program_output_test() ->
     ?assertEqual(match, re:run(Text, "42", [{capture, none}])),
     ?assertEqual(match, re:run(Text, "Program ended", [{capture, none}])).      
 
+assignment_type_mismatch_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Out1} = erlbasic_interp:handle_input("A$=20", S0),
+    ?assertEqual("?TYPE MISMATCH ERROR\r\n", lists:flatten(Out1)),
+
+    S2 = erlbasic_interp:new_state(),
+    {_S3, Out2} = erlbasic_interp:handle_input("A=\"FOO\"", S2),
+    ?assertEqual("?TYPE MISMATCH ERROR\r\n", lists:flatten(Out2)),
+
+    S4 = erlbasic_interp:new_state(),
+    {S5, _} = erlbasic_interp:handle_input("10 A$=20", S4),
+    {S6, _} = erlbasic_interp:handle_input("20 END", S5),
+    {_S7, Out3} = erlbasic_interp:handle_input("RUN", S6),
+    ?assertEqual("?TYPE MISMATCH ERROR IN 10\r\n", lists:flatten(Out3)).
+
+float_variable_suffix_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Out0} = erlbasic_interp:handle_input("PRINT A#", S0),
+    ?assertEqual("0.0\r\n", lists:flatten(Out0)),
+
+    {S2, _} = erlbasic_interp:handle_input("A#=1", S0),
+    {_S3, Out1} = erlbasic_interp:handle_input("PRINT A#", S2),
+    ?assertEqual("1.0\r\n", lists:flatten(Out1)),
+
+    {S4, _} = erlbasic_interp:handle_input("A#=A#+0.5", S2),
+    {_S5, Out2} = erlbasic_interp:handle_input("PRINT A#", S4),
+    ?assertEqual("1.5\r\n", lists:flatten(Out2)),
+
+    {_S6, Out3} = erlbasic_interp:handle_input("A#=\"X\"", S4),
+    ?assertEqual("?TYPE MISMATCH ERROR\r\n", lists:flatten(Out3)).
+
+stop_and_cont_resume_test() ->
+    State0 = erlbasic_interp:new_state(),
+    {State1, _} = erlbasic_interp:handle_input("10 LET X = 1", State0),
+    {State2, _} = erlbasic_interp:handle_input("20 STOP", State1),
+    {State3, _} = erlbasic_interp:handle_input("30 LET X = X + 1", State2),
+    {State4, _} = erlbasic_interp:handle_input("40 PRINT X", State3),
+    {State5, _} = erlbasic_interp:handle_input("50 END", State4),
+    {State6, BreakOutput} = erlbasic_interp:handle_input("RUN", State5),
+    ?assertEqual("BREAK IN 20\r\n", lists:flatten(BreakOutput)),
+    {_State7, ContOutput} = erlbasic_interp:handle_input("CONT", State6),
+    ?assertEqual("2\r\nProgram ended\r\n", lists:flatten(ContOutput)).
+
 websocket_implicit_boundary_flush_test() ->
     PrevOutputPid = erlang:get(output_pid),
     PrevOutputSocket = erlang:get(output_socket),
@@ -275,6 +318,79 @@ compressed_websocket_input_roundtrip_test() ->
         after
             cleanup_ws_extensions(Extensions),
             gen_tcp:close(Socket)
+        end
+    after
+        catch cowboy:stop_listener(ListenerRef),
+        cleanup_mem_watchdog(WatchdogState),
+        accounts_teardown(Dir)
+    end.
+
+compressed_websocket_quit_no_false_crash_test() ->
+    Dir = accounts_setup(),
+    WatchdogState = ensure_mem_watchdog_started(),
+    ListenerRef = erlbasic_ws_quit_test,
+    try
+        start_compressed_test_listener(ListenerRef),
+        Port = ranch:get_port(ListenerRef),
+        {Socket, Extensions, Buffer0} = ws_connect_with_compression(Port),
+        try
+            {ok, _Banner, Buffer1} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer0,
+                fun(Text) -> binary:matches(Text, <<"#">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"hello 1,1\n">>),
+            {ok, _LoginPrompt, Buffer2} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer1,
+                fun(Text) -> binary:matches(Text, <<"Password: ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"system\n">>),
+            {ok, _ReadyPrompt, Buffer3} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer2,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"10 A% = 1\n">>),
+            {ok, _Prompt4, Buffer4} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer3,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"20 FOR X = 1 TO 1000\n">>),
+            {ok, _Prompt5, Buffer5} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer4,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"30 A% = A% + A%\n">>),
+            {ok, _Prompt6, Buffer6} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer5,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"40 PRINT A%\n">>),
+            {ok, _Prompt7, Buffer7} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer6,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"50 NEXT\n">>),
+            {ok, _Prompt8, Buffer8} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer7,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"RUN\n">>),
+            {ok, _RunText, Buffer9} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer8,
+                fun(Text) -> byte_size(Text) > 0 end),
+
+            ok = ws_send_text(Socket, Extensions, <<3>>),
+            {ok, _BreakText, Buffer10} = ws_collect_visible_text_until(
+                Socket, Extensions, Buffer9,
+                fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
+
+            ok = ws_send_text(Socket, Extensions, <<"quit\n">>),
+            {QuitText, Closed, _Buffer11} = ws_collect_text_until_close(Socket, Extensions, Buffer10, 64),
+            QuitTextList = binary_to_list(QuitText),
+            ?assertEqual(true, Closed),
+            ?assertEqual(nomatch, re:run(QuitTextList, "Interpreter crashed - normal", [{capture, none}]))
+        after
+            cleanup_ws_extensions(Extensions),
+            catch gen_tcp:close(Socket)
         end
     after
         catch cowboy:stop_listener(ListenerRef),
@@ -1382,6 +1498,21 @@ sleep_negative_clamped_test() ->
     ?assertEqual(match, re:run(Text, "BEFORE", [{capture, none}])),
     ?assertEqual(match, re:run(Text, "AFTER",  [{capture, none}])).
 
+ws_down_normal_is_not_reported_as_crash_test() ->
+    Pid = self(),
+    State = #{conn => Pid},
+    ?assertEqual(
+        {stop, State},
+        erlbasic_ws_handler:websocket_info({'DOWN', make_ref(), process, Pid, normal}, State)
+    ).
+
+ws_down_error_is_reported_as_crash_test() ->
+    Pid = self(),
+    State = #{conn => Pid},
+    {reply, {text, Utf8}, _} = erlbasic_ws_handler:websocket_info({'DOWN', make_ref(), process, Pid, badarg}, State),
+    Text = binary_to_list(Utf8),
+    ?assertEqual(match, re:run(Text, "Interpreter crashed - badarg", [{capture, none}])).
+
 restore_env(Name, false) ->
     true = os:unsetenv(Name),
     ok;
@@ -1498,6 +1629,30 @@ ws_send_text(Socket, Extensions, Text) ->
 
 ws_collect_visible_text_until(Socket, Extensions, Buffer, Predicate) ->
     ws_collect_visible_text_until(Socket, Extensions, Buffer, Predicate, <<>>, 32).
+
+ws_collect_text_until_close(Socket, Extensions, Buffer, MaxFrames) ->
+    ws_collect_text_until_close(Socket, Extensions, Buffer, <<>>, MaxFrames).
+
+ws_collect_text_until_close(_Socket, _Extensions, Buffer, Acc, 0) ->
+    {Acc, false, Buffer};
+ws_collect_text_until_close(Socket, Extensions, Buffer, Acc, Remaining) ->
+    {Frame, Buffer1} = ws_recv_frame(Socket, Extensions, Buffer),
+    case Frame of
+        {text, Payload} ->
+            Acc1 = case Payload of
+                <<2, _/binary>> -> Acc;
+                _ -> <<Acc/binary, Payload/binary>>
+            end,
+            ws_collect_text_until_close(Socket, Extensions, Buffer1, Acc1, Remaining - 1);
+        {close, _Code, _Payload} ->
+            {Acc, true, Buffer1};
+        {close, _Payload} ->
+            {Acc, true, Buffer1};
+        close ->
+            {Acc, true, Buffer1};
+        _ ->
+            ws_collect_text_until_close(Socket, Extensions, Buffer1, Acc, Remaining - 1)
+    end.
 
 ws_collect_visible_text_until(_Socket, _Extensions, Buffer, _Predicate, Acc, 0) ->
     {ok, Acc, Buffer};

@@ -310,7 +310,10 @@ parse_input_value(Target, Line, Vars, Funcs) ->
             {ok, parse_string_input(Line)};
         false ->
             {Value, _} = erlbasic_eval:eval_expr(Line, Vars, Funcs),
-            {ok, erlbasic_eval:normalize_int(Value)}
+            case erlbasic_eval:target_is_float(Target) of
+                true -> {ok, float(Value)};
+                false -> {ok, erlbasic_eval:normalize_int(Value)}
+            end
     end.
 
 parse_string_input(Line) ->
@@ -602,6 +605,8 @@ execute_statement_single(Command, State) ->
         {goto, _LineExpr} ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {gosub, _LineExpr} ->
+            {State, ["?SYNTAX ERROR\r\n"]};
+        {stop_stmt} ->
             {State, ["?SYNTAX ERROR\r\n"]};
         {'return'} ->
             {State, ["?SYNTAX ERROR\r\n"]}

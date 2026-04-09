@@ -41,7 +41,7 @@ Syntax:
 - `CONT`
 
 Notes:
-- Requires a valid break context.
+- Requires a valid break context (from Ctrl-C or `STOP` in a running program).
 
 ### DELETE
 
@@ -156,7 +156,7 @@ Syntax:
 Statements below are listed in alphabetical order by command name. Unless noted otherwise, they work both in immediate mode and in stored program lines.
 
 Scope notes:
-- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON ERROR GOTO`, `RESUME`) are intended for stored program execution.
+- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`) are intended for stored program execution.
 - `INPUT`, `GET`, `GETKEY`, `SLEEP`, `PGET`, and `GETCHAR` may pause execution waiting for input or browser replies.
 
 ### BUFFER
@@ -412,11 +412,18 @@ Syntax:
 
 Targets may be scalar variables or array elements.
 
+Notes:
+- String targets (`$` suffix) require string values.
+- Numeric targets (no `$`) require numeric values.
+- Assigning incompatible types raises `?TYPE MISMATCH ERROR`.
+
 Examples:
 ```text
 LET X=42
 TOTAL=TOTAL+1
 LET A(3,2)=99
+LET A$=20      ' TYPE MISMATCH
+LET A="FOO"   ' TYPE MISMATCH
 ```
 
 ### LINE
@@ -613,6 +620,17 @@ Emits sound command.
 Syntax:
 - `SOUND <voice>,<pitch>,<distortion>,<volume>`
 
+### STOP
+
+Breaks program execution and leaves a continuation context for `CONT`.
+
+Syntax:
+- `STOP`
+
+Notes:
+- During `RUN`, `STOP` prints `BREAK IN <line>`.
+- `CONT` resumes from the statement after `STOP`.
+
 ### TEXT
 
 Returns to text mode.
@@ -645,6 +663,7 @@ Syntax:
 ## Notes
 
 - Variable names are case-insensitive and may include optional suffixes `$`, `%`, or `&`.
+- `#` suffix declares an explicit floating-point variable (double-precision runtime float).
 - Reserved words cannot be used as variable names.
 - Arrays support 1, 2, or 3 dimensions.
 - `FOR` loop control variables are numeric variable forms.

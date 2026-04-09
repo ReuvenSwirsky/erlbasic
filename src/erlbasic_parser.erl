@@ -2,9 +2,9 @@
 
 -export([parse_statement/1, should_split_top_level_sequence/1, split_statements/1, validate_program_line/1]).
 
--define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&]?)").
--define(VAR_BASE_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&]?)").
--define(LOOP_VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[%&]?)").
+-define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)").
+-define(VAR_BASE_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)").
+-define(LOOP_VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[%&#]?)").
 
 parse_statement(Command) ->
     Trimmed = string:trim(Command),
@@ -565,6 +565,7 @@ parse_keyword_statement(Trimmed) ->
         "HGR"  -> {hgr};
         "HGR2" -> {hgr2};
         "TEXT" -> {text};
+        "STOP" -> {stop_stmt};
         "TRON" -> {tron};
         "TROFF" -> {troff};
         "RETURN" -> {'return'};
@@ -1014,6 +1015,8 @@ validate_statement(Stmt) ->
                 ok -> validate_expr_pair(DistortionExpr, VolumeExpr);
                 error -> error
             end;
+        {stop_stmt} ->
+            ok;
         {color, FgExpr, undefined} ->
             validate_expr_syntax(FgExpr);
         {color, FgExpr, BgExpr} ->

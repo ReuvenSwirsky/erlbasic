@@ -27,7 +27,7 @@ builtin_function_keywords() ->
 list_keywords() ->
     [
         "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
-        "GOTO", "GOSUB", "RETURN", "END", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "GETCHAR", "SLEEP", "SOUND", "TIMER", "CHAIN",
+        "GOTO", "GOSUB", "RETURN", "END", "STOP", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "GETCHAR", "SLEEP", "SOUND", "TIMER", "CHAIN",
         "OPEN", "CLOSE", "WRITE", "FIELD", "PUT", "AS", "APPEND", "RANDOM", "OUTPUT",
         "TRON", "TROFF", "FLUSH", "BUFFER", "PGET"
     ].
@@ -74,5 +74,6 @@ strip_var_sigil(Name) ->
         $$ -> lists:sublist(Name, length(Name) - 1);
         $% -> lists:sublist(Name, length(Name) - 1);
         $& -> lists:sublist(Name, length(Name) - 1);
+        $# -> lists:sublist(Name, length(Name) - 1);
         _ -> Name
     end.

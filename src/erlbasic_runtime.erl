@@ -182,6 +182,15 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 end,
             %% Start executing the new program from line 1
             run_program_lines(NewState#state.prog, 1, NewState, [], [], NewAcc);
+        {break, BreakState, Output} ->
+            CombinedOutput = lists:reverse(Output) ++ TraceAcc,
+            flush_output(CombinedOutput),
+            case should_flush_output() of
+                true ->
+                    {BreakState, []};
+                false ->
+                    {BreakState, lists:reverse(CombinedOutput)}
+            end;
         {stop, Output} ->
             CombinedOutput = lists:reverse(Output) ++ TraceAcc,
             flush_output(CombinedOutput),
@@ -237,6 +246,8 @@ execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, Ca
             {'end', OutputAcc ++ Output};
         {chain, NewState, Output} ->
             {chain, NewState, OutputAcc ++ Output};
+        {break, BreakState, Output} ->
+            {break, BreakState, OutputAcc ++ Output};
         {stop, Output} ->
             {stop, OutputAcc ++ Output}
     end.
@@ -780,6 +791,9 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {chain, FileExpr} ->
             execute_chain(FileExpr, LineNumber, State);
+        {stop_stmt} ->
+            BreakState = State#state{continue_ctx = {Pc + 1, LoopStack, CallStack}},
+            {break, BreakState, [io_lib:format("BREAK IN ~B\r\n", [LineNumber])]};
         {'end'} ->
             {'end', []};
         {parse_error, Reason} ->
@@ -901,6 +915,8 @@ resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack) ->
                         _ ->
                             {NextState, Output}
                     end;
+                {break, BreakState, Output} ->
+                    {BreakState, Output};
                 {stop, Output} ->
                     {State, Output};
                 {'end', Output} ->
@@ -998,7 +1014,11 @@ convert_read_item(Target, Item) ->
             Item;
         false ->
             case erlbasic_eval:eval_expr_result(Item, #{}) of
-                {ok, Value, _} -> erlbasic_eval:normalize_int(Value);
+                {ok, Value, _} ->
+                    case erlbasic_eval:target_is_float(Target) of
+                        true -> float(Value);
+                        false -> erlbasic_eval:normalize_int(Value)
+                    end;
                 {error, _, _} -> 0
             end
     end.
