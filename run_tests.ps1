@@ -6,27 +6,8 @@ Write-Host "ERLBASIC TEST RUNNER" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "Building application..." -ForegroundColor Yellow
-rebar3 compile
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Application build failed"
-}
-
-Write-Host "Compiling eunit test module..." -ForegroundColor Yellow
-erl -noshell -pa _build/default/lib/erlbasic/ebin -pa _build/default/lib/cowboy/ebin -pa _build/default/lib/cowlib/ebin -pa _build/default/lib/ranch/ebin -eval "Result = compile:file('eunit_tests/erlbasic_eunit_tests.erl', [{outdir, '_build/default/lib/erlbasic/ebin'}]), case Result of {ok,_} -> io:format('Compilation successful~n'); _ -> io:format('Compilation failed: ~p~n', [Result]), halt(1) end, init:stop()"
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Test compilation failed"
-}
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "RUNNING EUNIT TESTS" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-erl -noshell -pa _build/default/lib/erlbasic/ebin -pa _build/default/lib/cowboy/ebin -pa _build/default/lib/cowlib/ebin -pa _build/default/lib/ranch/ebin -eval "eunit:test(erlbasic_eunit_tests, [verbose]), init:stop()"
+Write-Host "Building and running EUnit tests..." -ForegroundColor Yellow
+rebar3 eunit
 
 if ($LASTEXITCODE -ne 0) {
     throw "EUnit tests failed"

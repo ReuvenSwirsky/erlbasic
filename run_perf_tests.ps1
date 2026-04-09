@@ -1,13 +1,8 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-$rebar3 = "$env:USERPROFILE\rebar3"
-if (-not (Test-Path $rebar3)) {
-    throw "rebar3 not found at $rebar3"
-}
-
 Write-Host "Compiling project for perf tests..." -ForegroundColor Yellow
-escript $rebar3 compile
+rebar3 compile
 if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }

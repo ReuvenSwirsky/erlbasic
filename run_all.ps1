@@ -5,7 +5,8 @@ Set-Location $PSScriptRoot
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "BUILD" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-& .\build.ps1
+rebar3 compile
+if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 Write-Host ""
 
 # ── EUnit tests ──────────────────────────────────────────────────────────────
@@ -13,12 +14,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "EUNIT TESTS" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-erl -noshell -pa _build/default/lib/erlbasic/ebin -pa _build/default/lib/cowboy/ebin `
-    -eval "Result = compile:file('eunit_tests/erlbasic_eunit_tests.erl', [{outdir, '_build/default/lib/erlbasic/ebin'}]), case Result of {ok,_} -> ok; _ -> io:format('Compilation failed: ~p~n', [Result]), halt(1) end, init:stop()"
-if ($LASTEXITCODE -ne 0) { throw "EUnit test compilation failed" }
-
-erl -noshell -pa _build/default/lib/erlbasic/ebin -pa _build/default/lib/cowboy/ebin `
-    -eval "eunit:test(erlbasic_eunit_tests, [verbose]), init:stop()"
+rebar3 eunit
 if ($LASTEXITCODE -ne 0) { throw "EUnit tests failed" }
 Write-Host ""
 
