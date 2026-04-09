@@ -518,6 +518,18 @@ execute_statement_single(Command, State) ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end;
         {sound, _, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
+        {play_stmt, Expr} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    case erlbasic_runtime:execute_play(Expr, State) of
+                        {ok, NewState, Output} -> {NewState, Output};
+                        {error, Reason} -> {State, [erlbasic_eval:format_runtime_error(Reason)]}
+                    end;
+                _ ->
+                    {State, [erlbasic_eval:format_runtime_error(play_not_supported_on_tty)]}
+            end;
+        {on_play_gosub, NExpr, TargetExpr} ->
+            {State#state{on_play_gosub = {NExpr, TargetExpr}}, []};
         {color, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {tron} ->
             {State#state{trace_enabled = true}, []};

@@ -364,6 +364,11 @@ parse_resume_statement(Trimmed) ->
     end.
 
 parse_jump_statement(Trimmed) ->
+    %% Check for ON PLAY(n) GOSUB before general ON...GOSUB to avoid swallowing it
+    case re:run(Trimmed, "(?i)^ON\\s+PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+        {match, [NExpr, TargetExpr]} ->
+            {on_play_gosub, string:trim(NExpr), string:trim(TargetExpr)};
+        nomatch ->
     %% Check for ON...GOSUB / ON...GOTO first (computed jump)
     case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1,2], list}]) of
         {match, [Expr, Targets]} ->
@@ -377,6 +382,7 @@ parse_jump_statement(Trimmed) ->
                 nomatch ->
                     parse_simple_jump_statement(Trimmed)
             end
+    end
     end.
 
 parse_simple_jump_statement(Trimmed) ->
@@ -640,7 +646,13 @@ parse_sound_statement(Trimmed) ->
         {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
             {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr};
         nomatch ->
-            parse_chain_statement(Trimmed)
+            parse_play_statement(Trimmed)
+    end.
+
+parse_play_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^PLAY\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [Expr]} -> {play_stmt, string:trim(Expr)};
+        nomatch         -> parse_chain_statement(Trimmed)
     end.
 
 parse_chain_statement(Trimmed) ->
@@ -1006,6 +1018,13 @@ validate_statement(Stmt) ->
         {getchar, RowExpr, ColExpr, Target} ->
             case validate_expr_pair(RowExpr, ColExpr) of
                 ok    -> validate_target_syntax(Target);
+                error -> error
+            end;
+        {play_stmt, Expr} ->
+            validate_expr_syntax(Expr);
+        {on_play_gosub, NExpr, TargetExpr} ->
+            case validate_expr_syntax(NExpr) of
+                ok    -> validate_expr_syntax(TargetExpr);
                 error -> error
             end;
         {chain, FileExpr} ->

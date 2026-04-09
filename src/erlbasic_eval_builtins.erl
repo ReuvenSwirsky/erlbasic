@@ -121,6 +121,18 @@ apply_math_function("STRING$", [Count, Str]) when is_number(Count), is_list(Str)
     end;
 apply_math_function("VAL", [Value]) ->
     apply_val(Value);
+apply_math_function("PLAY", [_N]) ->
+    %% Returns the number of notes remaining in the background music queue.
+    %% The argument is accepted for compatibility but ignored.
+    Now = erlang:monotonic_time(millisecond),
+    Count = case erlang:get(erlbasic_play_schedule) of
+        undefined -> 0;
+        List ->
+            Remaining = [T || T <- List, T > Now],
+            erlang:put(erlbasic_play_schedule, Remaining),
+            length(Remaining)
+    end,
+    {ok, Count};
 apply_math_function(_, _Args) ->
     {error, illegal_function_call}.
 

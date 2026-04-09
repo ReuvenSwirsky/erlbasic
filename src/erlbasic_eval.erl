@@ -219,6 +219,8 @@ format_runtime_error(graphics_not_supported_on_tty) ->
     "?GRAPHICS NOT SUPPORTED ON TTY\r\n";
 format_runtime_error(sound_not_supported_on_tty) ->
     "?SOUND NOT SUPPORTED ON TTY\r\n";
+format_runtime_error(play_not_supported_on_tty) ->
+    "?PLAY NOT SUPPORTED ON TTY\r\n";
 format_runtime_error(no_graphics_mode) ->
     "?NO GRAPHICS MODE\r\n";
 format_runtime_error(no_previous_line) ->
@@ -254,6 +256,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         ws_only -> "WEBSOCKET ONLY";
         graphics_not_supported_on_tty -> "GRAPHICS NOT SUPPORTED ON TTY";
         sound_not_supported_on_tty -> "SOUND NOT SUPPORTED ON TTY";
+        play_not_supported_on_tty -> "PLAY NOT SUPPORTED ON TTY";
         no_graphics_mode -> "NO GRAPHICS MODE";
         no_previous_line -> "NO PREVIOUS LINE";
         program_not_found -> "PROGRAM NOT FOUND";
@@ -281,6 +284,7 @@ error_code(resume_without_error) -> 20;
 error_code(tty_no_cursor_movement) -> 71;
 error_code(graphics_not_supported_on_tty) -> 71;
 error_code(sound_not_supported_on_tty) -> 71;
+error_code(play_not_supported_on_tty) -> 71;
 error_code(no_graphics_mode) -> 71;
 error_code(no_previous_line) -> 71;
 error_code(illegal_file_name) -> 64;

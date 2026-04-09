@@ -7,7 +7,7 @@
          eval_color/4, render_print_using_items/5,
          hgr_output/0, hgr2_output/0, text_output/0,
          eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
-         eval_sound/6]).
+         eval_sound/6, execute_play/2]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
 
@@ -70,6 +70,7 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
             %% Drain any additional interrupt messages that queued up
             drain_interrupt_messages(),
             flush_output(NewAcc),
+            music_reset(),
             BreakState = State#state{continue_ctx = {Pc, LoopStack, CallStack}},
             %% Include GFX:TEXT so the browser resets graphics state even if its
             %% Ctrl-C handler fires after these frames arrive.
@@ -77,7 +78,8 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
                 false -> [];
                 _     -> text_output()
             end,
-            {BreakState#state{graphics_mode = false}, GfxReset ++ sound_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
+            {BreakState#state{graphics_mode = false, on_play_return_depth = -1},
+             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
             case erlang:get(memory_limit_exceeded) of
                 true ->
@@ -123,7 +125,12 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 end,
                 case NextState#state.pending_input of
                     undefined ->
-                        run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc);
+                        case on_play_trigger(NextState, NextLoopStack, NextCallStack) of
+                            {gosub, TargetPc, FiredState} ->
+                                run_program_lines(Program, TargetPc, FiredState, NextLoopStack, [Pc + 1 | NextCallStack], NewAcc);
+                            no_trigger ->
+                                run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc)
+                        end;
                     PendingInput ->
                         case should_flush_output() andalso should_flush_for_pending_input(PendingInput) of
                             true ->
@@ -162,24 +169,28 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 end;
         {'end', Output} ->
             %% Flush final output
-            FinalOutput = sound_stop_output() ++ lists:reverse(Output) ++ TraceAcc,
+            FinalOutput = sound_stop_output() ++ music_stop_output() ++ lists:reverse(Output) ++ TraceAcc,
             flush_output(FinalOutput),
+            music_reset(),
             %% Clear all runtime state as other BASICs do on END:
             %% variables, user functions, data pointer, open files,
             %% error handler, keyboard buffer, and continuation context.
             EndedState = State#state{
-                vars          = #{},
-                funcs         = #{},
-                data_items    = collect_program_data(State#state.prog),
-                data_index    = 1,
-                continue_ctx  = undefined,
-                open_files    = #{},
-                error_handler = undefined,
-                error_resume_pc = undefined,
-                error_code    = 0,
-                error_line    = 0,
-                char_buffer   = [],
-                print_col     = 0
+                vars              = #{},
+                funcs             = #{},
+                data_items        = collect_program_data(State#state.prog),
+                data_index        = 1,
+                continue_ctx      = undefined,
+                open_files        = #{},
+                error_handler     = undefined,
+                error_resume_pc   = undefined,
+                error_code        = 0,
+                error_line        = 0,
+                char_buffer       = [],
+                print_col         = 0,
+                play_background   = false,
+                on_play_gosub     = undefined,
+                on_play_return_depth = -1
             },
             case should_flush_output() of
                 true ->
@@ -808,6 +819,20 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {chain, FileExpr} ->
             execute_chain(FileExpr, LineNumber, State);
+        {play_stmt, Expr} ->
+            case erlang:get(erlbasic_conn_type) of
+                websocket ->
+                    case execute_play(Expr, State) of
+                        {ok, NewState, Output} ->
+                            {continue, NewState, LoopStack, CallStack, Output};
+                        {error, Reason} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end;
+                _ ->
+                    handle_runtime_error(play_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
+            end;
+        {on_play_gosub, NExpr, TargetExpr} ->
+            {continue, State#state{on_play_gosub = {NExpr, TargetExpr}}, LoopStack, CallStack, []};
         {stop_stmt} ->
             BreakState = State#state{continue_ctx = {Pc + 1, LoopStack, CallStack}},
             {break, BreakState, [io_lib:format("BREAK IN ~B\r\n", [LineNumber])]};
@@ -906,6 +931,13 @@ resolve_target_pc(LineExpr, Program, Vars, Funcs) ->
 execute_return(Program, _State, Pc, _LoopStack, []) ->
     LineNumber = get_line_number(Program, Pc),
     {stop, [erlbasic_eval:format_runtime_error(return_without_gosub, LineNumber)]};
+execute_return(_Program, State = #state{on_play_return_depth = D}, _Pc, LoopStack, [ReturnPc | Rest]) when D >= 0 ->
+    %% Returning while inside an ON PLAY handler — track whether we've left it.
+    NewDepth = case length(Rest) =< D of
+        true  -> -1;   %% Returned from the ON PLAY invocation frame itself
+        false -> D     %% Still inside a nested GOSUB within the handler
+    end,
+    {jump, ReturnPc, State#state{on_play_return_depth = NewDepth}, LoopStack, Rest, []};
 execute_return(_Program, State, _Pc, LoopStack, [ReturnPc | Rest]) ->
     {jump, ReturnPc, State, LoopStack, Rest, []}.
 
@@ -1251,6 +1283,119 @@ sound_stop_output() ->
     case erlang:get(erlbasic_conn_type) of
         websocket -> ["\x02SND:STOPALL"];
         _ -> []
+    end.
+
+music_stop_output() ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> ["\x02MUS:STOP"];
+        _ -> []
+    end.
+
+music_reset() ->
+    erlang:erase(erlbasic_play_schedule),
+    erlang:erase(erlbasic_play_cursor).
+
+notes_remaining() ->
+    Now = erlang:monotonic_time(millisecond),
+    case erlang:get(erlbasic_play_schedule) of
+        undefined -> 0;
+        List ->
+            Remaining = [T || T <- List, T > Now],
+            erlang:put(erlbasic_play_schedule, Remaining),
+            length(Remaining)
+    end.
+
+schedule_notes_in_dict(Notes) ->
+    Now = erlang:monotonic_time(millisecond),
+    Cursor = case erlang:get(erlbasic_play_cursor) of
+        undefined -> Now;
+        C         -> max(C, Now)
+    end,
+    {EndTimes, NewCursor} = lists:foldl(
+        fun({_Freq, _Play, TotalMs}, {Acc, Cur}) ->
+            E = Cur + TotalMs,
+            {[E | Acc], E}
+        end,
+        {[], Cursor},
+        Notes),
+    Prev = case erlang:get(erlbasic_play_schedule) of
+        undefined -> [];
+        S         -> [T || T <- S, T > Now]
+    end,
+    erlang:put(erlbasic_play_schedule, Prev ++ lists:reverse(EndTimes)),
+    erlang:put(erlbasic_play_cursor, NewCursor).
+
+format_mus_queue(Notes) ->
+    Parts = [lists:flatten(io_lib:format("~B:~B:~B", [round(F), P, T])) || {F, P, T} <- Notes],
+    "\x02MUS:QUEUE:" ++ string:join(Parts, ",").
+
+new_play_background(background, _Current) -> true;
+new_play_background(foreground, _Current) -> false;
+new_play_background(unchanged, Current)   -> Current.
+
+%% execute_play/2 — shared by program mode (execute_basic_statement) and
+%% immediate mode (erlbasic_interp). Returns {ok, NewState, Output} | {error, Reason}.
+execute_play(Expr, State) ->
+    case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
+        {ok, MmlStr, Vars1} when is_list(MmlStr) ->
+            case erlbasic_mml:parse(MmlStr) of
+                {ok, Notes, FinalMode} ->
+                    NewBackground = new_play_background(FinalMode, State#state.play_background),
+                    NewState = State#state{vars = Vars1, play_background = NewBackground},
+                    case Notes of
+                        [] ->
+                            {ok, NewState, []};
+                        _ ->
+                            Output = format_mus_queue(Notes),
+                            case NewBackground of
+                                true ->
+                                    schedule_notes_in_dict(Notes),
+                                    {ok, NewState, [Output]};
+                                false ->
+                                    %% Foreground: flush queued output, then block for the duration.
+                                    TotalMs = lists:sum([TMs || {_, _, TMs} <- Notes]),
+                                    erlang:put(explicit_flush_requested, true),
+                                    receive
+                                        interrupt ->
+                                            erlang:put(interrupted, true);
+                                        memory_limit_exceeded ->
+                                            erlang:put(memory_limit_exceeded, true)
+                                    after TotalMs -> ok end,
+                                    {ok, NewState, [Output]}
+                            end
+                    end;
+                {error, _} ->
+                    {error, syntax_error}
+            end;
+        {ok, _NotAString, _} ->
+            {error, type_mismatch};
+        {error, Reason, _} ->
+            {error, Reason}
+    end.
+
+on_play_trigger(#state{on_play_gosub = undefined}, _LoopStack, _CallStack) ->
+    no_trigger;
+on_play_trigger(#state{on_play_return_depth = D}, _LoopStack, _CallStack) when D >= 0 ->
+    no_trigger;  %% Re-entrancy guard: already executing the handler
+on_play_trigger(State = #state{on_play_gosub = {NExpr, TargetExpr}}, _LoopStack, CallStack) ->
+    Remaining = notes_remaining(),
+    case erlbasic_eval:eval_expr_result(NExpr, State#state.vars, State#state.funcs) of
+        {ok, NValue, _} ->
+            N = erlbasic_eval:normalize_int(NValue),
+            if N > 0, Remaining < N ->
+                case resolve_target_pc(TargetExpr, State#state.prog, State#state.vars, State#state.funcs) of
+                    {ok, TargetPc} ->
+                        Depth = length(CallStack),
+                        FiredState = State#state{on_play_return_depth = Depth},
+                        {gosub, TargetPc, FiredState};
+                    _ ->
+                        no_trigger
+                end;
+            true ->
+                no_trigger
+            end;
+        _ ->
+            no_trigger
     end.
 
 %% Helper to evaluate multiple expressions and extract first error

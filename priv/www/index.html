@@ -189,6 +189,7 @@
 
     ws.onclose = () => {
       stopAllSoundChannels();
+      stopAllMusic();
       statusEl.textContent = 'Disconnected — reload to reconnect';
       statusEl.className = 'disconnected';
       term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
@@ -470,6 +471,63 @@
 
       soundChannels[channel] = { osc, gain };
     }
+
+    // MML background music state
+    let musicQueue = [];         // oscillator nodes scheduled but not yet finished
+    let musicScheduleTime = 0;   // AudioContext time when the current queue ends
+
+    function stopAllMusic() {
+      const ctx = getAudioCtx();
+      const now = ctx ? ctx.currentTime : 0;
+      for (const node of musicQueue) {
+        try { node.stop(now); } catch (_) {}
+        try { node.disconnect(); } catch (_) {}
+      }
+      musicQueue.length = 0;
+      musicScheduleTime = 0;
+    }
+
+    function handleMusicCommand(cmd) {
+      if (cmd === 'STOP') {
+        stopAllMusic();
+        return;
+      }
+      if (!cmd.startsWith('QUEUE:')) { return; }
+      const noteList = cmd.slice(6);
+      if (!noteList) { return; }
+      const ctx = getAudioCtx();
+      if (!ctx) { return; }
+      if (ctx.state === 'suspended') { ctx.resume().catch(() => {}); }
+      const now = ctx.currentTime;
+      let t = Math.max(now, musicScheduleTime);
+      const noteSpecs = noteList.split(',');
+      for (const spec of noteSpecs) {
+        const p = spec.split(':');
+        if (p.length !== 3) { continue; }
+        const freq    = parseFloat(p[0]);
+        const playMs  = parseInt(p[1], 10);
+        const totalMs = parseInt(p[2], 10);
+        if (totalMs <= 0) { continue; }
+        if (freq > 0 && playMs > 0) {
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = freq;
+          gain.gain.value = 0.08;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t);
+          osc.stop(t + playMs / 1000);
+          osc.onended = () => {
+            const idx = musicQueue.indexOf(osc);
+            if (idx >= 0) { musicQueue.splice(idx, 1); }
+          };
+          musicQueue.push(osc);
+        }
+        t += totalMs / 1000;
+      }
+      musicScheduleTime = t;
+    }
     
     // Output from the server → display in terminal
     ws.onmessage = (evt) => {
@@ -484,6 +542,7 @@
         if (cmd.startsWith('GFX:')) { handleGraphicsCommand(cmd.slice(4)); }
         if (cmd.startsWith('GFXB:')) { handleGraphicsBatch(cmd.slice(5)); }
         if (cmd.startsWith('SND:')) { handleSoundCommand(cmd.slice(4)); }
+        if (cmd.startsWith('MUS:')) { handleMusicCommand(cmd.slice(4)); }
         if (cmd.startsWith('TXT:')) { handleTextQuery(cmd.slice(4)); }
         return;
       }
@@ -509,6 +568,7 @@
         term.write('^C');
         ws.send('\x03');
         stopAllSoundChannels();
+        stopAllMusic();
         inputBuffer = '';
         // Exit graphics mode if active
         if (graphicsMode === 'hgr2') {

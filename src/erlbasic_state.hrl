@@ -18,5 +18,8 @@
     trace_enabled = false,      % TRON/TROFF runtime line tracing
     graphics_mode = false,      % false | hgr | hgr2 — active graphics mode (WebSocket only)
     graphics_pen = undefined,   % {X, Y} - last graphics endpoint (for LINETO)
-    dblbuff = false             % true when BUFFER mode is on (WebSocket only)
+    dblbuff = false,            % true when BUFFER mode is on (WebSocket only)
+    play_background = false,    % true = MB (background) mode, false = MF (foreground)
+    on_play_gosub = undefined,  % {NExpr, TargetExpr} | undefined — ON PLAY(n) GOSUB handler
+    on_play_return_depth = -1   % -1 = not in handler; >=0 = call stack depth at fire time
 }).
