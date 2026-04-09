@@ -16,7 +16,7 @@ serve_homepage(Req, State) ->
     case erlbasic_accounts:find_by_username(Username) of
         {ok, {Project, Programmer, Name, StoredUsername}} ->
             UserDir = user_dir(Project, Programmer),
-            ok = filelib:ensure_dir(filename:join(UserDir, ".keep")),
+            _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
             case read_home_bas(UserDir) of
                 {ok, HomeBas} ->
                     Body = render_home_from_bas(StoredUsername, Name, Project, Programmer, HomeBas),
@@ -67,7 +67,7 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
     CacheKey = {Project, Programmer},
     FileHash = crypto:hash(sha256, HomeBas),
-    OutputHtml = escape_html(execute_home_bas(CacheKey, FileHash, HomeBas)),
+    OutputHtml = escape_html(execute_home_bas(CacheKey, FileHash, HomeBas, Project, Programmer)),
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -94,23 +94,25 @@ init_cache() ->
             ok
     end.
 
-execute_home_bas(CacheKey, FileHash, HomeBas) ->
+execute_home_bas(CacheKey, FileHash, HomeBas, Project, Programmer) ->
     case cache_lookup(CacheKey, FileHash) of
         {hit, CachedOutput} ->
             CachedOutput;
         miss ->
             TTL = detect_dynamic(HomeBas),
-            Output = run_home_bas(HomeBas),
+            Output = run_home_bas(HomeBas, Project, Programmer),
             cache_store(CacheKey, FileHash, Output, TTL),
             Output
     end.
 
-run_home_bas(HomeBas) ->
+run_home_bas(HomeBas, Project, Programmer) ->
     case erlbasic_commands:parse_bin_as_program(HomeBas) of
         {ok, Program} ->
             State = #state{prog = Program},
             Self = self(),
             Pid = spawn(fun() ->
+                erlang:put(erlbasic_ppn, {Project, Programmer}),
+                erlang:put(erlbasic_conn_type, websocket),
                 {_RanState, Output} = erlbasic_runtime:run_program(State),
                 Self ! {bas_output, collect_text_output(Output)}
             end),

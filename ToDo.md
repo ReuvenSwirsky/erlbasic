@@ -15,4 +15,4 @@
 - [ ] END should clear all variables
 - [ ] look at accuraccy of free() statement, and also what memory quota is exceeded in pathological cases like the "steve" program
 - [x] What is ?Too Many Sessions for this account bug? We're getting this when trying to log in again
-- [ ] When a user creates a home.bas and we try to go to the home page for /user the server won't serve it up the first time, and the session will disconnect. If we reconnect, the home page then appears.
+- [x] When a user creates a home.bas and we try to go to the home page for /user the server won't serve it up the first time, and the session will disconnect. If we reconnect, the home page then appears.
