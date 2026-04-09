@@ -653,6 +653,50 @@ is_privileged_test() ->
     ?assertNot(erlbasic_accounts:is_privileged(2, 1)),
     ?assertNot(erlbasic_accounts:is_privileged(100, 1)).
 
+%% ===========================================================================
+%% Session counter tests (issue: stale sessions not decrementing count)
+%% ===========================================================================
+
+session_counter_cleanup_on_process_exit_test() ->
+    %% When a monitored session process exits, the mem_watchdog should
+    %% automatically decrement the PPN counter via the DOWN handler.
+    PPN = {2, 1},
+    MaxSessions = 3,
+    
+    %% Start the watchdog
+    WatchdogState = ensure_mem_watchdog_started(),
+    
+    try
+        %% Register a session for 2,1
+        Pid1 = spawn(fun() -> timer:sleep(infinity) end),
+        ok = erlbasic_mem_watchdog:try_register_session(
+                 Pid1, unlimited, PPN, MaxSessions),
+        
+        %% Verify count is 1
+        Stats1 = erlbasic_mem_watchdog:get_stats(),
+        ?assertEqual(1, maps:get(active_sessions, Stats1)),
+        
+        %% Kill the session
+        exit(Pid1, kill),
+        timer:sleep(100),  %% Let DOWN handler fire
+        
+        %% Verify count went back to 0
+        Stats2 = erlbasic_mem_watchdog:get_stats(),
+        ?assertEqual(0, maps:get(active_sessions, Stats2)),
+        
+        %% Now we should be able to register again for the same PPN
+        Pid2 = spawn(fun() -> timer:sleep(infinity) end),
+        Result = erlbasic_mem_watchdog:try_register_session(
+                     Pid2, unlimited, PPN, MaxSessions),
+        ?assertEqual(ok, Result),
+        
+        %% Cleanup
+        exit(Pid2, kill),
+        timer:sleep(100)
+    after
+        cleanup_mem_watchdog(WatchdogState)
+    end.
+
 %% ===========================================================================  
 %% parse_hello / login syntax tests
 %% ===========================================================================  

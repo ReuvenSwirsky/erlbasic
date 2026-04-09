@@ -137,7 +137,14 @@ tcp_worker_loop(Socket, State, {P, N} = PPN) ->
         false -> infinity
     end,
     receive
-        socket_closed -> ok;
+        socket_closed ->
+            %% Client disconnected; explicitly unregister if a session was active
+            case erlang:get(erlbasic_ppn) of
+                undefined -> ok;
+                _ ->
+                    erlang:erase(erlbasic_ppn),
+                    erlbasic_mem_watchdog:unregister_session(self())
+            end;
         interrupt ->
             erlang:put(interrupted, true),
             tcp_worker_loop(Socket, State, PPN);
@@ -246,6 +253,14 @@ ws_login_loop(WsPid, Attempts) ->
     receive
         interrupt ->
             ws_login_loop(WsPid, Attempts);
+        close ->
+            %% Client disconnected; explicitly unregister if a session was active
+            case erlang:get(erlbasic_ppn) of
+                undefined -> ok;
+                _ ->
+                    erlang:erase(erlbasic_ppn),
+                    erlbasic_mem_watchdog:unregister_session(self())
+            end;
         {input, RawLine} ->
             Line = normalize_input_line(list_to_binary(RawLine)),
             case parse_os_command(Line) of

@@ -11,3 +11,7 @@
 - [ ] PLAY "MB" for background music? (Keep SOUND syntax, but add PLAY) Microsoft's MML
 - [ ] Implement ON PLAY() GOSUB to refil the PLAY buffer asynchronosly
 - [ ] Implement MSX BASIC or AMIGA style sprites
+- [ ] CTRL-C sometimes takes a while to stop
+- [ ] END should clear all variables
+- [ ] look at accuraccy of free() statement, and also what memory quota is exceeded in pathological cases like the "steve" program
+- [ ] What is ?Too Many Sessions for this account bug? We're getting this when trying to log in again

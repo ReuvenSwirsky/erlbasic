@@ -54,7 +54,9 @@ init([]) ->
 
 handle_call({try_register, Pid, LimitBytes, PPN, MaxSessions}, _From,
             #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
-    CurrentCount = maps:get(PPN, Counts, 0),
+    %% Clean up any stale entries for this PPN from dead processes
+    Counts1 = clean_stale_ppn_count(PPN, Sessions, Counts),
+    CurrentCount = maps:get(PPN, Counts1, 0),
     Over = case MaxSessions of
         unlimited -> false;
         Max when is_integer(Max) -> CurrentCount >= Max
@@ -64,14 +66,14 @@ handle_call({try_register, Pid, LimitBytes, PPN, MaxSessions}, _From,
             {reply, {error, too_many_sessions}, State};
         false ->
             %% Demonitor any existing entry for this Pid.
-            {Sessions1, Counts1} = do_unregister(Pid, Sessions, Counts),
+            {Sessions3, Counts3} = do_unregister(Pid, Sessions, Counts1),
             Ref = erlang:monitor(process, Pid),
-            Sessions2 = Sessions1#{Pid => {LimitBytes, Ref, PPN}},
-            Counts2 = case PPN of
-                undefined -> Counts1;
-                _ -> Counts1#{PPN => maps:get(PPN, Counts1, 0) + 1}
+            Sessions4 = Sessions3#{Pid => {LimitBytes, Ref, PPN}},
+            Counts4 = case PPN of
+                undefined -> Counts3;
+                _ -> Counts3#{PPN => maps:get(PPN, Counts3, 0) + 1}
             end,
-            {reply, ok, State#wd{sessions = Sessions2, ppn_counts = Counts2}}
+            {reply, ok, State#wd{sessions = Sessions4, ppn_counts = Counts4}}
     end;
 
 handle_call(get_stats, _From, #wd{sessions = Sessions, ppn_counts = Counts} = State) ->
@@ -138,6 +140,41 @@ terminate(_Reason, #wd{sessions = Sessions}) ->
 %% ===================================================================
 %% Internal helpers
 %% ===================================================================
+
+%% Clean up any stale sessions (dead processes) registered for the given PPN.
+%% This ensures the ppn_count stays accurate even if DOWN messages are delayed.
+clean_stale_ppn_count(undefined, _Sessions, Counts) ->
+    Counts;
+clean_stale_ppn_count(PPN, Sessions, Counts) ->
+    PidList = maps:fold(
+        fun(Pid, {_, _, SessionPPN}, Acc) ->
+            case SessionPPN =:= PPN of
+                true -> [Pid | Acc];
+                false -> Acc
+            end
+        end,
+        [],
+        Sessions),
+    %% Count how many of these Pids are actually still alive
+    AliveCount = lists:foldl(
+        fun(Pid, Cnt) ->
+            case erlang:is_process_alive(Pid) of
+                true -> Cnt + 1;
+                false -> Cnt
+            end
+        end,
+        0,
+        PidList),
+    %% If the actual count differs from the stored count, fix it
+    StoredCount = maps:get(PPN, Counts, 0),
+    case AliveCount =:= StoredCount of
+        true -> Counts;
+        false ->
+            case AliveCount of
+                0 -> maps:remove(PPN, Counts);
+                _ -> Counts#{PPN => AliveCount}
+            end
+    end.
 
 do_unregister(Pid, Sessions, Counts) ->
     case maps:find(Pid, Sessions) of
