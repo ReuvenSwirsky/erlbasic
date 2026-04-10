@@ -17,6 +17,12 @@ Rules:
 - Multiple statements can be placed on one line using `:`.
 - `REM` comments consume the rest of the statement text.
 
+## Literal Notes
+
+- Integer literals may be written in decimal or hexadecimal.
+- Hexadecimal literals use the form `0x...` or `0X...` and can be used anywhere an integer expression is accepted.
+- Hex literals are useful for packed bit masks, including sprite row definitions stored in `%` integer variables.
+
 ## REPL Commands (Immediate Mode)
 
 These commands are entered without a line number.
@@ -697,9 +703,9 @@ See also:
 
 Example:
 ```text
-DIM SHIP&(255)
-SPRITE LOAD 1,16,16,SHIP&(0)
-SPRITE SCALE 1,2
+DIM ROW%(31),SHIP&(1023)
+ROW%(6)=0x000FF000
+SPRITE LOAD 1,32,32,SHIP&(0)
 SPRITE 1,(120,80)
 SPRITE SHOW 1
 ```

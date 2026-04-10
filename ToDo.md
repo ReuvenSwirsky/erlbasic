@@ -11,6 +11,7 @@
 - [X] PLAY "MB" for background music? (Keep SOUND syntax, but add PLAY) Microsoft's MML
 - [X] Implement ON PLAY() GOSUB to refil the PLAY buffer asynchronosly
 - [x] Implement MSX BASIC or AMIGA style sprites
+- [x] Support `0x...` integer literals for larger sprite bitmask setup
 - [ ] CTRL-C sometimes takes a while to stop
 - [x] END should clear all variables
 - [X] look at accuraccy of free() statement, and also what memory quota is exceeded in pathological cases like the "steve" program

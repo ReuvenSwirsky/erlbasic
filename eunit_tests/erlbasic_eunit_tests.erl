@@ -73,6 +73,18 @@ builtin_instr_space_pos_test() ->
         end
     end.
 
+hex_literal_eval_test() ->
+    ?assertEqual({ok, 16, #{}}, erlbasic_eval:eval_expr_result("0x10", #{})),
+    ?assertEqual({ok, 31, #{}}, erlbasic_eval:eval_expr_result("0x10+0x0F", #{})).
+
+hex_literal_64bit_promotion_test() ->
+    ?assertEqual({ok, 16#8000000000000000, #{}},
+        erlbasic_eval:eval_expr_result("0x8000000000000000", #{})),
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("BIG%=0xFFFFFFFFFFFFFFFF", S0),
+    {_S2, Output} = erlbasic_interp:handle_input("PRINT BIG%", S1),
+    ?assertEqual(match, re:run(lists:flatten(Output), "18446744073709551615", [{capture, none}])).
+
 file_io_parser_and_builtins_test() ->
     ?assertEqual(
         {file_open, "\"tmp.dat\"", "RANDOM", "1", "32"},
@@ -1297,6 +1309,21 @@ asciilife_load_test() ->
         {_State3, ListOutput2} = erlbasic_interp:handle_input("LIST 9020", State1),
         ListText2 = lists:flatten(ListOutput2),
         ?assertEqual(match, re:run(ListText2, "READ N, L", [{capture, none}])),
+        ok.
+
+    sprites_examples_load_test() ->
+        State0 = erlbasic_interp:new_state(),
+        {State1, LoadSpritesOutput} = erlbasic_interp:handle_input("LOAD sprites", State0),
+        ?assertEqual("OK\r\n", lists:flatten(LoadSpritesOutput)),
+        {_State2, SpritesListOutput} = erlbasic_interp:handle_input("LIST 150", State1),
+        SpritesListText = lists:flatten(SpritesListOutput),
+        ?assertEqual(match, re:run(SpritesListText, "0x000FF000", [{capture, none}])),
+
+        {State3, LoadSpritesHgr2Output} = erlbasic_interp:handle_input("LOAD sprites_hgr2", State0),
+        ?assertEqual("OK\r\n", lists:flatten(LoadSpritesHgr2Output)),
+        {_State4, SpritesHgr2ListOutput} = erlbasic_interp:handle_input("LIST 150", State3),
+        SpritesHgr2ListText = lists:flatten(SpritesHgr2ListOutput),
+        ?assertEqual(match, re:run(SpritesHgr2ListText, "0x000000000FF00000", [{capture, none}])),
         ok.
 
 load_program_skips_bad_lines_test() ->

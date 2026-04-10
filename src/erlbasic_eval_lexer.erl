@@ -34,6 +34,13 @@ tokenize_expr([$" | Rest], Acc) ->
         error ->
             error
     end;
+tokenize_expr([$0, X | Rest], Acc) when X =:= $x; X =:= $X ->
+    case read_hex_digits(Rest, []) of
+        {[], _Tail} ->
+            error;
+        {HexChars, Tail} ->
+            tokenize_expr(Tail, [{num, hex_to_integer(HexChars)} | Acc])
+    end;
 tokenize_expr([Ch | Rest], Acc) when Ch >= $0, Ch =< $9 ->
     {NumberChars, HasDot, Tail} = read_number([Ch | Rest], [], false),
     NumberToken =
@@ -70,6 +77,24 @@ read_number([$. | Rest], Acc, false) ->
     read_number(Rest, [$. | Acc], true);
 read_number(Rest, Acc, HasDot) ->
     {lists:reverse(Acc), HasDot, Rest}.
+
+read_hex_digits([Ch | Rest], Acc)
+    when (Ch >= $0 andalso Ch =< $9) orelse
+         (Ch >= $A andalso Ch =< $F) orelse
+         (Ch >= $a andalso Ch =< $f) ->
+    read_hex_digits(Rest, [Ch | Acc]);
+read_hex_digits(Rest, Acc) ->
+    {lists:reverse(Acc), Rest}.
+
+hex_to_integer(HexChars) ->
+    lists:foldl(fun hex_digit_value/2, 0, HexChars).
+
+hex_digit_value(Ch, Acc) when Ch >= $0, Ch =< $9 ->
+    Acc * 16 + (Ch - $0);
+hex_digit_value(Ch, Acc) when Ch >= $A, Ch =< $F ->
+    Acc * 16 + (10 + Ch - $A);
+hex_digit_value(Ch, Acc) when Ch >= $a, Ch =< $f ->
+    Acc * 16 + (10 + Ch - $a).
 
 normalize_float_text([$. | _] = NumberChars) ->
     [$0 | NumberChars];

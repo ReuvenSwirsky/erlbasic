@@ -4,6 +4,41 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 9, 2026 - Hex Integer Literals and Larger Sprite Examples
+
+### Enhancement
+Extended the expression lexer to support hexadecimal integer literals and refreshed the sprite examples to show larger 32x32 and 64x64 sprite workflows built from packed row masks.
+
+### Implementation
+- `src/erlbasic_eval_lexer.erl`:
+  - Added `0x...` / `0X...` tokenization for hexadecimal integer literals.
+  - Supports larger unsigned constants used for packed 32-bit and 64-bit sprite row masks.
+- `examples/sprites.bas`:
+  - Reworked to generate 32x32 sprites from 32-bit hex row masks stored in `%` arrays.
+  - Expands those masks into 1D BYTE arrays before `SPRITE LOAD`.
+- `examples/sprites_hgr2.bas`:
+  - Reworked to generate 64x64 sprites from 64-bit hex row masks stored in `%` arrays.
+  - Keeps the interactive `GETKEY` control/collision flow while demonstrating much larger sprites.
+- `Basic_Syntax.md`:
+  - Added literal notes documenting hexadecimal integer syntax.
+  - Updated the sprite example snippet to reflect the larger packed-mask workflow.
+- `README.md`:
+  - Updated feature notes and example descriptions for hex literals and the larger sprite demos.
+
+### Tests
+- Added `hex_literal_eval_test/0` to verify direct hex literal parsing and arithmetic.
+- Added `hex_literal_64bit_promotion_test/0` to verify large unsigned values can be assigned to `%` variables and printed correctly.
+- Added `sprites_examples_load_test/0` to verify both updated sprite examples load successfully via `LOAD`.
+
+### Validation
+- `rebar3 compile`: PASS
+- `rebar3 eunit --module=erlbasic_eunit_tests`: PASS
+
+### Rationale
+The original sprite demos showed the feature but forced verbose per-pixel setup. Hex row masks make larger sprites practical to author in BASIC while still preserving the BYTE-array `SPRITE LOAD` model. Adding lexer support keeps the language side aligned with how those examples are now written.
+
+---
+
 ## April 9, 2026 - LOAD Robustness for Malformed Shared Examples (SPRITES crash fix)
 
 ### Bug
