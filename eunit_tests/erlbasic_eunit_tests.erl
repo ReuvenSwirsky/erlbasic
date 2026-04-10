@@ -1317,13 +1317,13 @@ asciilife_load_test() ->
         ?assertEqual("OK\r\n", lists:flatten(LoadSpritesOutput)),
         {_State2, SpritesListOutput} = erlbasic_interp:handle_input("LIST 150", State1),
         SpritesListText = lists:flatten(SpritesListOutput),
-        ?assertEqual(match, re:run(SpritesListText, "0x000FF000", [{capture, none}])),
+        ?assertEqual(match, re:run(SpritesListText, "0x00018000", [{capture, none}])),
 
         {State3, LoadSpritesHgr2Output} = erlbasic_interp:handle_input("LOAD sprites_hgr2", State0),
         ?assertEqual("OK\r\n", lists:flatten(LoadSpritesHgr2Output)),
         {_State4, SpritesHgr2ListOutput} = erlbasic_interp:handle_input("LIST 150", State3),
         SpritesHgr2ListText = lists:flatten(SpritesHgr2ListOutput),
-        ?assertEqual(match, re:run(SpritesHgr2ListText, "0x000000000FF00000", [{capture, none}])),
+        ?assertEqual(match, re:run(SpritesHgr2ListText, "0x0000000000600000", [{capture, none}])),
         ok.
 
 load_program_skips_bad_lines_test() ->
