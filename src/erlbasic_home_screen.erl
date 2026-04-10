@@ -58,11 +58,13 @@ locate(Row, Col) ->
     erlang:put(home_scr_row, max(1, min(Row, ?ROWS))),
     erlang:put(home_scr_col, max(1, min(Col, ?COLS))).
 
-%% Clear the screen and home the cursor, but preserve colour state.
+%% Clear the screen, home the cursor, and reset colours to defaults.
 cls() ->
     erlang:put(home_scr_cells, #{}),
     erlang:put(home_scr_row,   1),
-    erlang:put(home_scr_col,   1).
+    erlang:put(home_scr_col,   1),
+    erlang:put(home_scr_fg,    ?DEFAULT_FG),
+    erlang:put(home_scr_bg,    ?DEFAULT_BG).
 
 %% Snapshot the current screen as an HTML fragment, append to the sections
 %% list, then clear the screen ready for the next section.
