@@ -20,6 +20,7 @@ awaiting_input_nonblocking(_State) -> false.
 %% @doc True only when the interpreter is paused waiting for a GETKEY statement.
 awaiting_input_getkey(#state{pending_input = {getkey, _, _}}) -> true;
 awaiting_input_getkey(#state{pending_input = {sleep_keypress, _}}) -> true;
+awaiting_input_getkey(#state{pending_input = {home_publish_keypress, _}}) -> true;
 awaiting_input_getkey(_State) -> false.
 
 next_prompt(#state{pending_input = undefined}) ->
@@ -211,6 +212,10 @@ handle_pending_input(Line, State = #state{pending_input = {input_line, Target, C
 handle_pending_input(Line, State = #state{pending_input = {sleep_keypress, Continuation}}) ->
     %% Any keypress (or Enter) resumes; key is left in char_buffer for GETKEY/INKEY$/etc.
     ClearedState = State#state{pending_input = undefined, char_buffer = Line},
+    resume_continuation(ClearedState, Continuation);
+handle_pending_input(_Line, State = #state{pending_input = {home_publish_keypress, Continuation}}) ->
+    %% Keypress consumed (not stored in char_buffer) — used by HOME PUBLISH interactive pause.
+    ClearedState = State#state{pending_input = undefined},
     resume_continuation(ClearedState, Continuation);
 handle_pending_input(Line, State = #state{pending_input = {pget_query, Target, Continuation}}) ->
     %% Browser responds with the palette index (0..15) or -1 if not in palette.

@@ -141,10 +141,7 @@ free_memory_value() ->
         unlimited ->
             2147483647;
         LimitBytes when is_integer(LimitBytes), LimitBytes > 0 ->
-            UsedBytes = case process_info(self(), memory) of
-                {memory, Bytes} -> Bytes;
-                _ -> approximate_current_memory_bytes()
-            end,
+            UsedBytes = approximate_current_memory_bytes(),
             Free = LimitBytes - UsedBytes,
             case Free > 0 of
                 true -> Free;

@@ -468,10 +468,19 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             end;
         {home_publish} ->
             case erlang:get(erlbasic_conn_type) of
-                home_bas -> erlbasic_home_screen:publish();
-                _        -> ok
-            end,
-            {continue, State, LoopStack, CallStack, []};
+                home_bas ->
+                    erlbasic_home_screen:publish(),
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    case State#state.char_buffer of
+                        [_ | Rest] ->
+                            {continue, State#state{char_buffer = Rest}, LoopStack, CallStack, []};
+                        [] ->
+                            Prompt = "\r\n[Press any key to continue]\r\n",
+                            PendingState = State#state{pending_input = {home_publish_keypress, {program, Pc, [], LoopStack, CallStack}}},
+                            {continue, PendingState, LoopStack, CallStack, [Prompt]}
+                    end
+            end;
         {read_data, Targets} ->
             case apply_read_vars(Targets, State) of
                 {ok, NextState} ->
@@ -1135,6 +1144,10 @@ update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {immed
     State#state{pending_input = {sleep_keypress, {immediate, RemainingStatements}}};
 update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
     State#state{pending_input = {sleep_keypress, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
+update_pending_input_rest(State = #state{pending_input = {home_publish_keypress, {immediate, _OldRemaining}}}, RemainingStatements) ->
+    State#state{pending_input = {home_publish_keypress, {immediate, RemainingStatements}}};
+update_pending_input_rest(State = #state{pending_input = {home_publish_keypress, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
+    State#state{pending_input = {home_publish_keypress, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
 update_pending_input_rest(State = #state{pending_input = {pget_query, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
     State#state{pending_input = {pget_query, Target, {immediate, RemainingStatements}}};
 update_pending_input_rest(State = #state{pending_input = {pget_query, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
@@ -1399,6 +1412,8 @@ should_flush_for_pending_input(PendingInput) when is_list(PendingInput) ->
 should_flush_for_pending_input({input_line, _Target, _Continuation}) ->
     true;
 should_flush_for_pending_input({sleep_keypress, _Continuation}) ->
+    true;
+should_flush_for_pending_input({home_publish_keypress, _Continuation}) ->
     true;
 should_flush_for_pending_input({get_nb, _Target, _Continuation}) ->
     false;
