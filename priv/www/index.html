@@ -69,6 +69,19 @@
       z-index: 1;
       /* CSS width/height matched to terminal pixel size by JS */
     }
+    #sprite-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      background: transparent;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
     #terminal-container.graphics-mode #terminal {
       z-index: 1;
     }
@@ -76,6 +89,10 @@
       z-index: 3;
       opacity: 1;
       /* pointer-events: none lets keystrokes reach the terminal */
+    }
+    #terminal-container.graphics-mode #sprite-canvas {
+      z-index: 4;
+      opacity: 1;
     }
     #status {
       margin-top: 0.5rem;
@@ -111,6 +128,7 @@
       <div id="terminal-scale-wrapper">
         <div id="terminal"></div>
         <canvas id="graphics-canvas" width="800" height="600"></canvas>
+        <canvas id="sprite-canvas" width="800" height="600"></canvas>
       </div>
     </div>
     <div id="status" class="disconnected">Connecting…</div>
@@ -157,6 +175,8 @@
       // Internal resolution stays 800×600 for BASIC coordinate-space compatibility.
       canvas.style.width  = naturalW + 'px';
       canvas.style.height = naturalH + 'px';
+      spriteCanvas.style.width  = naturalW + 'px';
+      spriteCanvas.style.height = naturalH + 'px';
       scaleToFit();
     }
 
@@ -203,6 +223,8 @@
     // Graphics setup
     const canvas = document.getElementById('graphics-canvas');
     const ctx = canvas.getContext('2d');
+    const spriteCanvas = document.getElementById('sprite-canvas');
+    const spriteCtx = spriteCanvas.getContext('2d');
     
     // 16-color EGA/VGA palette (CSS strings for drawing, RGB triples for PGET matching)
     const palette = [
@@ -226,6 +248,38 @@
     }
     
     let graphicsMode = 'none'; // 'none', 'hgr', 'hgr2'
+    const sprites = new Map(); // id -> {w,h,pixels,x,y,scale,visible}
+
+    function clearSprites() {
+      sprites.clear();
+      redrawSprites();
+    }
+
+    function redrawSprites() {
+      spriteCtx.clearRect(0, 0, 800, spriteCanvas.height);
+      if (graphicsMode === 'none') {
+        return;
+      }
+      const ids = Array.from(sprites.keys()).sort((a, b) => a - b);
+      for (const id of ids) {
+        const s = sprites.get(id);
+        if (!s || !s.visible || !Array.isArray(s.pixels) || s.w <= 0 || s.h <= 0) {
+          continue;
+        }
+        const scale = Math.max(1, s.scale | 0);
+        for (let y = 0; y < s.h; y += 1) {
+          for (let x = 0; x < s.w; x += 1) {
+            const idx = y * s.w + x;
+            const px = s.pixels[idx];
+            if (px === 255 || Number.isNaN(px)) {
+              continue;
+            }
+            spriteCtx.fillStyle = palette[px & 15];
+            spriteCtx.fillRect(s.x + x * scale, s.y + y * scale, scale, scale);
+          }
+        }
+      }
+    }
 
     function handleGraphicsCommand(cmd) {
       const parts = cmd.split(':');
@@ -241,28 +295,34 @@
 
       // Skip drawing commands when not in graphics mode (drains stale GFX frames
       // instantly after Ctrl-C resets graphicsMode, so BREAK text isn't delayed).
-      if (graphicsMode === 'none' && action !== 'HGR' && action !== 'HGR2' && action !== 'TEXT') return;
+      if (graphicsMode === 'none' && action !== 'HGR' && action !== 'HGR2' && action !== 'TEXT' && action !== 'SPRCLR' && action !== 'SPRDEF' && action !== 'SPRPOS') return;
 
       switch(action) {
         case 'HGR':
           graphicsMode = 'hgr';
           canvas.height = 600;
           canvas.style.height = naturalH + 'px';
+          spriteCanvas.height = 600;
+          spriteCanvas.style.height = naturalH + 'px';
           document.getElementById('terminal-container').classList.add('graphics-mode');
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 800, 600);
+          clearSprites();
           break;
 
         case 'HGR2':
           graphicsMode = 'hgr2';
           // 480px internal height maps exactly to the 21-row CSS area; no black gap.
           canvas.height = 480;
+          spriteCanvas.height = 480;
           // Cover exactly 21 of 25 text rows; the bottom 4 rows remain visible as text area.
           canvas.style.height = Math.round(naturalH * 21 / 25) + 'px';
+          spriteCanvas.style.height = Math.round(naturalH * 21 / 25) + 'px';
           document.getElementById('terminal-container').classList.add('graphics-mode');
           document.getElementById('terminal-container').classList.add('hgr2-mode');
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 800, 480);
+          clearSprites();
           // Clear text rows 22-25, restrict scrolling to that region, move cursor there.
           term.write('\x1b[22;1H\x1b[2K\x1b[23;1H\x1b[2K\x1b[24;1H\x1b[2K\x1b[25;1H\x1b[2K\x1b[22;25r\x1b[22;1H');
           break;
@@ -270,10 +330,13 @@
         case 'TEXT':
           graphicsMode = 'none';
           canvas.height = 600;
+          spriteCanvas.height = 600;
           canvas.style.height = naturalH + 'px'; // restore if HGR2 shrank it
+          spriteCanvas.style.height = naturalH + 'px';
           document.getElementById('terminal-container').classList.remove('graphics-mode');
           document.getElementById('terminal-container').classList.remove('hgr2-mode');
           term.write('\x1b[r'); // reset scroll region if HGR2 set it
+          clearSprites();
           break;
 
         case 'PSET': {
@@ -326,6 +389,46 @@
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 800, graphicsMode === 'hgr2' ? 480 : 600);
           break;
+
+        case 'SPRCLR':
+          clearSprites();
+          break;
+
+        case 'SPRDEF': {
+          const id = parseInt(parts[1], 10);
+          const w = parseInt(parts[2], 10);
+          const h = parseInt(parts[3], 10);
+          const payload = parts.slice(4).join(':');
+          const pixelParts = payload.length > 0 ? payload.split(',') : [];
+          const pixels = [];
+          for (let i = 0; i < pixelParts.length; i += 1) {
+            const v = parseInt(pixelParts[i], 10);
+            pixels.push(Number.isFinite(v) ? v : 255);
+          }
+          const expected = Math.max(0, w * h);
+          while (pixels.length < expected) {
+            pixels.push(255);
+          }
+          if (pixels.length > expected) {
+            pixels.length = expected;
+          }
+          const prev = sprites.get(id) || { x: 0, y: 0, scale: 1, visible: false };
+          sprites.set(id, { ...prev, w, h, pixels });
+          redrawSprites();
+          break;
+        }
+
+        case 'SPRPOS': {
+          const id = parseInt(parts[1], 10);
+          const x = parseInt(parts[2], 10);
+          const y = parseInt(parts[3], 10);
+          const scale = Math.max(1, parseInt(parts[4], 10) || 1);
+          const visible = (parseInt(parts[5], 10) || 0) !== 0;
+          const prev = sprites.get(id) || { w: 0, h: 0, pixels: [] };
+          sprites.set(id, { ...prev, x, y, scale, visible });
+          redrawSprites();
+          break;
+        }
       }
     }
 
@@ -573,15 +676,20 @@
         // Exit graphics mode if active
         if (graphicsMode === 'hgr2') {
           canvas.height = 600;
+          spriteCanvas.height = 600;
           canvas.style.height = naturalH + 'px';
+          spriteCanvas.style.height = naturalH + 'px';
           term.write('\x1b[r');
           document.getElementById('terminal-container').classList.remove('hgr2-mode');
         } else if (graphicsMode === 'hgr') {
           canvas.height = 600;
+          spriteCanvas.height = 600;
           canvas.style.height = naturalH + 'px';
+          spriteCanvas.style.height = naturalH + 'px';
         }
         graphicsMode = 'none';
         document.getElementById('terminal-container').classList.remove('graphics-mode');
+        clearSprites();
         return;
       }
 

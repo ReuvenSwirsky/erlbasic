@@ -638,6 +638,26 @@ PRINT POS(0)       '  6
 
 ---
 
+### PLAY
+
+Returns the number of notes currently remaining in the background `PLAY` queue.
+
+Syntax:
+- `PLAY(<dummy>)`
+
+Notes:
+- The argument is accepted for compatibility but ignored.
+- Typical usage is `PLAY(0)`.
+- Foreground phrases (`MF`) do not leave queued background notes.
+
+Example:
+```text
+ON PLAY(4) GOSUB 1000
+PRINT "Queue: "; PLAY(0)
+```
+
+---
+
 ### SEEK
 
 Returns the current byte position in the open file on *channel* (1-based).

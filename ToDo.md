@@ -8,9 +8,9 @@
 - [x] Add a regression test so buffering behavior is tested when it's in default "implcit" mode
 - [ ] Add a RESTORE statment (used for DATA / READ constructs in most BASICs to reset to first unread data item)
 - [x] BASIC Syntax document is incomplete. Also sections should be alphabetical
-- [ ] PLAY "MB" for background music? (Keep SOUND syntax, but add PLAY) Microsoft's MML
-- [ ] Implement ON PLAY() GOSUB to refil the PLAY buffer asynchronosly
-- [ ] Implement MSX BASIC or AMIGA style sprites
+- [X] PLAY "MB" for background music? (Keep SOUND syntax, but add PLAY) Microsoft's MML
+- [X] Implement ON PLAY() GOSUB to refil the PLAY buffer asynchronosly
+- [x] Implement MSX BASIC or AMIGA style sprites
 - [ ] CTRL-C sometimes takes a while to stop
 - [x] END should clear all variables
 - [X] look at accuraccy of free() statement, and also what memory quota is exceeded in pathological cases like the "steve" program

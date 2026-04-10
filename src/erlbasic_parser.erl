@@ -364,25 +364,31 @@ parse_resume_statement(Trimmed) ->
     end.
 
 parse_jump_statement(Trimmed) ->
-    %% Check for ON PLAY(n) GOSUB before general ON...GOSUB to avoid swallowing it
-    case re:run(Trimmed, "(?i)^ON\\s+PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
-        {match, [NExpr, TargetExpr]} ->
-            {on_play_gosub, string:trim(NExpr), string:trim(TargetExpr)};
+    %% Check for ON SPRITE GOSUB before generic ON...GOSUB.
+    case re:run(Trimmed, "(?i)^ON\\s+SPRITE\\s+GOSUB\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [TargetExpr]} ->
+            {on_sprite_gosub, string:trim(TargetExpr)};
         nomatch ->
-    %% Check for ON...GOSUB / ON...GOTO first (computed jump)
-    case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1,2], list}]) of
-        {match, [Expr, Targets]} ->
-            TargetList = parse_comma_separated_list(Targets),
-            {on_gosub, Expr, TargetList};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1,2], list}]) of
-                {match, [Expr, Targets]} ->
-                    TargetList = parse_comma_separated_list(Targets),
-                    {on_goto, Expr, TargetList};
+            %% Check for ON PLAY(n) GOSUB before general ON...GOSUB to avoid swallowing it
+            case re:run(Trimmed, "(?i)^ON\\s+PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                {match, [NExpr, TargetExpr]} ->
+                    {on_play_gosub, string:trim(NExpr), string:trim(TargetExpr)};
                 nomatch ->
-                    parse_simple_jump_statement(Trimmed)
+                    %% Check for ON...GOSUB / ON...GOTO first (computed jump)
+                    case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1,2], list}]) of
+                        {match, [Expr, Targets]} ->
+                            TargetList = parse_comma_separated_list(Targets),
+                            {on_gosub, Expr, TargetList};
+                        nomatch ->
+                            case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1,2], list}]) of
+                                {match, [Expr, Targets]} ->
+                                    TargetList = parse_comma_separated_list(Targets),
+                                    {on_goto, Expr, TargetList};
+                                nomatch ->
+                                    parse_simple_jump_statement(Trimmed)
+                            end
+                    end
             end
-    end
     end.
 
 parse_simple_jump_statement(Trimmed) ->
@@ -757,7 +763,52 @@ parse_pget_statement(Trimmed) ->
                 {ok, Target} -> {pget, string:trim(XExpr), string:trim(YExpr), Target};
                 _            -> unknown
             end;
-        nomatch -> parse_getchar_statement(Trimmed)
+        nomatch -> parse_sprite_statement(Trimmed)
+    end.
+
+parse_sprite_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^SPRITE\\s+CLEAR$", [{capture, none}]) of
+        match -> {sprite_clear};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^SPRITE\\s+HIDE\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [IdExpr]} ->
+                    {sprite_hide, string:trim(IdExpr)};
+                nomatch ->
+                    case re:run(Trimmed, "(?i)^SPRITE\\s+SHOW\\s+(.+)$", [{capture, [1], list}]) of
+                        {match, [IdExpr]} ->
+                            {sprite_show, string:trim(IdExpr)};
+                        nomatch ->
+                            case re:run(Trimmed, "(?i)^SPRITE\\s+SCALE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [IdExpr, ScaleExpr]} ->
+                                    {sprite_scale, string:trim(IdExpr), string:trim(ScaleExpr)};
+                                nomatch ->
+                                    case re:run(Trimmed, "(?i)^SPRITE\\s+LOAD\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+                                        {match, [IdExpr, WidthExpr, HeightExpr, SourceText]} ->
+                                            case parse_sprite_load_source(SourceText) of
+                                                {ok, SourceTarget} ->
+                                                    {sprite_load, string:trim(IdExpr), string:trim(WidthExpr), string:trim(HeightExpr), SourceTarget};
+                                                _ ->
+                                                    unknown
+                                            end;
+                                        nomatch ->
+                                            case re:run(Trimmed, "(?i)^SPRITE\\s+(.+?)\\s*,\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)$", [{capture, [1, 2, 3], list}]) of
+                                                {match, [IdExpr, XExpr, YExpr]} ->
+                                                    {sprite_move, string:trim(IdExpr), string:trim(XExpr), string:trim(YExpr)};
+                                                nomatch ->
+                                                    parse_getchar_statement(Trimmed)
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
+
+parse_sprite_load_source(Text) ->
+    case parse_assignment_target(string:trim(Text)) of
+        {ok, Target = {array_target, _Var, [_]}} ->
+            {ok, Target};
+        _ ->
+            error
     end.
 
 parse_getchar_statement(Trimmed) ->
@@ -1020,13 +1071,33 @@ validate_statement(Stmt) ->
                 ok    -> validate_target_syntax(Target);
                 error -> error
             end;
-        {play_stmt, Expr} ->
-            validate_expr_syntax(Expr);
+        {on_sprite_gosub, TargetExpr} ->
+            validate_expr_syntax(TargetExpr);
         {on_play_gosub, NExpr, TargetExpr} ->
             case validate_expr_syntax(NExpr) of
                 ok    -> validate_expr_syntax(TargetExpr);
                 error -> error
             end;
+        {sprite_clear} ->
+            ok;
+        {sprite_hide, IdExpr} ->
+            validate_expr_syntax(IdExpr);
+        {sprite_show, IdExpr} ->
+            validate_expr_syntax(IdExpr);
+        {sprite_scale, IdExpr, ScaleExpr} ->
+            validate_expr_pair(IdExpr, ScaleExpr);
+        {sprite_move, IdExpr, XExpr, YExpr} ->
+            case validate_expr_pair(IdExpr, XExpr) of
+                ok -> validate_expr_syntax(YExpr);
+                error -> error
+            end;
+        {sprite_load, IdExpr, WidthExpr, HeightExpr, {array_target, _Var, [StartExpr]}} ->
+            case validate_expr_pair(IdExpr, WidthExpr) of
+                ok -> validate_expr_pair(HeightExpr, StartExpr);
+                error -> error
+            end;
+        {play_stmt, Expr} ->
+            validate_expr_syntax(Expr);
         {chain, FileExpr} ->
             validate_expr_syntax(FileExpr);
         {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->

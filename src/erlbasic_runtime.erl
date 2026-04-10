@@ -7,7 +7,7 @@
          eval_color/4, render_print_using_items/5,
          hgr_output/0, hgr2_output/0, text_output/0,
          eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
-         eval_sound/6, execute_play/2]).
+         eval_sound/6, execute_play/2, execute_sprite_stmt/2]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
 
@@ -78,8 +78,15 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
                 false -> [];
                 _     -> text_output()
             end,
-            {BreakState#state{graphics_mode = false, on_play_return_depth = -1},
-             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
+            ResetState = BreakState#state{
+                graphics_mode = false,
+                sprites = #{},
+                sprite_active_collisions = [],
+                on_sprite_return_depth = -1,
+                on_play_return_depth = -1
+            },
+            {ResetState,
+             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
         _ ->
             case erlang:get(memory_limit_exceeded) of
                 true ->
@@ -125,11 +132,11 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 end,
                 case NextState#state.pending_input of
                     undefined ->
-                        case on_play_trigger(NextState, NextLoopStack, NextCallStack) of
+                        case event_gosub_trigger(NextState, NextLoopStack, NextCallStack) of
                             {gosub, TargetPc, FiredState} ->
                                 run_program_lines(Program, TargetPc, FiredState, NextLoopStack, [Pc + 1 | NextCallStack], NewAcc);
-                            no_trigger ->
-                                run_program_lines(Program, Pc + 1, NextState, NextLoopStack, NextCallStack, NewAcc)
+                            {no_trigger, UpdatedState} ->
+                                run_program_lines(Program, Pc + 1, UpdatedState, NextLoopStack, NextCallStack, NewAcc)
                         end;
                     PendingInput ->
                         case should_flush_output() andalso should_flush_for_pending_input(PendingInput) of
@@ -169,7 +176,7 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 end;
         {'end', Output} ->
             %% Flush final output
-            FinalOutput = sound_stop_output() ++ music_stop_output() ++ lists:reverse(Output) ++ TraceAcc,
+            FinalOutput = sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ lists:reverse(Output) ++ TraceAcc,
             flush_output(FinalOutput),
             music_reset(),
             %% Clear all runtime state as other BASICs do on END:
@@ -188,6 +195,10 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 error_line        = 0,
                 char_buffer       = [],
                 print_col         = 0,
+                sprites           = #{},
+                sprite_active_collisions = [],
+                on_sprite_gosub   = undefined,
+                on_sprite_return_depth = -1,
                 play_background   = false,
                 on_play_gosub     = undefined,
                 on_play_return_depth = -1
@@ -615,21 +626,33 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
         {hgr} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State#state{graphics_mode = hgr, graphics_pen = undefined}, LoopStack, CallStack, hgr_output()};
+                    {continue,
+                     State#state{graphics_mode = hgr, graphics_pen = undefined, sprites = #{}, sprite_active_collisions = []},
+                     LoopStack,
+                     CallStack,
+                     hgr_output() ++ sprite_clear_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {hgr2} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State#state{graphics_mode = hgr2, graphics_pen = undefined}, LoopStack, CallStack, hgr2_output()};
+                    {continue,
+                     State#state{graphics_mode = hgr2, graphics_pen = undefined, sprites = #{}, sprite_active_collisions = []},
+                     LoopStack,
+                     CallStack,
+                     hgr2_output() ++ sprite_clear_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
         {text} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
-                    {continue, State#state{graphics_mode = false, graphics_pen = undefined}, LoopStack, CallStack, text_output()};
+                    {continue,
+                     State#state{graphics_mode = false, graphics_pen = undefined, sprites = #{}, sprite_active_collisions = []},
+                     LoopStack,
+                     CallStack,
+                     text_output() ++ sprite_clear_output()};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -819,6 +842,48 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {chain, FileExpr} ->
             execute_chain(FileExpr, LineNumber, State);
+        {sprite_clear} = Stmt ->
+            case execute_sprite_stmt(Stmt, State) of
+                {ok, NextState, Output} ->
+                    {continue, NextState, LoopStack, CallStack, Output};
+                {error, Reason, ErrState} ->
+                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
+            end;
+        {sprite_hide, _} = Stmt ->
+            case execute_sprite_stmt(Stmt, State) of
+                {ok, NextState, Output} ->
+                    {continue, NextState, LoopStack, CallStack, Output};
+                {error, Reason, ErrState} ->
+                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
+            end;
+        {sprite_show, _} = Stmt ->
+            case execute_sprite_stmt(Stmt, State) of
+                {ok, NextState, Output} ->
+                    {continue, NextState, LoopStack, CallStack, Output};
+                {error, Reason, ErrState} ->
+                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
+            end;
+        {sprite_scale, _, _} = Stmt ->
+            case execute_sprite_stmt(Stmt, State) of
+                {ok, NextState, Output} ->
+                    {continue, NextState, LoopStack, CallStack, Output};
+                {error, Reason, ErrState} ->
+                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
+            end;
+        {sprite_move, _, _, _} = Stmt ->
+            case execute_sprite_stmt(Stmt, State) of
+                {ok, NextState, Output} ->
+                    {continue, NextState, LoopStack, CallStack, Output};
+                {error, Reason, ErrState} ->
+                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
+            end;
+        {sprite_load, _, _, _, _} = Stmt ->
+            case execute_sprite_stmt(Stmt, State) of
+                {ok, NextState, Output} ->
+                    {continue, NextState, LoopStack, CallStack, Output};
+                {error, Reason, ErrState} ->
+                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
+            end;
         {play_stmt, Expr} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
@@ -833,6 +898,8 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             end;
         {on_play_gosub, NExpr, TargetExpr} ->
             {continue, State#state{on_play_gosub = {NExpr, TargetExpr}}, LoopStack, CallStack, []};
+        {on_sprite_gosub, TargetExpr} ->
+            {continue, State#state{on_sprite_gosub = TargetExpr}, LoopStack, CallStack, []};
         {stop_stmt} ->
             BreakState = State#state{continue_ctx = {Pc + 1, LoopStack, CallStack}},
             {break, BreakState, [io_lib:format("BREAK IN ~B\r\n", [LineNumber])]};
@@ -931,15 +998,9 @@ resolve_target_pc(LineExpr, Program, Vars, Funcs) ->
 execute_return(Program, _State, Pc, _LoopStack, []) ->
     LineNumber = get_line_number(Program, Pc),
     {stop, [erlbasic_eval:format_runtime_error(return_without_gosub, LineNumber)]};
-execute_return(_Program, State = #state{on_play_return_depth = D}, _Pc, LoopStack, [ReturnPc | Rest]) when D >= 0 ->
-    %% Returning while inside an ON PLAY handler — track whether we've left it.
-    NewDepth = case length(Rest) =< D of
-        true  -> -1;   %% Returned from the ON PLAY invocation frame itself
-        false -> D     %% Still inside a nested GOSUB within the handler
-    end,
-    {jump, ReturnPc, State#state{on_play_return_depth = NewDepth}, LoopStack, Rest, []};
 execute_return(_Program, State, _Pc, LoopStack, [ReturnPc | Rest]) ->
-    {jump, ReturnPc, State, LoopStack, Rest, []}.
+    NewState = update_event_return_depths(State, Rest),
+    {jump, ReturnPc, NewState, LoopStack, Rest, []}.
 
 resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack) ->
     Program = State#state.prog,
@@ -1291,6 +1352,12 @@ music_stop_output() ->
         _ -> []
     end.
 
+sprite_clear_output() ->
+    case erlang:get(erlbasic_conn_type) of
+        websocket -> ["\x02GFX:SPRCLR"];
+        _ -> []
+    end.
+
 music_reset() ->
     erlang:erase(erlbasic_play_schedule),
     erlang:erase(erlbasic_play_cursor).
@@ -1372,6 +1439,271 @@ execute_play(Expr, State) ->
         {error, Reason, _} ->
             {error, Reason}
     end.
+
+%% execute_sprite_stmt/2 — shared by program mode and immediate mode.
+%% Returns {ok, NewState, Output} | {error, Reason, ErrState}.
+execute_sprite_stmt(_Stmt, State) when State#state.graphics_mode =:= false ->
+    {error, no_graphics_mode, State};
+execute_sprite_stmt(_Stmt, State) ->
+    try
+        case erlang:get(erlbasic_conn_type) of
+            websocket -> ok;
+            _ -> throw({sprite_error, ws_only, State})
+        end,
+        execute_sprite_stmt_ws(_Stmt, State)
+    catch
+        throw:{sprite_error, Reason, ErrState} ->
+            {error, Reason, ErrState}
+    end.
+
+execute_sprite_stmt_ws({sprite_clear}, State) ->
+    {ok, State#state{sprites = #{}, sprite_active_collisions = []}, sprite_clear_output()};
+execute_sprite_stmt_ws({sprite_hide, IdExpr}, State) ->
+    case eval_exprs([IdExpr], State#state.vars, State#state.funcs) of
+        {ok, [{IdV, Vars1}]} when is_number(IdV) ->
+            Id = erlbasic_eval:normalize_int(IdV),
+            case update_sprite(Id, fun(Spr) -> Spr#{visible => false} end, State#state{vars = Vars1}) of
+                {ok, NextState, Spr} ->
+                    {ok, NextState, [format_sprite_pos(Id, Spr)]};
+                {error, Reason} ->
+                    {error, Reason, State#state{vars = Vars1}}
+            end;
+        {ok, [{_, Vars1}]} ->
+            {error, type_mismatch, State#state{vars = Vars1}};
+        {error, Reason, Vars1} ->
+            {error, Reason, State#state{vars = Vars1}}
+    end;
+execute_sprite_stmt_ws({sprite_show, IdExpr}, State) ->
+    case eval_exprs([IdExpr], State#state.vars, State#state.funcs) of
+        {ok, [{IdV, Vars1}]} when is_number(IdV) ->
+            Id = erlbasic_eval:normalize_int(IdV),
+            case update_sprite(Id, fun(Spr) -> Spr#{visible => true} end, State#state{vars = Vars1}) of
+                {ok, NextState, Spr} ->
+                    {ok, NextState, [format_sprite_pos(Id, Spr)]};
+                {error, Reason} ->
+                    {error, Reason, State#state{vars = Vars1}}
+            end;
+        {ok, [{_, Vars1}]} ->
+            {error, type_mismatch, State#state{vars = Vars1}};
+        {error, Reason, Vars1} ->
+            {error, Reason, State#state{vars = Vars1}}
+    end;
+execute_sprite_stmt_ws({sprite_scale, IdExpr, ScaleExpr}, State) ->
+    case eval_exprs([IdExpr, ScaleExpr], State#state.vars, State#state.funcs) of
+        {ok, [{IdV, _}, {ScaleV, Vars1}]} when is_number(IdV), is_number(ScaleV) ->
+            Id = erlbasic_eval:normalize_int(IdV),
+            Scale = erlbasic_eval:normalize_int(ScaleV),
+            if
+                Scale < 1 orelse Scale > 64 ->
+                    {error, illegal_function_call, State#state{vars = Vars1}};
+                true ->
+                    case update_sprite(Id, fun(Spr) -> Spr#{scale => Scale} end, State#state{vars = Vars1}) of
+                        {ok, NextState, Spr} ->
+                            {ok, NextState, [format_sprite_pos(Id, Spr)]};
+                        {error, Reason} ->
+                            {error, Reason, State#state{vars = Vars1}}
+                    end
+            end;
+        {ok, [{_, _}, {_, Vars1}]} ->
+            {error, type_mismatch, State#state{vars = Vars1}};
+        {error, Reason, Vars1} ->
+            {error, Reason, State#state{vars = Vars1}}
+    end;
+execute_sprite_stmt_ws({sprite_move, IdExpr, XExpr, YExpr}, State) ->
+    case eval_exprs([IdExpr, XExpr, YExpr], State#state.vars, State#state.funcs) of
+        {ok, [{IdV, _}, {XV, _}, {YV, Vars1}]} when is_number(IdV), is_number(XV), is_number(YV) ->
+            Id = erlbasic_eval:normalize_int(IdV),
+            X = erlbasic_eval:normalize_int(XV),
+            Y = erlbasic_eval:normalize_int(YV),
+            case update_sprite(Id, fun(Spr) -> Spr#{x => X, y => Y, visible => true} end, State#state{vars = Vars1}) of
+                {ok, NextState, Spr} ->
+                    {ok, NextState, [format_sprite_pos(Id, Spr)]};
+                {error, Reason} ->
+                    {error, Reason, State#state{vars = Vars1}}
+            end;
+        {ok, [{_, _}, {_, _}, {_, Vars1}]} ->
+            {error, type_mismatch, State#state{vars = Vars1}};
+        {error, Reason, Vars1} ->
+            {error, Reason, State#state{vars = Vars1}}
+    end;
+execute_sprite_stmt_ws({sprite_load, IdExpr, WidthExpr, HeightExpr, {array_target, Var, [StartExpr]}}, State) ->
+    case erlbasic_eval_arrays:is_byte_var(Var) of
+        false ->
+            {error, type_mismatch, State};
+        true ->
+            case eval_exprs([IdExpr, WidthExpr, HeightExpr, StartExpr], State#state.vars, State#state.funcs) of
+                {ok, [{IdV, _}, {WV, _}, {HV, _}, {StartV, Vars1}]} when is_number(IdV), is_number(WV), is_number(HV), is_number(StartV) ->
+                    Id = erlbasic_eval:normalize_int(IdV),
+                    W = erlbasic_eval:normalize_int(WV),
+                    H = erlbasic_eval:normalize_int(HV),
+                    Start = erlbasic_eval:normalize_int(StartV),
+                    if
+                        Id < 0; W < 1; H < 1; W > 256; H > 256; Start < 0 ->
+                            {error, illegal_function_call, State#state{vars = Vars1}};
+                        true ->
+                            Count = W * H,
+                            case read_sprite_bytes(Var, Start, Count, Vars1, []) of
+                                {ok, Pixels} ->
+                                    Existing = maps:get(Id, State#state.sprites, #{x => 0, y => 0, visible => false, scale => 1}),
+                                    Sprite = Existing#{w => W, h => H, pixels => Pixels},
+                                    NextSprites = maps:put(Id, Sprite, State#state.sprites),
+                                    NextState = State#state{vars = Vars1, sprites = NextSprites},
+                                    {ok, NextState, [format_sprite_def(Id, Sprite), format_sprite_pos(Id, Sprite)]};
+                                {error, Reason} ->
+                                    {error, Reason, State#state{vars = Vars1}}
+                            end
+                    end;
+                {ok, [{_, _}, {_, _}, {_, _}, {_, Vars1}]} ->
+                    {error, type_mismatch, State#state{vars = Vars1}};
+                {error, Reason, Vars1} ->
+                    {error, Reason, State#state{vars = Vars1}}
+            end
+    end;
+execute_sprite_stmt_ws(_, State) ->
+    {error, syntax_error, State}.
+
+update_sprite(Id, _Fun, _State) when Id < 0 ->
+    {error, illegal_function_call};
+update_sprite(Id, Fun, State) ->
+    case maps:find(Id, State#state.sprites) of
+        {ok, Sprite} ->
+            case has_sprite_bitmap(Sprite) of
+                false -> {error, illegal_function_call};
+                true ->
+                    NextSprite = Fun(Sprite),
+                    {ok, State#state{sprites = maps:put(Id, NextSprite, State#state.sprites)}, NextSprite}
+            end;
+        error ->
+            {error, illegal_function_call}
+    end.
+
+has_sprite_bitmap(Sprite) ->
+    maps:is_key(w, Sprite) andalso maps:is_key(h, Sprite) andalso maps:is_key(pixels, Sprite).
+
+read_sprite_bytes(_Var, _Index, 0, _Vars, Acc) ->
+    {ok, lists:reverse(Acc)};
+read_sprite_bytes(Var, Index, N, Vars, Acc) ->
+    case erlbasic_eval_arrays:get_array_value(Var, [Index], Vars) of
+        {ok, Value} when is_number(Value) ->
+            B = erlbasic_eval_arrays:normalize_byte_value(Value),
+            read_sprite_bytes(Var, Index + 1, N - 1, Vars, [B | Acc]);
+        {ok, _} ->
+            {error, type_mismatch};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+format_sprite_def(Id, Sprite) ->
+    W = maps:get(w, Sprite),
+    H = maps:get(h, Sprite),
+    Pixels = maps:get(pixels, Sprite),
+    PixelText = string:join([integer_to_list(P) || P <- Pixels], ","),
+    "\x02GFX:SPRDEF:" ++ integer_to_list(Id) ++ ":" ++ integer_to_list(W) ++ ":" ++ integer_to_list(H) ++ ":" ++ PixelText.
+
+format_sprite_pos(Id, Sprite) ->
+    X = maps:get(x, Sprite, 0),
+    Y = maps:get(y, Sprite, 0),
+    Scale = maps:get(scale, Sprite, 1),
+    Visible = case maps:get(visible, Sprite, false) of true -> 1; false -> 0 end,
+    "\x02GFX:SPRPOS:" ++ integer_to_list(Id) ++ ":" ++ integer_to_list(X) ++ ":" ++ integer_to_list(Y) ++ ":" ++ integer_to_list(Scale) ++ ":" ++ integer_to_list(Visible).
+
+event_gosub_trigger(State, LoopStack, CallStack) ->
+    case on_sprite_trigger(State, LoopStack, CallStack) of
+        {gosub, TargetPc, FiredState} ->
+            {gosub, TargetPc, FiredState};
+        {no_trigger, State1} ->
+            case on_play_trigger(State1, LoopStack, CallStack) of
+                {gosub, TargetPc, FiredState} -> {gosub, TargetPc, FiredState};
+                no_trigger -> {no_trigger, State1}
+            end
+    end.
+
+on_sprite_trigger(State = #state{on_sprite_return_depth = D}, _LoopStack, _CallStack) when D >= 0 ->
+    {no_trigger, update_sprite_collision_set(State)};
+on_sprite_trigger(State, _LoopStack, CallStack) ->
+    State1 = update_sprite_collision_set(State),
+    case new_collision_pair(State#state.sprite_active_collisions, State1#state.sprite_active_collisions) of
+        none ->
+            {no_trigger, State1};
+        {Id1, Id2} ->
+            case State1#state.on_sprite_gosub of
+                undefined ->
+                    {no_trigger, State1};
+                TargetExpr ->
+                    case resolve_target_pc(TargetExpr, State1#state.prog, State1#state.vars, State1#state.funcs) of
+                        {ok, TargetPc} ->
+                            Vars1 = maps:put("SPRCOL2%", Id2, maps:put("SPRCOL1%", Id1, State1#state.vars)),
+                            Depth = length(CallStack),
+                            FiredState = State1#state{vars = Vars1, on_sprite_return_depth = Depth},
+                            {gosub, TargetPc, FiredState};
+                        _ ->
+                            {no_trigger, State1}
+                    end
+            end
+    end.
+
+update_sprite_collision_set(State) ->
+    Current = sprite_collisions(State#state.sprites),
+    State#state{sprite_active_collisions = Current}.
+
+new_collision_pair(Prev, Current) ->
+    New = [P || P <- Current, not lists:member(P, Prev)],
+    case New of
+        [Pair | _] -> Pair;
+        [] -> none
+    end.
+
+sprite_collisions(SpritesMap) ->
+    Visible = [{Id, S} || {Id, S} <- maps:to_list(SpritesMap), maps:get(visible, S, false) =:= true, has_sprite_bitmap(S)],
+    sprite_collisions(Visible, []).
+
+sprite_collisions([], Acc) ->
+    lists:usort(Acc);
+sprite_collisions([{Id1, S1} | Rest], Acc) ->
+    NextAcc = lists:foldl(
+        fun({Id2, S2}, A) ->
+            case sprites_overlap(S1, S2) of
+                true -> [ordered_pair(Id1, Id2) | A];
+                false -> A
+            end
+        end,
+        Acc,
+        Rest),
+    sprite_collisions(Rest, NextAcc).
+
+ordered_pair(A, B) when A =< B -> {A, B};
+ordered_pair(A, B) -> {B, A}.
+
+sprites_overlap(S1, S2) ->
+    {X1, Y1, W1, H1} = sprite_bounds(S1),
+    {X2, Y2, W2, H2} = sprite_bounds(S2),
+    X1 < X2 + W2 andalso X2 < X1 + W1 andalso Y1 < Y2 + H2 andalso Y2 < Y1 + H1.
+
+sprite_bounds(S) ->
+    X = maps:get(x, S, 0),
+    Y = maps:get(y, S, 0),
+    Scale = max(1, maps:get(scale, S, 1)),
+    W = maps:get(w, S, 0) * Scale,
+    H = maps:get(h, S, 0) * Scale,
+    {X, Y, W, H}.
+
+update_event_return_depths(State, RestCallStack) ->
+    RestDepth = length(RestCallStack),
+    SpriteDepth = State#state.on_sprite_return_depth,
+    NewSpriteDepth =
+        case SpriteDepth of
+            D1 when D1 >= 0, RestDepth =< D1 -> -1;
+            D1 when D1 >= 0 -> D1;
+            _ -> SpriteDepth
+        end,
+    PlayDepth = State#state.on_play_return_depth,
+    NewPlayDepth =
+        case PlayDepth of
+            D2 when D2 >= 0, RestDepth =< D2 -> -1;
+            D2 when D2 >= 0 -> D2;
+            _ -> PlayDepth
+        end,
+    State#state{on_sprite_return_depth = NewSpriteDepth, on_play_return_depth = NewPlayDepth}.
 
 on_play_trigger(#state{on_play_gosub = undefined}, _LoopStack, _CallStack) ->
     no_trigger;

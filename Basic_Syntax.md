@@ -156,7 +156,7 @@ Syntax:
 Statements below are listed in alphabetical order by command name. Unless noted otherwise, they work both in immediate mode and in stored program lines.
 
 Scope notes:
-- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`) are intended for stored program execution.
+- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`) are intended for stored program execution.
 - `INPUT`, `GET`, `GETKEY`, `SLEEP`, `PGET`, and `GETCHAR` may pause execution waiting for input or browser replies.
 
 ### BUFFER
@@ -483,6 +483,35 @@ Enables runtime error trap target.
 Syntax:
 - `ON ERROR GOTO <line-expr>`
 
+### ON PLAY ... GOSUB
+
+Background-music refill trigger.
+
+Syntax:
+- `ON PLAY(<notes-expr>) GOSUB <line-expr>`
+
+Notes:
+- Works with `PLAY` background mode (`MB`) and checks after each executed statement.
+- When remaining queued notes drop below `<notes-expr>`, the subroutine is invoked.
+- Re-entry is guarded: the handler will not trigger again while its prior invocation is still active.
+
+### ON SPRITE GOSUB
+
+Registers a collision event handler for sprite overlaps.
+
+Syntax:
+- `ON SPRITE GOSUB <line-expr>`
+
+Notes:
+- Triggering is edge-based: the handler fires when a collision pair first appears (not every statement while still overlapping).
+- During the handler, collision IDs are available in `SPRCOL1%` and `SPRCOL2%`.
+- Re-entry is guarded while a prior sprite handler invocation is active.
+
+Example:
+```text
+ON SPRITE GOSUB 900
+```
+
 ### OPEN
 
 Opens a file channel.
@@ -506,6 +535,35 @@ Reads pixel palette index into target.
 
 Syntax:
 - `PGET (<x>,<y>),<target>`
+
+### PLAY
+
+Queues and plays Music Macro Language (MML) notes.
+
+Syntax:
+- `PLAY <string-expr>`
+
+Implemented MML controls:
+- `O<n>` set octave (0-6)
+- `<` and `>` shift octave down/up
+- `L<n>[.]` default note length (1-64), optional dotted length
+- `T<n>` tempo (32-255 BPM)
+- `A`-`G` notes with optional accidental (`#`, `+`, `-`), optional length, optional dot
+- `N<n>[.]` note by number (`0` = rest, `1-84` = note)
+- `P<n>[.]` or `R<n>[.]` rest
+- `MN`, `ML`, `MS` articulation (normal, legato, staccato)
+- `MB`, `MF` playback mode (background, foreground)
+
+Notes:
+- `PLAY` is available in WebSocket sessions.
+- In foreground mode (`MF`), execution waits for phrase duration.
+- In background mode (`MB`), execution continues while notes remain queued.
+
+Examples:
+```text
+PLAY "MF T160 L8 O4 C E G O5 C"
+PLAY "MB T140 ML O4 L4 C E G O5 C"
+```
 
 ### PRINT
 
@@ -612,6 +670,39 @@ Syntax:
 Notes:
 - `SLEEP` with no argument waits for a keypress.
 - `SLEEP <seconds-expr>` pauses for that duration (bounded internally).
+
+### SPRITE
+
+Loads, positions, and controls bitmap sprites in graphics mode.
+
+Syntax:
+- `SPRITE LOAD <id-expr>,<width-expr>,<height-expr>,<byte-array-1d-element>`
+- `SPRITE <id-expr>,(<x-expr>,<y-expr>)`
+- `SPRITE SHOW <id-expr>`
+- `SPRITE HIDE <id-expr>`
+- `SPRITE SCALE <id-expr>,<scale-expr>`
+- `SPRITE CLEAR`
+
+Bitmap source notes:
+- `SPRITE LOAD` reads `width * height` bytes from a 1D BYTE array (`&` suffix), starting at the supplied index.
+- Value `255` is treated as transparent; other values use the low 4 bits as palette color index.
+
+Behavior notes:
+- Sprite rendering requires WebSocket graphics mode (`HGR` or `HGR2`).
+- IDs are not fixed to legacy limits; many sprites and larger dimensions are supported.
+
+See also:
+- [examples/sprites.bas](examples/sprites.bas)
+- [examples/sprites_hgr2.bas](examples/sprites_hgr2.bas)
+
+Example:
+```text
+DIM SHIP&(255)
+SPRITE LOAD 1,16,16,SHIP&(0)
+SPRITE SCALE 1,2
+SPRITE 1,(120,80)
+SPRITE SHOW 1
+```
 
 ### SOUND
 

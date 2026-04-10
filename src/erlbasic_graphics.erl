@@ -9,21 +9,24 @@ execute_stmt({cls}, State) ->
 execute_stmt({hgr}, State) ->
     case erlang:get(erlbasic_conn_type) of
         websocket ->
-            {State#state{graphics_mode = hgr, graphics_pen = undefined}, erlbasic_runtime:hgr_output()};
+            {State#state{graphics_mode = hgr, graphics_pen = undefined, sprites = #{}, sprite_active_collisions = []},
+             erlbasic_runtime:hgr_output() ++ ["\x02GFX:SPRCLR"]};
         _ ->
             {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
     end;
 execute_stmt({hgr2}, State) ->
     case erlang:get(erlbasic_conn_type) of
         websocket ->
-            {State#state{graphics_mode = hgr2, graphics_pen = undefined}, erlbasic_runtime:hgr2_output()};
+            {State#state{graphics_mode = hgr2, graphics_pen = undefined, sprites = #{}, sprite_active_collisions = []},
+             erlbasic_runtime:hgr2_output() ++ ["\x02GFX:SPRCLR"]};
         _ ->
             {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
     end;
 execute_stmt({text}, State) ->
     case erlang:get(erlbasic_conn_type) of
         websocket ->
-            {State#state{graphics_mode = false, graphics_pen = undefined}, erlbasic_runtime:text_output()};
+            {State#state{graphics_mode = false, graphics_pen = undefined, sprites = #{}, sprite_active_collisions = []},
+             erlbasic_runtime:text_output() ++ ["\x02GFX:SPRCLR"]};
         _ ->
             {State, [erlbasic_eval:format_runtime_error(graphics_not_supported_on_tty)]}
     end;

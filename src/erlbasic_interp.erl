@@ -528,8 +528,40 @@ execute_statement_single(Command, State) ->
                 _ ->
                     {State, [erlbasic_eval:format_runtime_error(play_not_supported_on_tty)]}
             end;
+        {sprite_clear} = Stmt ->
+            case erlbasic_runtime:execute_sprite_stmt(Stmt, State) of
+                {ok, NewState, Output} -> {NewState, Output};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {sprite_hide, _} = Stmt ->
+            case erlbasic_runtime:execute_sprite_stmt(Stmt, State) of
+                {ok, NewState, Output} -> {NewState, Output};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {sprite_show, _} = Stmt ->
+            case erlbasic_runtime:execute_sprite_stmt(Stmt, State) of
+                {ok, NewState, Output} -> {NewState, Output};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {sprite_scale, _, _} = Stmt ->
+            case erlbasic_runtime:execute_sprite_stmt(Stmt, State) of
+                {ok, NewState, Output} -> {NewState, Output};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {sprite_move, _, _, _} = Stmt ->
+            case erlbasic_runtime:execute_sprite_stmt(Stmt, State) of
+                {ok, NewState, Output} -> {NewState, Output};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
+        {sprite_load, _, _, _, _} = Stmt ->
+            case erlbasic_runtime:execute_sprite_stmt(Stmt, State) of
+                {ok, NewState, Output} -> {NewState, Output};
+                {error, Reason, ErrState} -> {ErrState, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {on_play_gosub, NExpr, TargetExpr} ->
             {State#state{on_play_gosub = {NExpr, TargetExpr}}, []};
+        {on_sprite_gosub, TargetExpr} ->
+            {State#state{on_sprite_gosub = TargetExpr}, []};
         {color, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {tron} ->
             {State#state{trace_enabled = true}, []};

@@ -19,6 +19,10 @@
     graphics_mode = false,      % false | hgr | hgr2 — active graphics mode (WebSocket only)
     graphics_pen = undefined,   % {X, Y} - last graphics endpoint (for LINETO)
     dblbuff = false,            % true when BUFFER mode is on (WebSocket only)
+    sprites = #{},              % sprite id => #{w,h,pixels,x,y,visible,scale}
+    sprite_active_collisions = [], % normalized [{Id1,Id2}] currently overlapping
+    on_sprite_gosub = undefined, % <TargetExpr> | undefined — ON SPRITE GOSUB handler
+    on_sprite_return_depth = -1, % -1 = not in sprite handler; >=0 = call stack depth at fire time
     play_background = false,    % true = MB (background) mode, false = MF (foreground)
     on_play_gosub = undefined,  % {NExpr, TargetExpr} | undefined — ON PLAY(n) GOSUB handler
     on_play_return_depth = -1   % -1 = not in handler; >=0 = call stack depth at fire time

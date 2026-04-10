@@ -8,8 +8,8 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Browser WebSocket sessions use permessage-deflate compression with `server_no_context_takeover` for stable interactive `INPUT`/`GETKEY` traffic
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
-- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
-- Graphics mode (WebSocket only): `HGR`, `HGR2`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `BUFFER`, `FLUSH`, `PGET`, `GETCHAR`, `SOUND`
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
+- Graphics mode (WebSocket only): `HGR`, `HGR2`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `BUFFER`, `FLUSH`, `PGET`, `GETCHAR`, `SOUND`, `SPRITE` (`LOAD`, `SHOW`, `HIDE`, `SCALE`, `CLEAR`, position)
 - Full expression engine: numeric operators, exponentiation, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
@@ -124,6 +124,8 @@ RUN
 - `GET A$` reads one character non-blocking; `GETKEY A$` blocks until a keystroke.
 - Browser WebSocket compression is enabled, but negotiated with `server_no_context_takeover` so successive prompt/output frames remain decodable during interactive sessions.
 - `SLEEP n` pauses for up to 30 seconds (maximum capped); other sessions are unaffected.
+- `SPRITE LOAD` reads bitmap bytes from 1D BYTE arrays (`&` suffix); `255` is treated as transparent.
+- `ON SPRITE GOSUB` is collision-edge triggered and exposes colliding sprite IDs via `SPRCOL1%` and `SPRCOL2%`.
 - `SAVE`/`LOAD`/`SCRATCH`/`DIR` manage programs in the user's sandboxed directory.
 - `DIR` output is grouped by source (`Your files` and `Shared examples`) to distinguish personal files from bundled examples.
 - `IF ... THEN <line>` and `IF ... THEN <line> ELSE <line>` are accepted as shorthand for implied `GOTO` targets.
@@ -144,6 +146,8 @@ See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase is
 - [examples/flag.bas](examples/flag.bas) — Colourised American flag using `COLOR` and `STRING$`
 - [examples/enterprise.bas](examples/enterprise.bas) — Animated starship using `LOCATE`, `COLOR`, `SLEEP`, `TIMER`
 - [examples/graphics.bas](examples/graphics.bas) — Graphics demo: `HGR`, `PSET`, `LINE`, `RECT`, `CIRCLE` (WebSocket only)
+- [examples/sprites.bas](examples/sprites.bas) — Sprite demo: BYTE bitmap loading, movement, and `ON SPRITE GOSUB` collision callback (WebSocket only)
+- [examples/sprites_hgr2.bas](examples/sprites_hgr2.bas) — Interactive `HGR2` sprite demo with `GETKEY` movement (`WASD`) and `ON SPRITE GOSUB` collision detection
 - [examples/hgr2demo.bas](examples/hgr2demo.bas) — Split-screen demo: `HGR2` 800×480 graphics above 4 text rows (WebSocket only)
 - [examples/bufffer.bas](examples/bufffer.bas) — Buffered-output demo: `BUFFER`, `FLUSH`, `PGET`, `GETCHAR` (WebSocket only)
 - [examples/lunarlander.bas](examples/lunarlander.bas) — Interactive side-view Lunar Lander in `HGR2` with thrust controls and pad landing physics

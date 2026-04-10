@@ -262,6 +262,7 @@ load_program_file(FileName) ->
         {ok, ExamplePath} ->
             case read_program_file(ExamplePath) of
                 {ok, _} = Ok                         -> Ok;
+                {syntax_errors, _Program, _ErrorLines} = E -> E;
                 {syntax_error, _, _} = E             -> E;
                 {syntax_error, _} = E                -> E;
                 syntax_error                         -> syntax_error;
@@ -323,16 +324,16 @@ parse_program_lines(["" | Rest], Acc, ErrorLines) ->
 parse_program_lines([Line | Rest], Acc, ErrorLines) ->
     case parse_program_line(Line) of
         {program_line, Num, Code} ->
-            NextAcc = [{Num, Code} | lists:keydelete(Num, 1, Acc)],
             case erlbasic_parser:validate_program_line(Code) of
                 ok ->
+                    NextAcc = [{Num, Code} | lists:keydelete(Num, 1, Acc)],
                     parse_program_lines(Rest, NextAcc, ErrorLines);
                 {error, _Reason} ->
-                    %% Keep loading so users can LIST and fix all bad lines.
-                    parse_program_lines(Rest, NextAcc, [Num | ErrorLines]);
+                    %% Keep loading, but skip invalid lines and report all bad line numbers.
+                    parse_program_lines(Rest, Acc, [Num | ErrorLines]);
                 error ->
-                    %% Include the bad line in the loaded program and keep going.
-                    parse_program_lines(Rest, NextAcc, [Num | ErrorLines])
+                    %% Keep loading, but skip invalid lines and report all bad line numbers.
+                    parse_program_lines(Rest, Acc, [Num | ErrorLines])
             end;
         immediate ->
             error

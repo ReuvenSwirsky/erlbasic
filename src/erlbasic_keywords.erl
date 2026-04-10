@@ -28,7 +28,7 @@ list_keywords() ->
     [
         "PRINT", "USING", "LET", "INPUT", "LINE", "DEF", "IF", "THEN", "ELSE", "FOR", "TO", "STEP", "NEXT", "CLS", "COLOR", "LOCATE",
         "GOTO", "GOSUB", "RETURN", "END", "STOP", "DATA", "READ", "DIM", "MOD", "REM", "GET", "GETKEY", "GETCHAR", "SLEEP", "SOUND", "TIMER", "CHAIN",
-        "OPEN", "CLOSE", "WRITE", "FIELD", "PUT", "AS", "APPEND", "RANDOM", "OUTPUT",
+        "OPEN", "CLOSE", "WRITE", "FIELD", "PUT", "AS", "APPEND", "RANDOM", "OUTPUT", "SPRITE",
         "TRON", "TROFF", "FLUSH", "BUFFER", "PGET"
     ].
 

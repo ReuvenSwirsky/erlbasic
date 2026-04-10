@@ -127,6 +127,52 @@ sound_parse_and_validate_test() ->
         erlbasic_parser:parse_statement("SOUND 0,120,10,8")),
     ?assertEqual(ok, erlbasic_parser:validate_program_line("SOUND 0,120,10,8")).
 
+sprite_parse_and_validate_test() ->
+    ?assertEqual({on_sprite_gosub, "200"},
+        erlbasic_parser:parse_statement("ON SPRITE GOSUB 200")),
+    ?assertEqual({sprite_clear},
+        erlbasic_parser:parse_statement("SPRITE CLEAR")),
+    ?assertEqual({sprite_move, "1", "10", "20"},
+        erlbasic_parser:parse_statement("SPRITE 1,(10,20)")),
+    ?assertEqual({sprite_show, "1"},
+        erlbasic_parser:parse_statement("SPRITE SHOW 1")),
+    ?assertEqual({sprite_hide, "1"},
+        erlbasic_parser:parse_statement("SPRITE HIDE 1")),
+    ?assertEqual({sprite_scale, "1", "3"},
+        erlbasic_parser:parse_statement("SPRITE SCALE 1,3")),
+    ?assertEqual(ok,
+        erlbasic_parser:validate_program_line("DIM S&(31):SPRITE LOAD 1,4,4,S&(0):ON SPRITE GOSUB 200")).
+
+sprite_collision_on_gosub_test() ->
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        S0 = erlbasic_interp:new_state(),
+        {S1, _} = erlbasic_interp:handle_input("10 HGR", S0),
+        {S2, _} = erlbasic_interp:handle_input("20 DIM S&(31)", S1),
+        {S3, _} = erlbasic_interp:handle_input("30 FOR I=0 TO 15:S&(I)=12:NEXT I", S2),
+        {S4, _} = erlbasic_interp:handle_input("40 FOR I=16 TO 31:S&(I)=10:NEXT I", S3),
+        {S5, _} = erlbasic_interp:handle_input("50 SPRITE LOAD 1,4,4,S&(0)", S4),
+        {S6, _} = erlbasic_interp:handle_input("60 SPRITE LOAD 2,4,4,S&(16)", S5),
+        {S7, _} = erlbasic_interp:handle_input("70 SPRITE 1,(10,10)", S6),
+        {S8, _} = erlbasic_interp:handle_input("80 SPRITE 2,(40,10)", S7),
+        {S9, _} = erlbasic_interp:handle_input("90 ON SPRITE GOSUB 200", S8),
+        {S10, _} = erlbasic_interp:handle_input("100 SPRITE 2,(12,10)", S9),
+        {S11, _} = erlbasic_interp:handle_input("110 PRINT \"AFTER\"", S10),
+        {S12, _} = erlbasic_interp:handle_input("120 END", S11),
+        {S13, _} = erlbasic_interp:handle_input("200 PRINT \"HIT\";SPRCOL1%;\"-\";SPRCOL2%", S12),
+        {S14, _} = erlbasic_interp:handle_input("210 RETURN", S13),
+        {_S15, Output} = erlbasic_interp:handle_input("RUN", S14),
+        Text = lists:flatten(Output),
+        ?assertEqual(match, re:run(Text, "HIT1-2", [{capture, none}])),
+        ?assertEqual(match, re:run(Text, "AFTER", [{capture, none}]))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
+
 buffer_parse_and_validate_test() ->
     ?assertEqual({buffer_mode, on}, erlbasic_parser:parse_statement("BUFFER ON")),
     ?assertEqual({buffer_mode, off}, erlbasic_parser:parse_statement("BUFFER OFF")),
@@ -1253,7 +1299,7 @@ asciilife_load_test() ->
         ?assertEqual(match, re:run(ListText2, "READ N, L", [{capture, none}])),
         ok.
 
-load_program_keeps_bad_lines_test() ->
+load_program_skips_bad_lines_test() ->
     ProgramText =
         "10 PRINT \"OK\"\n"
         "20 DIM NEXT(1)\n"
@@ -1261,8 +1307,49 @@ load_program_keeps_bad_lines_test() ->
         "40 END\n",
     {syntax_errors, Program, ErrorLines} = erlbasic_commands:parse_bin_as_program(list_to_binary(ProgramText)),
     ?assertEqual([20, 30], ErrorLines),
-    ?assertEqual("DIM NEXT(1)", proplists:get_value(20, Program)),
-    ?assertEqual("LET X =", proplists:get_value(30, Program)).
+    ?assertEqual(undefined, proplists:get_value(20, Program)),
+    ?assertEqual(undefined, proplists:get_value(30, Program)),
+    ?assertEqual("PRINT \"OK\"", proplists:get_value(10, Program)),
+    ?assertEqual("END", proplists:get_value(40, Program)).
+
+load_malformed_shared_example_reports_error_without_crash_test() ->
+    BeamPath = code:which(erlbasic_commands),
+    BeamDir = filename:dirname(BeamPath),
+    RepoRoot = find_repo_root_from(BeamDir),
+    ExamplesDir = filename:join(RepoRoot, "examples"),
+    TempBase = "__badload_example_test__",
+    TempFile = filename:join(ExamplesDir, TempBase ++ ".bas"),
+    ProgramText =
+        "10 PRINT \"OK\"\n"
+        "20 LET X =\n"
+        "30 END\n",
+    try
+        ok = file:write_file(TempFile, ProgramText),
+        State0 = erlbasic_interp:new_state(),
+        {State1, LoadOutput} = erlbasic_interp:handle_input("LOAD " ++ TempBase, State0),
+        LoadText = lists:flatten(LoadOutput),
+        ?assertEqual(match, re:run(LoadText, "SYNTAX ERROR IN 20", [{capture, none}])),
+        {_State2, List10} = erlbasic_interp:handle_input("LIST 10", State1),
+        {_State3, List20} = erlbasic_interp:handle_input("LIST 20", State1),
+        {_State4, List30} = erlbasic_interp:handle_input("LIST 30", State1),
+        ?assertEqual(match, re:run(lists:flatten(List10), "PRINT \"OK\"", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(lists:flatten(List20), "LET X", [{capture, none}])),
+        ?assertEqual(match, re:run(lists:flatten(List30), "END", [{capture, none}]))
+    after
+        _ = file:delete(TempFile)
+    end.
+
+find_repo_root_from(Dir) ->
+    ConfigPath = filename:join(Dir, "rebar.config"),
+    case filelib:is_regular(ConfigPath) of
+        true -> Dir;
+        false ->
+            Parent = filename:dirname(Dir),
+            case Parent =:= Dir of
+                true -> Dir;
+                false -> find_repo_root_from(Parent)
+            end
+    end.
 
 %% =============================================================================
 %% INPUT Statement Tests (GW-BASIC Compatibility)

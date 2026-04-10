@@ -4,6 +4,36 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 9, 2026 - LOAD Robustness for Malformed Shared Examples (SPRITES crash fix)
+
+### Bug
+Loading a malformed shared example (for example `LOAD sprites` before the loop-variable fix) could crash in WebSocket command handling with:
+- `case_clause {syntax_errors, Program, ErrorLines}`
+
+Root cause:
+- `parse_bin_as_program/1` may return `{syntax_errors, Program, ErrorLines}`.
+- `handle_load_command/2` already handled that tuple.
+- `load_program_file/1` (shared examples path) did not handle it, so the tuple escaped into a `case` that only matched `{ok,...}` and legacy `syntax_error` variants.
+
+### Fix
+- Added explicit `{syntax_errors, _Program, _ErrorLines}` handling in `src/erlbasic_commands.erl` within `load_program_file/1`.
+- Kept current loader semantics: continue loading valid lines, skip invalid lines, and report each bad line number as `?SYNTAX ERROR IN <line>`.
+
+### Additional correction
+- Updated `examples/sprites.bas` to avoid reserved-word variable naming (`STEP%` -> `N%`), which had been triggering line syntax errors.
+
+### Regression tests
+- Added `load_malformed_shared_example_reports_error_without_crash_test/0` in `eunit_tests/erlbasic_eunit_tests.erl`.
+  - Creates a temporary malformed shared example under `examples/`.
+  - Verifies `LOAD` returns syntax-line diagnostics without crashing.
+  - Verifies bad lines are omitted while valid lines remain listable.
+
+### Validation
+- `rebar3 eunit --module=erlbasic_eunit_tests`: PASS
+- `smoke_tests/smoke_runner.escript`: PASS
+
+---
+
 ## April 8, 2026 - IF/THEN Line-Number Shorthand, Safer Syntax Failure Handling, and HGR2 Lunar Lander Example
 
 ### Enhancements
