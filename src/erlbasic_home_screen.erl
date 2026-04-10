@@ -11,10 +11,13 @@
 %%   home_scr_col      : integer 1..?COLS   (cursor col)
 %%   home_scr_fg       : 0..15              (current foreground index)
 %%   home_scr_bg       : 0..15              (current background index)
-%%   home_scr_sections : [HtmlBinary]       (most-recent at head)
+%%   home_scr_sections : [{text,Html}|{gfx,Svg}] (most-recent at head)
+%%   home_scr_gfx_mode : none | hgr | hgr2   (active graphics mode)
+%%   home_scr_gfx_list : [cmd()]             (recorded draw ops, newest at head)
 
 -module(erlbasic_home_screen).
--export([init/0, write_text/1, set_color/2, locate/2, cls/0, publish/0, get_sections/0]).
+-export([init/0, write_text/1, set_color/2, locate/2, cls/0, publish/0, get_sections/0,
+         set_gfx_mode/1, gfx_text_mode/0, record_gfx/1]).
 
 -define(COLS, 80).
 -define(ROWS, 24).
@@ -39,7 +42,9 @@ init() ->
     erlang:put(home_scr_col,      1),
     erlang:put(home_scr_fg,       ?DEFAULT_FG),
     erlang:put(home_scr_bg,       ?DEFAULT_BG),
-    erlang:put(home_scr_sections, []).
+    erlang:put(home_scr_sections, []),
+    erlang:put(home_scr_gfx_mode, none),
+    erlang:put(home_scr_gfx_list, []).
 
 %% Write a string of characters to the virtual screen at the current cursor.
 %% Handles \r\n, \r, and \n line endings.
@@ -66,18 +71,52 @@ cls() ->
     erlang:put(home_scr_fg,    ?DEFAULT_FG),
     erlang:put(home_scr_bg,    ?DEFAULT_BG).
 
-%% Snapshot the current screen as an HTML fragment, append to the sections
-%% list, then clear the screen ready for the next section.
+%% Snapshot the current graphics display list (if any) and text screen (if
+%% non-empty) as tagged section entries, then clear both ready for the next
+%% section.
 publish() ->
-    Cells    = erlang:get(home_scr_cells),
-    Html     = render_screen(Cells),
-    Sections = erlang:get(home_scr_sections),
-    erlang:put(home_scr_sections, [Html | Sections]),
+    %% Emit graphics display list as SVG section (if active and non-empty).
+    GfxMode = erlang:get(home_scr_gfx_mode),
+    GfxList = lists:reverse(erlang:get(home_scr_gfx_list)),
+    case {GfxMode, GfxList} of
+        {none, _} -> ok;
+        {_, []}   -> ok;
+        {Mode, CmdList} ->
+            Svg = render_gfx_svg(Mode, CmdList),
+            Sections0 = erlang:get(home_scr_sections),
+            erlang:put(home_scr_sections, [{gfx, Svg} | Sections0]),
+            erlang:put(home_scr_gfx_list, []),
+            erlang:put(home_scr_gfx_mode, none)
+    end,
+    %% Emit text screen as tagged section (only if non-empty).
+    Cells = erlang:get(home_scr_cells),
+    case map_size(Cells) of
+        0 -> ok;
+        _ ->
+            Html     = render_screen(Cells),
+            Sections = erlang:get(home_scr_sections),
+            erlang:put(home_scr_sections, [{text, Html} | Sections])
+    end,
     cls().
 
 %% Return all published sections in order (first published first).
 get_sections() ->
     lists:reverse(erlang:get(home_scr_sections)).
+
+%% Set the active graphics mode (hgr or hgr2) and clear the display list.
+set_gfx_mode(Mode) ->
+    erlang:put(home_scr_gfx_mode, Mode),
+    erlang:put(home_scr_gfx_list, []).
+
+%% Switch back to text mode without publishing (clears display list).
+gfx_text_mode() ->
+    erlang:put(home_scr_gfx_mode, none),
+    erlang:put(home_scr_gfx_list, []).
+
+%% Append a graphics command to the display list.
+record_gfx(Cmd) ->
+    List = erlang:get(home_scr_gfx_list),
+    erlang:put(home_scr_gfx_list, [Cmd | List]).
 
 %%%=========================================================================
 %%% Internal: cursor & character placement
@@ -234,3 +273,53 @@ esc(Chars) ->
         ($") -> "&quot;";
         (C)  -> [C]
     end, Chars).
+
+%%%=========================================================================
+%%% Internal: SVG graphics rendering
+%%%=========================================================================
+
+%% Render accumulated graphics commands as an inline SVG.
+%% The SVG uses the full canvas dimensions (800x600 for HGR, 800x480 for HGR2)
+%% as its viewBox, with a black background rect, and scales to 100% width
+%% so it fits the containing div.
+render_gfx_svg(Mode, CmdList) ->
+    {W, H} = case Mode of
+        hgr  -> {800, 600};
+        hgr2 -> {800, 480}
+    end,
+    WS = integer_to_list(W),
+    HS = integer_to_list(H),
+    Elements = [render_gfx_cmd(Cmd) || Cmd <- CmdList],
+    iolist_to_binary([
+        "<svg xmlns=\"http://www.w3.org/2000/svg\""
+        " viewBox=\"0 0 ", WS, " ", HS, "\""
+        " style=\"max-width:100%;height:auto;display:block\">",
+        "<rect width=\"", WS, "\" height=\"", HS, "\" fill=\"#000000\"/>",
+        Elements,
+        "</svg>"
+    ]).
+
+render_gfx_cmd({pset, X, Y, C}) ->
+    Color = color_hex(C),
+    ["<rect x=\"", i(X), "\" y=\"", i(Y), "\" width=\"1\" height=\"1\" fill=\"", Color, "\"/>"];
+render_gfx_cmd({line, X1, Y1, X2, Y2, C}) ->
+    Color = color_hex(C),
+    ["<line x1=\"", i(X1), "\" y1=\"", i(Y1),
+     "\" x2=\"", i(X2), "\" y2=\"", i(Y2),
+     "\" stroke=\"", Color, "\" stroke-width=\"1\"/>"];
+render_gfx_cmd({rect, X1, Y1, X2, Y2, C}) ->
+    Color = color_hex(C),
+    W = X2 - X1 + 1,
+    H = Y2 - Y1 + 1,
+    ["<rect x=\"", i(X1), "\" y=\"", i(Y1),
+     "\" width=\"", i(W), "\" height=\"", i(H),
+     "\" fill=\"", Color, "\"/>"];
+render_gfx_cmd({circle, X, Y, R, C}) ->
+    Color = color_hex(C),
+    ["<circle cx=\"", i(X), "\" cy=\"", i(Y),
+     "\" r=\"", i(R),
+     "\" fill=\"none\" stroke=\"", Color, "\" stroke-width=\"1\"/>"];
+render_gfx_cmd(_) ->
+    [].
+
+i(N) -> integer_to_list(N).

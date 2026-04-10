@@ -202,7 +202,20 @@ handle_save_command(State, RawName) ->
                 false ->
                     Content = serialize_program(State#state.prog),
                     case erlbasic_storage:write_program(FileName, Content) of
-                        ok           -> {State, ["Saved " ++ FileName ++ "\r\n"]};
+                        ok ->
+                            SaveMsg = "Saved " ++ FileName ++ "\r\n",
+                            Warning = case string:uppercase(FileName) =:= "HOME.BAS" of
+                                false -> [];
+                                true  ->
+                                    case home_blocking_lines(State#state.prog) of
+                                        [] -> [];
+                                        BLines ->
+                                            Nums = string:join([integer_to_list(L) || {L, _} <- BLines], ", "),
+                                            ["?WARNING: SLEEP, INPUT, GET and GETKEY are skipped during\r\n"
+                                             "  homepage rendering. Found at line(s): " ++ Nums ++ "\r\n"]
+                                    end
+                            end,
+                            {State, [SaveMsg | Warning]};
                         {error, quota_exceeded} -> {State, [erlbasic_eval:format_runtime_error(storage_quota_exceeded)]};
                         {error, _}   -> {State, ["?FILE ERROR\r\n"]}
                     end
@@ -310,6 +323,34 @@ parse_bin_as_program(Bin) ->
 serialize_program(Program) ->
     Lines = [integer_to_list(LineNumber) ++ " " ++ Code || {LineNumber, Code} <- Program],
     string:join(Lines, "\n") ++ "\n".
+
+%% Scan the program for lines containing statements that would block
+%% when executed in a live session but are silently skipped during
+%% home page rendering: SLEEP, INPUT, INPUT LINE, GET, GETKEY.
+%% Returns [{LineNumber, [StatementName]}] for every line that has at
+%% least one such statement.
+home_blocking_lines(Program) ->
+    lists:filtermap(fun({LineNum, Code}) ->
+        Stmts = case erlbasic_parser:should_split_top_level_sequence(Code) of
+            true  -> erlbasic_parser:split_statements(Code);
+            false -> [Code]
+        end,
+        Kinds = lists:filtermap(fun(S) ->
+            case erlbasic_parser:parse_statement(string:trim(S)) of
+                {input, _}       -> {true, "INPUT"};
+                {input_line, _}  -> {true, "INPUT LINE"};
+                {get, _}         -> {true, "GET"};
+                {getkey, _}      -> {true, "GETKEY"};
+                {sleep, _}       -> {true, "SLEEP"};
+                {sleep_keypress} -> {true, "SLEEP"};
+                _                -> false
+            end
+        end, Stmts),
+        case lists:usort(Kinds) of
+            []    -> false;
+            Uniq  -> {true, {LineNum, Uniq}}
+        end
+    end, Program).
 
 parse_program_text(Text) ->
     Lines = [string:trim(Line) || Line <- string:split(Text, "\n", all)],

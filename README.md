@@ -13,7 +13,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Full expression engine: numeric operators, exponentiation, decimal and `0x...` hexadecimal integer literals, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
-- **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and serves the output as an HTML page at `/:username`
+- **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and serves the output as an HTML page at `/:username`; supports `COLOR`, `LOCATE`, `PRINT` text panels and `HGR`/`RECT`/`CIRCLE`/`LINE` graphics panels (rendered as inline SVG)
 - RSTS/E-style PPN login (`[Project,Programmer]`) with PBKDF2-SHA256 password hashing
 - Per-user disk quotas, per-session memory quotas (watchdog process), per-PPN session limits
 - HTTPS support (self-signed or Let's Encrypt)
@@ -147,6 +147,7 @@ See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase is
 - [examples/flag.bas](examples/flag.bas) — Colourised American flag using `COLOR` and `STRING$`
 - [examples/enterprise.bas](examples/enterprise.bas) — Animated starship using `LOCATE`, `COLOR`, `SLEEP`, `TIMER`
 - [examples/graphics.bas](examples/graphics.bas) — Graphics demo: `HGR`, `PSET`, `LINE`, `RECT`, `CIRCLE` (WebSocket only)
+- [examples/example_home.bas](examples/example_home.bas) — Three-panel sample `HOME.BAS`: colour-effect intro text, `HGR` graphics panel (colour bars + concentric circles), closing note — demonstrates `HOME PUBLISH` for homepage authoring
 - [examples/sprites.bas](examples/sprites.bas) — 32x32 sprite demo built from 32-bit hexadecimal row masks expanded into BYTE sprite buffers, with collision callback (WebSocket only)
 - [examples/sprites_hgr2.bas](examples/sprites_hgr2.bas) — Interactive `HGR2` demo with 64x64 sprites generated from 64-bit hexadecimal row masks and `GETKEY` movement (`WASD`)
 - [examples/hgr2demo.bas](examples/hgr2demo.bas) — Split-screen demo: `HGR2` 800×480 graphics above 4 text rows (WebSocket only)

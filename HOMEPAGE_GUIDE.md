@@ -85,9 +85,9 @@ The cached version is automatically discarded the next time the page is requeste
 
 | Statement | Effect |
 |---|---|
-| `HOME PUBLISH` | Snapshot the current screen as a page panel, then clear the screen |
+| `HOME PUBLISH` | Snapshot the current screen or graphics canvas as a page panel, then reset ready for the next panel |
 
-`HOME PUBLISH` is only meaningful inside `HOME.BAS`. In any other program it is silently ignored.
+`HOME PUBLISH` is only meaningful inside `HOME.BAS`. In any other program it is silently ignored. Typed at the immediate prompt it returns `?NOT VALID HERE`.
 
 ---
 
@@ -138,6 +138,71 @@ Clears the screen, homes the cursor, and resets colours to the defaults (light g
 
 ---
 
+## Graphics Panels
+
+You can include an 800×600 graphics panel by switching into `HGR` mode, drawing shapes, and then calling `HOME PUBLISH`. The canvas is captured as an inline SVG and inserted into your page just like a text panel.
+
+### HGR — switch to graphics mode
+
+```basic
+HGR
+```
+
+Clears an 800×600 canvas and activates graphics mode. After `HGR`, drawing commands record to the canvas.
+
+### RECT — filled rectangle
+
+```basic
+RECT (x1, y1)-(x2, y2), color
+```
+
+Fills a rectangle from `(x1, y1)` to `(x2, y2)` with the given colour index.
+
+### CIRCLE — circle outline
+
+```basic
+CIRCLE (cx, cy), radius, color
+```
+
+Draws a circle outline (not filled). Center at `(cx, cy)`, given radius.
+
+### LINE — straight line
+
+```basic
+LINE (x1, y1)-(x2, y2), color
+```
+
+Draws a straight line between the two points.
+
+### PSET — single pixel
+
+```basic
+PSET (x, y), color
+```
+
+Lights a single pixel at `(x, y)`.
+
+### Example — colour bars with concentric rings
+
+```basic
+10 HGR
+20 REM Vertical colour bars (colours 1-15)
+30 FOR I = 1 TO 15
+40   X1 = (I - 1) * 53
+50   X2 = X1 + 52
+60   RECT (X1, 0)-(X2, 599), I
+70 NEXT I
+80 REM Concentric circle rings
+90 FOR I = 15 TO 1 STEP -1
+100   CIRCLE (400, 300), I * 18, 16 - I
+110 NEXT I
+120 HOME PUBLISH
+```
+
+Graphics panels and text panels can be freely mixed — just call `HOME PUBLISH` after each one.
+
+---
+
 ## Multiple Panels
 
 Each `HOME PUBLISH` starts a fresh screen. This lets you divide your page into separate visual sections:
@@ -164,5 +229,13 @@ Each `HOME PUBLISH` starts a fresh screen. This lets you divide your page into s
 - **The screen is 80×24.** `LOCATE` coordinates outside that range are clamped to the boundary.
 - **Trailing spaces are trimmed** from each row to keep the HTML compact.
 - **The page is cached.** After a `SAVE HOME.BAS`, the cached copy is regenerated on the next page view. You do not need to restart the server.
-- **`HOME PUBLISH` without any preceding output** produces an empty panel — just a blank black box. Put it after your `PRINT` statements.
+- **`HOME PUBLISH` without any preceding output** has no effect — it silently skips empty panels. Put it after your `PRINT` or drawing statements.
+- **Graphics panels are rendered as SVG.** All 16 CGA colours, filled rectangles, circle outlines, and straight lines are preserved exactly.
 - **`HOME` with any subcommand other than `PUBLISH`** is a syntax error in normal programs. It is parsed at startup and silently skipped in all non-homepage contexts.
+- **`HOME PUBLISH` typed at the prompt** returns `?NOT VALID HERE` — it only works inside a running `HOME.BAS`.
+
+---
+
+## Example
+
+See [examples/example_home.bas](examples/example_home.bas) for a complete three-panel homepage demonstrating colour text effects, an HGR graphics panel, and a closing text panel.

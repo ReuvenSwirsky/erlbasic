@@ -374,47 +374,72 @@ execute_program_line_statement(Command, Program, State, Pc, LoopStack, CallStack
         {'return'} ->
             execute_return(Program, State, Pc, LoopStack, CallStack);
         {input, Targets} ->
-            PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Targets)]};
+            case erlang:get(erlbasic_conn_type) of
+                home_bas ->
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
+                    {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Targets)]}
+            end;
         {input_line, Target} ->
-            PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
+            case erlang:get(erlbasic_conn_type) of
+                home_bas ->
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
+                    {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]}
+            end;
         {get, Target} ->
             %% Non-blocking but cooperative: take first buffered char, or suspend
             %% so the conn layer can yield the CPU before returning "".
-            case State#state.char_buffer of
-                [Ch | Rest] ->
-                    case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
-                        {ok, Vars1} ->
-                            {continue, State#state{vars = Vars1, char_buffer = Rest}, LoopStack, CallStack, []};
-                        {error, Reason} ->
-                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
-                    end;
-                [] ->
-                    PendingState = State#state{pending_input = {get_nb, Target, {program, Pc, [], LoopStack, CallStack}}},
-                    {continue, PendingState, LoopStack, CallStack, []}
+            case erlang:get(erlbasic_conn_type) of
+                home_bas ->
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    case State#state.char_buffer of
+                        [Ch | Rest] ->
+                            case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
+                                {ok, Vars1} ->
+                                    {continue, State#state{vars = Vars1, char_buffer = Rest}, LoopStack, CallStack, []};
+                                {error, Reason} ->
+                                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                            end;
+                        [] ->
+                            PendingState = State#state{pending_input = {get_nb, Target, {program, Pc, [], LoopStack, CallStack}}},
+                            {continue, PendingState, LoopStack, CallStack, []}
+                    end
             end;
         {getkey, Target} ->
-            case State#state.char_buffer of
-                [Ch | Rest] ->
-                    case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
-                        {ok, Vars1} ->
-                            {continue, State#state{vars = Vars1, char_buffer = Rest}, LoopStack, CallStack, []};
-                        {error, Reason} ->
-                            {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
-                    end;
-                [] ->
-                    PendingState = State#state{pending_input = {getkey, Target, {program, Pc, [], LoopStack, CallStack}}},
-                    {continue, PendingState, LoopStack, CallStack, []}
+            case erlang:get(erlbasic_conn_type) of
+                home_bas ->
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    case State#state.char_buffer of
+                        [Ch | Rest] ->
+                            case erlbasic_eval:assign_target(Target, [Ch], State#state.vars, State#state.funcs) of
+                                {ok, Vars1} ->
+                                    {continue, State#state{vars = Vars1, char_buffer = Rest}, LoopStack, CallStack, []};
+                                {error, Reason} ->
+                                    {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]}
+                            end;
+                        [] ->
+                            PendingState = State#state{pending_input = {getkey, Target, {program, Pc, [], LoopStack, CallStack}}},
+                            {continue, PendingState, LoopStack, CallStack, []}
+                    end
             end;
         {sleep_keypress} ->
-            case State#state.char_buffer of
-                [_ | Rest] ->
-                    %% Buffered input available — consume one char and continue
-                    {continue, State#state{char_buffer = Rest}, LoopStack, CallStack, []};
-                [] ->
-                    PendingState = State#state{pending_input = {sleep_keypress, {program, Pc, [], LoopStack, CallStack}}},
-                    {continue, PendingState, LoopStack, CallStack, []}
+            case erlang:get(erlbasic_conn_type) of
+                home_bas ->
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    case State#state.char_buffer of
+                        [_ | Rest] ->
+                            %% Buffered input available — consume one char and continue
+                            {continue, State#state{char_buffer = Rest}, LoopStack, CallStack, []};
+                        [] ->
+                            PendingState = State#state{pending_input = {sleep_keypress, {program, Pc, [], LoopStack, CallStack}}},
+                            {continue, PendingState, LoopStack, CallStack, []}
+                    end
             end;
         {'end'} ->
             {'end', []};
@@ -666,6 +691,11 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                      LoopStack,
                      CallStack,
                      hgr_output() ++ sprite_clear_output()};
+                home_bas ->
+                    erlbasic_home_screen:set_gfx_mode(hgr),
+                    {continue,
+                     State#state{graphics_mode = hgr, graphics_pen = undefined},
+                     LoopStack, CallStack, []};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -677,6 +707,11 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                      LoopStack,
                      CallStack,
                      hgr2_output() ++ sprite_clear_output()};
+                home_bas ->
+                    erlbasic_home_screen:set_gfx_mode(hgr2),
+                    {continue,
+                     State#state{graphics_mode = hgr2, graphics_pen = undefined},
+                     LoopStack, CallStack, []};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -688,6 +723,11 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                      LoopStack,
                      CallStack,
                      text_output() ++ sprite_clear_output()};
+                home_bas ->
+                    erlbasic_home_screen:gfx_text_mode(),
+                    {continue,
+                     State#state{graphics_mode = false, graphics_pen = undefined},
+                     LoopStack, CallStack, []};
                 _ ->
                     handle_runtime_error(graphics_not_supported_on_tty, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -759,14 +799,20 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
-                    %% BUFFER mode still flushes before SLEEP so paused frames/text are visible.
-                    erlang:put(explicit_flush_requested, true),
-                    Ms = min(300000, max(0, trunc(Value * 1000))),
-                    receive
-                        interrupt             -> erlang:put(interrupted, true);
-                        memory_limit_exceeded -> erlang:put(memory_limit_exceeded, true)
-                    after Ms -> ok end,
-                    {continue, State#state{vars = Vars1}, LoopStack, CallStack, []};
+                    case erlang:get(erlbasic_conn_type) of
+                        home_bas ->
+                            %% Skip sleeping when rendering the homepage.
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, []};
+                        _ ->
+                            %% BUFFER mode still flushes before SLEEP so paused frames/text are visible.
+                            erlang:put(explicit_flush_requested, true),
+                            Ms = min(300000, max(0, trunc(Value * 1000))),
+                            receive
+                                interrupt             -> erlang:put(interrupted, true);
+                                memory_limit_exceeded -> erlang:put(memory_limit_exceeded, true)
+                            after Ms -> ok end,
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, []}
+                    end;
                 {ok, _Value, _Vars1} ->
                     handle_runtime_error(type_mismatch, LineNumber, State, Pc, LoopStack, CallStack);
                 {error, Reason, _Vars1} ->
@@ -1379,8 +1425,21 @@ part_is_control_frame(Part) ->
 graphics_output(Command, Args) ->
     case erlang:get(erlbasic_conn_type) of
         websocket -> [io_lib:format("\x02GFX:" ++ Command, Args)];
+        home_bas  -> record_home_gfx(Command, Args), [];
         _ -> []
     end.
+
+%% Route a rendered graphics command to the home_bas display list.
+record_home_gfx("PSET:~B:~B:~B", [X, Y, C]) ->
+    erlbasic_home_screen:record_gfx({pset, X, Y, C});
+record_home_gfx("LINE:~B:~B:~B:~B:~B", [X1, Y1, X2, Y2, C]) ->
+    erlbasic_home_screen:record_gfx({line, X1, Y1, X2, Y2, C});
+record_home_gfx("RECT:~B:~B:~B:~B:~B", [X1, Y1, X2, Y2, C]) ->
+    erlbasic_home_screen:record_gfx({rect, X1, Y1, X2, Y2, C});
+record_home_gfx("CIRCLE:~B:~B:~B:~B", [X, Y, R, C]) ->
+    erlbasic_home_screen:record_gfx({circle, X, Y, R, C});
+record_home_gfx(_, _) ->
+    ok.
 
 sound_stop_output() ->
     case erlang:get(erlbasic_conn_type) of

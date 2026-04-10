@@ -409,7 +409,7 @@ execute_statement_single(Command, State) ->
         {data, _Items} ->
             {State, ["OK\r\n"]};
         {home_publish} ->
-            {State, []};
+            {State, ["?NOT VALID HERE\r\n"]};
         {restore, all} ->
             DataState = ensure_data_loaded(State),
             {DataState#state{data_index = 1}, ["OK\r\n"]};

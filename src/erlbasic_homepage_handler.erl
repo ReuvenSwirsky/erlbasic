@@ -81,6 +81,7 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
         ".home-section{background:#0b1220;border-radius:12px;padding:2px;margin-bottom:16px;overflow:auto}",
         ".home-section pre{margin:0;padding:14px 16px;font-family:'Courier New',Courier,monospace;font-size:14px;",
         "line-height:1.35;background:transparent;color:#AAAAAA;white-space:pre}",
+        ".home-section-gfx{padding:0;line-height:0}",
         "</style></head><body><div class=\"wrap\"><div class=\"card\">",
         "<h1>", UsernameText, "</h1>",
         "<div class=\"meta\">", NameText, " - ", io_lib:format("~s", [PpnText]), "</div>",
@@ -88,8 +89,10 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
         "</div></div></body></html>"
     ]).
 
-render_section(Html) ->
-    ["<div class=\"home-section\"><pre>", Html, "</pre></div>"].
+render_section({text, Html}) ->
+    ["<div class=\"home-section\"><pre>", Html, "</pre></div>"];
+render_section({gfx, Svg}) ->
+    ["<div class=\"home-section home-section-gfx\">", Svg, "</div>"].
 
 %% init_cache/0 kept for backward compatibility with erlbasic_app.erl.
 init_cache() ->
