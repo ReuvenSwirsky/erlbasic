@@ -19,7 +19,7 @@ serve_homepage(Req, State) ->
             _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
             case read_home_bas(UserDir) of
                 {ok, HomeBas} ->
-                    Body = render_home_from_bas(StoredUsername, Name, Project, Programmer, HomeBas),
+                    Body = render_home_from_bas(StoredUsername, Name, Project, Programmer, HomeBas, UserDir),
                     reply_html(Req, State, Body);
                 {error, enoent} ->
                     Body = default_homepage(StoredUsername, Name, Project, Programmer),
@@ -61,13 +61,13 @@ user_dir(Project, Programmer) ->
     SubDir = integer_to_list(Project) ++ "_" ++ integer_to_list(Programmer),
     filename:join([erl_users_root(), SubDir]).
 
-render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
+render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir) ->
     UsernameText = escape_html(to_text(Username)),
     NameText = escape_html(to_text(Name)),
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
-    CacheKey = {Project, Programmer},
+    CacheFile = filename:join(UserDir, ".home_cache"),
     FileHash = crypto:hash(sha256, HomeBas),
-    OutputHtml = escape_html(execute_home_bas(CacheKey, FileHash, HomeBas, Project, Programmer)),
+    OutputHtml = escape_html(execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer)),
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -86,22 +86,16 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     ]).
 
 init_cache() ->
-    case ets:info(erlbasic_home_cache) of
-        undefined ->
-            ets:new(erlbasic_home_cache, [named_table, public, set]),
-            ok;
-        _ ->
-            ok
-    end.
+    ok.
 
-execute_home_bas(CacheKey, FileHash, HomeBas, Project, Programmer) ->
-    case cache_lookup(CacheKey, FileHash) of
+execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer) ->
+    case cache_lookup(CacheFile, FileHash) of
         {hit, CachedOutput} ->
             CachedOutput;
         miss ->
             TTL = detect_dynamic(HomeBas),
             Output = run_home_bas(HomeBas, Project, Programmer),
-            cache_store(CacheKey, FileHash, Output, TTL),
+            cache_store(CacheFile, FileHash, Output, TTL),
             Output
     end.
 
@@ -145,34 +139,36 @@ detect_dynamic(HomeBas) ->
         true        -> infinity
     end.
 
-cache_lookup(Key, FileHash) ->
-    try ets:lookup(erlbasic_home_cache, Key) of
-        [{Key, FileHash, Output, CachedAt, TTL}] ->
-            case TTL of
-                infinity ->
-                    {hit, Output};
+cache_lookup(CacheFile, FileHash) ->
+    case file:read_file(CacheFile) of
+        {ok, Bin} ->
+            try binary_to_term(Bin, [safe]) of
+                {FileHash, CachedAt, TTL, Output} ->
+                    case TTL of
+                        infinity ->
+                            {hit, Output};
+                        _ ->
+                            Now = erlang:system_time(second),
+                            case Now - CachedAt =< TTL of
+                                true  -> {hit, Output};
+                                false -> miss
+                            end
+                    end;
                 _ ->
-                    Now = erlang:system_time(second),
-                    case Now - CachedAt =< TTL of
-                        true  -> {hit, Output};
-                        false -> miss
-                    end
+                    miss
+            catch
+                _:_ -> miss
             end;
         _ ->
             miss
-    catch
-        _:_ -> miss
     end.
 
-cache_store(_Key, _FileHash, _Output, never) ->
+cache_store(_CacheFile, _FileHash, _Output, never) ->
     ok;
-cache_store(Key, FileHash, Output, TTL) ->
+cache_store(CacheFile, FileHash, Output, TTL) ->
     Now = erlang:system_time(second),
-    try
-        ets:insert(erlbasic_home_cache, {Key, FileHash, Output, Now, TTL})
-    catch
-        _:_ -> ok
-    end,
+    Bin = term_to_binary({FileHash, Now, TTL, Output}),
+    _ = file:write_file(CacheFile, Bin),
     ok.
 
 collect_text_output(Output) ->
