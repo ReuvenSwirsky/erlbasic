@@ -6,7 +6,7 @@
 - [x] Add a system stats page under `/a/system`.
 - [x] ASCII Life isn't displaying anything until I ctrl-c. I think the delayed buffering is broken
 - [x] Add a regression test so buffering behavior is tested when it's in default "implcit" mode
-- [ ] Add a RESTORE statment (used for DATA / READ constructs in most BASICs to reset to first unread data item)
+- [x] Add a RESTORE statment (used for DATA / READ constructs in most BASICs to reset to first unread data item)
 - [x] BASIC Syntax document is incomplete. Also sections should be alphabetical
 - [X] PLAY "MB" for background music? (Keep SOUND syntax, but add PLAY) Microsoft's MML
 - [X] Implement ON PLAY() GOSUB to refil the PLAY buffer asynchronosly
