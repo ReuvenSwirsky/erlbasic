@@ -2,7 +2,7 @@
 
 -export([run_program/1, continue_program/4, resume_program_input/5,
          update_pending_input_rest/2, format_input_prompt/1,
-         collect_program_data/1, apply_read_vars/2, eval_locate/4,
+         collect_program_data/1, collect_program_data_from_line/2, apply_read_vars/2, eval_locate/4,
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
          hgr_output/0, hgr2_output/0, text_output/0,
@@ -430,6 +430,23 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
     case ParsedStmt of
         {data, _Items} ->
             {continue, State, LoopStack, CallStack, []};
+        {restore, all} ->
+            {continue, State#state{data_index = 1}, LoopStack, CallStack, []};
+        {restore, LineExpr} ->
+            case erlbasic_eval:eval_expr_result(LineExpr, State#state.vars, State#state.funcs) of
+                {ok, LineNum, Vars1} ->
+                    TargetLine = erlbasic_eval:normalize_int(LineNum),
+                    NewItems = collect_program_data_from_line(State#state.prog, TargetLine),
+                    {continue, State#state{vars = Vars1, data_items = NewItems, data_index = 1}, LoopStack, CallStack, []};
+                {error, Reason, Vars1} ->
+                    handle_runtime_error(Reason, LineNumber, State#state{vars = Vars1}, Pc, LoopStack, CallStack)
+            end;
+        {home_publish} ->
+            case erlang:get(erlbasic_conn_type) of
+                home_bas -> erlbasic_home_screen:publish();
+                _        -> ok
+            end,
+            {continue, State, LoopStack, CallStack, []};
         {read_data, Targets} ->
             case apply_read_vars(Targets, State) of
                 {ok, NextState} ->
@@ -568,7 +585,13 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                             true -> 0;
                             false -> NextCol
                         end,
-                    {continue, State#state{vars = Vars1, print_col = FinalCol}, LoopStack, CallStack, [FinalText]};
+                    case erlang:get(erlbasic_conn_type) of
+                        home_bas ->
+                            erlbasic_home_screen:write_text(FinalText),
+                            {continue, State#state{vars = Vars1, print_col = FinalCol}, LoopStack, CallStack, []};
+                        _ ->
+                            {continue, State#state{vars = Vars1, print_col = FinalCol}, LoopStack, CallStack, [FinalText]}
+                    end;
                 {error, Reason, _Vars1} ->
                     handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
@@ -587,7 +610,13 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                                     true -> 0;
                                     false -> NextCol
                                 end,
-                            {continue, State#state{vars = Vars2, print_col = FinalCol}, LoopStack, CallStack, [FinalText]};
+                            case erlang:get(erlbasic_conn_type) of
+                                home_bas ->
+                                    erlbasic_home_screen:write_text(FinalText),
+                                    {continue, State#state{vars = Vars2, print_col = FinalCol}, LoopStack, CallStack, []};
+                                _ ->
+                                    {continue, State#state{vars = Vars2, print_col = FinalCol}, LoopStack, CallStack, [FinalText]}
+                            end;
                         {error, Reason, _Vars2} ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
                     end;
@@ -622,7 +651,13 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
             {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
         {cls} ->
-            {continue, State, LoopStack, CallStack, cls_output()};
+            case erlang:get(erlbasic_conn_type) of
+                home_bas ->
+                    erlbasic_home_screen:cls(),
+                    {continue, State, LoopStack, CallStack, []};
+                _ ->
+                    {continue, State, LoopStack, CallStack, cls_output()}
+            end;
         {hgr} ->
             case erlang:get(erlbasic_conn_type) of
                 websocket ->
@@ -1071,6 +1106,10 @@ format_input_prompt(_Targets) ->
 collect_program_data(Program) ->
     collect_program_data(Program, []).
 
+collect_program_data_from_line(Program, LineNum) ->
+    Filtered = lists:dropwhile(fun({LN, _}) -> LN < LineNum end, Program),
+    collect_program_data(Filtered).
+
 collect_program_data([], Acc) ->
     lists:reverse(Acc);
 collect_program_data([{_LineNumber, Code} | Rest], Acc) ->
@@ -1147,6 +1186,9 @@ eval_locate(RowExpr, ColExpr, Vars, Funcs) ->
                     case erlang:get(erlbasic_conn_type) of
                         websocket ->
                             {ok, Vars2, [io_lib:format("\e[~B;~BH", [Row, Col])]};
+                        home_bas ->
+                            erlbasic_home_screen:locate(Row, Col),
+                            {ok, Vars2, []};
                         _ ->
                             {error, tty_no_cursor_movement, Vars2}
                     end
@@ -1857,6 +1899,9 @@ color_output(Fg, Bg) ->
                 _ -> [io_lib:format("\e[~Bm", [ansi_bg_code(Bg band 7)])]
             end,
             [io_lib:format("\e[~Bm", [FgCode])] ++ BgCode;
+        home_bas ->
+            erlbasic_home_screen:set_color(Fg, Bg),
+            [];
         _ ->
             []
     end.

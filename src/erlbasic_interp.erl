@@ -408,6 +408,20 @@ execute_statement_single(Command, State) ->
             end;
         {data, _Items} ->
             {State, ["OK\r\n"]};
+        {home_publish} ->
+            {State, []};
+        {restore, all} ->
+            DataState = ensure_data_loaded(State),
+            {DataState#state{data_index = 1}, ["OK\r\n"]};
+        {restore, LineExpr} ->
+            case erlbasic_eval:eval_expr_result(LineExpr, State#state.vars, State#state.funcs) of
+                {ok, LineNum, Vars1} ->
+                    TargetLine = erlbasic_eval:normalize_int(LineNum),
+                    NewItems = erlbasic_runtime:collect_program_data_from_line(State#state.prog, TargetLine),
+                    {State#state{vars = Vars1, data_items = NewItems, data_index = 1}, ["OK\r\n"]};
+                {error, Reason, _Vars1} ->
+                    {State, [erlbasic_eval:format_runtime_error(Reason)]}
+            end;
         {read_data, Targets} ->
             DataState = ensure_data_loaded(State),
             case erlbasic_runtime:apply_read_vars(Targets, DataState) of

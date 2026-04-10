@@ -490,6 +490,28 @@ parse_data_statement(Trimmed) ->
         {match, [DataText]} ->
             {data, normalize_data_items(split_commas_top_level(DataText))};
         nomatch ->
+            parse_restore_statement(Trimmed)
+    end.
+
+parse_restore_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^RESTORE\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [LineExpr]} ->
+            {restore, LineExpr};
+        nomatch ->
+            case re:run(Trimmed, "(?i)^RESTORE$", [{capture, none}]) of
+                match   -> {restore, all};
+                nomatch -> parse_home_statement(Trimmed)
+            end
+    end.
+
+parse_home_statement(Trimmed) ->
+    case re:run(Trimmed, "(?i)^HOME\\s+(\\S+)$", [{capture, [1], list}]) of
+        {match, [Sub]} ->
+            case string:to_upper(Sub) of
+                "PUBLISH" -> {home_publish};
+                _         -> unknown
+            end;
+        nomatch ->
             parse_keyword_statement(Trimmed)
     end.
 
@@ -957,6 +979,12 @@ validate_statement(Stmt) ->
         {locate, RowExpr, ColExpr} ->
             validate_expr_pair(RowExpr, ColExpr);
         {data, _Items} ->
+            ok;
+        {restore, all} ->
+            ok;
+        {restore, LineExpr} ->
+            validate_expr_syntax(LineExpr);
+        {home_publish} ->
             ok;
         {read_data, Targets} ->
             validate_targets(Targets);

@@ -252,7 +252,8 @@ is_regular_file(Dir, Name) ->
 list_files_with_info(Dir) ->
     case file:list_dir(Dir) of
         {ok, Names} ->
-            Infos = lists:filtermap(fun(N) -> get_file_info(Dir, N) end, Names),
+            Visible = [N || N <- Names, hd(N) =/= $.],
+            Infos = lists:filtermap(fun(N) -> get_file_info(Dir, N) end, Visible),
             {ok, lists:sort(Infos)};
         {error, Reason} ->
             {error, Reason}

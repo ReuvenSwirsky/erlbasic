@@ -18,9 +18,9 @@ serve_homepage(Req, State) ->
             UserDir = user_dir(Project, Programmer),
             _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
             case read_home_bas(UserDir) of
-                {ok, HomeBas} ->
-                    Body = render_home_from_bas(StoredUsername, Name, Project, Programmer, HomeBas),
-                    reply_html(Req, State, Body);
+                {ok, HomeBas, HomeBasPath} ->
+                    serve_with_cache(StoredUsername, Name, Project, Programmer,
+                                     HomeBas, HomeBasPath, UserDir, Req, State);
                 {error, enoent} ->
                     Body = default_homepage(StoredUsername, Name, Project, Programmer),
                     reply_html(Req, State, Body);
@@ -53,8 +53,10 @@ read_first_existing([Path | Rest]) ->
     case file:read_file(Path) of
         {error, enoent} ->
             read_first_existing(Rest);
-        Result ->
-            Result
+        {ok, Bin} ->
+            {ok, Bin, Path};
+        {error, _} = Err ->
+            Err
     end.
 
 user_dir(Project, Programmer) ->
@@ -65,9 +67,8 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     UsernameText = escape_html(to_text(Username)),
     NameText = escape_html(to_text(Name)),
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
-    CacheKey = {Project, Programmer},
-    FileHash = crypto:hash(sha256, HomeBas),
-    OutputHtml = escape_html(execute_home_bas(CacheKey, FileHash, HomeBas, Project, Programmer)),
+    Sections = run_home_bas(HomeBas, Project, Programmer),
+    SectionsHtml = [render_section(S) || S <- Sections],
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -77,33 +78,44 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
         ".card{background:#ffffffdd;border:1px solid #cbd5e1;border-radius:16px;padding:24px;box-shadow:0 10px 30px #64748b33}",
         "h1{margin:0 0 8px 0;font-size:2rem;color:#0f172a}",
         ".meta{color:#334155;margin-bottom:18px}",
-        "pre{background:#0b1220;color:#dbeafe;border-radius:12px;padding:16px;overflow:auto;line-height:1.4;white-space:pre-wrap}",
+        ".home-section{background:#0b1220;border-radius:12px;padding:2px;margin-bottom:16px;overflow:auto}",
+        ".home-section pre{margin:0;padding:14px 16px;font-family:'Courier New',Courier,monospace;font-size:14px;",
+        "line-height:1.35;background:transparent;color:#AAAAAA;white-space:pre}",
         "</style></head><body><div class=\"wrap\"><div class=\"card\">",
         "<h1>", UsernameText, "</h1>",
         "<div class=\"meta\">", NameText, " - ", io_lib:format("~s", [PpnText]), "</div>",
-        "<pre>", OutputHtml, "</pre>",
+        SectionsHtml,
         "</div></div></body></html>"
     ]).
 
+render_section(Html) ->
+    ["<div class=\"home-section\"><pre>", Html, "</pre></div>"].
+
+%% init_cache/0 kept for backward compatibility with erlbasic_app.erl.
 init_cache() ->
-    case ets:info(erlbasic_home_cache) of
-        undefined ->
-            ets:new(erlbasic_home_cache, [named_table, public, set]),
-            ok;
-        _ ->
-            ok
+    ok.
+
+serve_with_cache(Username, Name, Project, Programmer, HomeBas, HomeBasPath, UserDir, Req, State) ->
+    CacheFile    = filename:join(UserDir, ".home_cache.html"),
+    HomeBasMtime = filelib:last_modified(HomeBasPath),
+    CacheMtime   = filelib:last_modified(CacheFile),
+    UseCache = CacheMtime =/= 0 andalso CacheMtime >= HomeBasMtime,
+    case UseCache of
+        true ->
+            case file:read_file(CacheFile) of
+                {ok, CachedBin} ->
+                    reply_html(Req, State, CachedBin);
+                _ ->
+                    render_and_cache(Username, Name, Project, Programmer, HomeBas, CacheFile, Req, State)
+            end;
+        false ->
+            render_and_cache(Username, Name, Project, Programmer, HomeBas, CacheFile, Req, State)
     end.
 
-execute_home_bas(CacheKey, FileHash, HomeBas, Project, Programmer) ->
-    case cache_lookup(CacheKey, FileHash) of
-        {hit, CachedOutput} ->
-            CachedOutput;
-        miss ->
-            TTL = detect_dynamic(HomeBas),
-            Output = run_home_bas(HomeBas, Project, Programmer),
-            cache_store(CacheKey, FileHash, Output, TTL),
-            Output
-    end.
+render_and_cache(Username, Name, Project, Programmer, HomeBas, CacheFile, Req, State) ->
+    Body = render_home_from_bas(Username, Name, Project, Programmer, HomeBas),
+    _ = file:write_file(CacheFile, Body),
+    reply_html(Req, State, Body).
 
 run_home_bas(HomeBas, Project, Programmer) ->
     case erlbasic_commands:parse_bin_as_program(HomeBas) of
@@ -112,86 +124,19 @@ run_home_bas(HomeBas, Project, Programmer) ->
             Self = self(),
             Pid = spawn(fun() ->
                 erlang:put(erlbasic_ppn, {Project, Programmer}),
-                erlang:put(erlbasic_conn_type, websocket),
-                {_RanState, Output} = erlbasic_runtime:run_program(State),
-                Self ! {bas_output, collect_text_output(Output)}
+                erlang:put(erlbasic_conn_type, home_bas),
+                erlbasic_home_screen:init(),
+                {_RanState, _Output} = erlbasic_runtime:run_program(State),
+                Self ! {bas_sections, erlbasic_home_screen:get_sections()}
             end),
             receive
-                {bas_output, Text} -> Text
+                {bas_sections, Sections} -> Sections
             after 5000 ->
                 exit(Pid, kill),
-                ""
+                []
             end;
         _ ->
-            ""
-    end.
-
-%% Detect whether HOME.BAS uses dynamic keywords that affect caching.
-%% Returns: never (volatile - don't cache), or an integer TTL in seconds,
-%%          or the atom 'infinity' (cache until the file changes).
-detect_dynamic(HomeBas) ->
-    Upper = string:to_upper(binary_to_list(HomeBas)),
-    HasVolatile = lists:any(
-        fun(Kw) -> string:find(Upper, Kw) =/= nomatch end,
-        ["INPUT", "INKEY$", "GETKEY", "RND", "RANDOMIZE"]),
-    HasTimed = lists:any(
-        fun(Kw) -> string:find(Upper, Kw) =/= nomatch end,
-        ["TIME$", "TIMER"]),
-    HasDate = string:find(Upper, "DATE$") =/= nomatch,
-    if
-        HasVolatile -> never;
-        HasTimed    -> 30;
-        HasDate     -> 3600;
-        true        -> infinity
-    end.
-
-cache_lookup(Key, FileHash) ->
-    try ets:lookup(erlbasic_home_cache, Key) of
-        [{Key, FileHash, Output, CachedAt, TTL}] ->
-            case TTL of
-                infinity ->
-                    {hit, Output};
-                _ ->
-                    Now = erlang:system_time(second),
-                    case Now - CachedAt =< TTL of
-                        true  -> {hit, Output};
-                        false -> miss
-                    end
-            end;
-        _ ->
-            miss
-    catch
-        _:_ -> miss
-    end.
-
-cache_store(_Key, _FileHash, _Output, never) ->
-    ok;
-cache_store(Key, FileHash, Output, TTL) ->
-    Now = erlang:system_time(second),
-    try
-        ets:insert(erlbasic_home_cache, {Key, FileHash, Output, Now, TTL})
-    catch
-        _:_ -> ok
-    end,
-    ok.
-
-collect_text_output(Output) ->
-    Parts = lists:filtermap(fun(Part) ->
-        Bin = try iolist_to_binary(Part) catch _:_ -> <<>> end,
-        case Bin of
-            <<2, _/binary>> -> false;
-            _ -> {true, binary_to_list(Bin)}
-        end
-    end, Output),
-    Text = lists:concat(Parts),
-    Stripped = [C || C <- Text, C =/= $\r],
-    strip_program_ended_suffix(Stripped).
-
-strip_program_ended_suffix(Text) ->
-    Suffix = "Program ended\n",
-    case lists:suffix(Suffix, Text) of
-        true -> lists:sublist(Text, length(Text) - length(Suffix));
-        false -> Text
+            []
     end.
 
 default_homepage(Username, _Name, Project, Programmer) ->
