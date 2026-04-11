@@ -1,5 +1,5 @@
 -module(erlbasic_homepage_handler).
--export([init/2, init_cache/0]).
+-export([init/2, init_cache/0, render_home_bas_html/5]).
 
 -include("erlbasic_state.hrl").
 
@@ -19,7 +19,7 @@ serve_homepage(Req, State) ->
             _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
             case read_home_bas(UserDir) of
                 {ok, HomeBas} ->
-                    Body = render_home_from_bas(StoredUsername, Name, Project, Programmer, HomeBas, UserDir),
+                    Body = render_home_bas_html(StoredUsername, Name, Project, Programmer, HomeBas),
                     reply_html(Req, State, Body);
                 {error, enoent} ->
                     Body = default_homepage(StoredUsername, Name, Project, Programmer),
@@ -67,7 +67,8 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir) ->
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
     CacheFile = filename:join(UserDir, ".home_cache"),
     FileHash = crypto:hash(sha256, HomeBas),
-    OutputHtml = escape_html(execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer)),
+    Sections = execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer),
+    SectionsHtml = [render_section(S) || S <- Sections],
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -77,13 +78,25 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir) ->
         ".card{background:#ffffffdd;border:1px solid #cbd5e1;border-radius:16px;padding:24px;box-shadow:0 10px 30px #64748b33}",
         "h1{margin:0 0 8px 0;font-size:2rem;color:#0f172a}",
         ".meta{color:#334155;margin-bottom:18px}",
-        "pre{background:#0b1220;color:#dbeafe;border-radius:12px;padding:16px;overflow:auto;line-height:1.4;white-space:pre-wrap}",
+        ".home-section{background:#0b1220;border-radius:12px;padding:2px;margin-bottom:16px;overflow:auto}",
+        ".home-section pre{margin:0;padding:14px 16px;font-family:'Courier New',Courier,monospace;font-size:14px;line-height:1.35;background:transparent;color:#AAAAAA;white-space:pre}",
+        ".home-section-gfx{padding:0;line-height:0}",
         "</style></head><body><div class=\"wrap\"><div class=\"card\">",
         "<h1>", UsernameText, "</h1>",
         "<div class=\"meta\">", NameText, " - ", io_lib:format("~s", [PpnText]), "</div>",
-        "<pre>", OutputHtml, "</pre>",
+        SectionsHtml,
         "</div></div></body></html>"
     ]).
+
+render_home_bas_html(Username, Name, Project, Programmer, HomeBas) ->
+    UserDir = user_dir(Project, Programmer),
+    _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
+    render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir).
+
+render_section({text, Html}) ->
+    ["<div class=\"home-section\"><pre>", Html, "</pre></div>"];
+render_section({gfx, Svg}) ->
+    ["<div class=\"home-section home-section-gfx\">", Svg, "</div>"].
 
 init_cache() ->
     ok.
@@ -106,18 +119,19 @@ run_home_bas(HomeBas, Project, Programmer) ->
             Self = self(),
             Pid = spawn(fun() ->
                 erlang:put(erlbasic_ppn, {Project, Programmer}),
-                erlang:put(erlbasic_conn_type, websocket),
-                {_RanState, Output} = erlbasic_runtime:run_program(State),
-                Self ! {bas_output, collect_text_output(Output)}
+                erlang:put(erlbasic_conn_type, home_bas),
+                erlbasic_home_screen:init(),
+                {_RanState, _Output} = erlbasic_runtime:run_program(State),
+                Self ! {bas_sections, erlbasic_home_screen:get_sections()}
             end),
             receive
-                {bas_output, Text} -> Text
+                {bas_sections, Sections} -> Sections
             after 5000 ->
                 exit(Pid, kill),
-                ""
+                []
             end;
         _ ->
-            ""
+            []
     end.
 
 %% Detect whether HOME.BAS uses dynamic keywords that affect caching.
@@ -144,15 +158,22 @@ cache_lookup(CacheFile, FileHash) ->
         {ok, Bin} ->
             try binary_to_term(Bin, [safe]) of
                 {FileHash, CachedAt, TTL, Output} ->
-                    case TTL of
-                        infinity ->
-                            {hit, Output};
-                        _ ->
-                            Now = erlang:system_time(second),
-                            case Now - CachedAt =< TTL of
-                                true  -> {hit, Output};
-                                false -> miss
-                            end
+                    case is_cached_sections(Output) of
+                        true ->
+                            case TTL of
+                                infinity ->
+                                    {hit, Output};
+                                _ ->
+                                    Now = erlang:system_time(second),
+                                    case Now - CachedAt =< TTL of
+                                        true  -> {hit, Output};
+                                        false -> miss
+                                    end
+                            end;
+                        false ->
+                            %% Legacy cache entries stored plain text output.
+                            %% Treat as a miss so we regenerate section tuples.
+                            miss
                     end;
                 _ ->
                     miss
@@ -171,24 +192,14 @@ cache_store(CacheFile, FileHash, Output, TTL) ->
     _ = file:write_file(CacheFile, Bin),
     ok.
 
-collect_text_output(Output) ->
-    Parts = lists:filtermap(fun(Part) ->
-        Bin = try iolist_to_binary(Part) catch _:_ -> <<>> end,
-        case Bin of
-            <<2, _/binary>> -> false;
-            _ -> {true, binary_to_list(Bin)}
-        end
-    end, Output),
-    Text = lists:concat(Parts),
-    Stripped = [C || C <- Text, C =/= $\r],
-    strip_program_ended_suffix(Stripped).
-
-strip_program_ended_suffix(Text) ->
-    Suffix = "Program ended\n",
-    case lists:suffix(Suffix, Text) of
-        true -> lists:sublist(Text, length(Text) - length(Suffix));
-        false -> Text
-    end.
+is_cached_sections(Sections) when is_list(Sections) ->
+    lists:all(fun
+        ({text, Html}) when is_list(Html); is_binary(Html) -> true;
+        ({gfx, Svg}) when is_list(Svg); is_binary(Svg) -> true;
+        (_) -> false
+    end, Sections);
+is_cached_sections(_) ->
+    false.
 
 default_homepage(Username, _Name, Project, Programmer) ->
     UsernameText = escape_html(to_text(Username)),

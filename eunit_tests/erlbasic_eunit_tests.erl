@@ -1607,6 +1607,142 @@ case_insensitive_program_filename_test() ->
         file:del_dir(TempDir)
     end.
 
+homepage_render_home_publish_sections_regression_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    HomeBas = <<
+        "10 COLOR 14,0\n",
+        "20 PRINT \"FIRST PANEL\"\n",
+        "30 HOME PUBLISH\n",
+        "40 COLOR 11,0\n",
+        "50 PRINT \"SECOND PANEL\"\n",
+        "60 HOME PUBLISH\n",
+        "70 END\n"
+    >>,
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
+        Body = binary_to_list(BodyBin),
+        ?assertEqual(match, re:run(Body, "FIRST PANEL", [{capture, none}])),
+        ?assertEqual(match, re:run(Body, "SECOND PANEL", [{capture, none}])),
+        ?assertEqual(match, re:run(Body, "home-section", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "\\e\\[", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "\\[Press any key to continue\\]", [{capture, none}]))
+    after
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"])),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
+homepage_render_text_gfx_text_sections_regression_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    HomeBas = <<
+        "10 COLOR 14,0\n",
+        "20 PRINT \"TEXT PANEL ONE\"\n",
+        "30 HOME PUBLISH\n",
+        "40 HGR\n",
+        "50 RECT (10,10)-(60,60), 12\n",
+        "60 LINE (0,0)-(799,599), 15\n",
+        "70 HOME PUBLISH\n",
+        "80 COLOR 11,0\n",
+        "90 PRINT \"TEXT PANEL TWO\"\n",
+        "100 HOME PUBLISH\n",
+        "110 END\n"
+    >>,
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
+        Body = binary_to_list(BodyBin),
+        Text1Pos = string:str(Body, "TEXT PANEL ONE"),
+        SvgPos = string:str(Body, "<svg"),
+        Text2Pos = string:str(Body, "TEXT PANEL TWO"),
+        ?assert(Text1Pos > 0),
+        ?assert(SvgPos > Text1Pos),
+        ?assert(Text2Pos > SvgPos),
+        ?assertEqual(match, re:run(Body, "home-section-gfx", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "\\e\\[", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "\\[Press any key to continue\\]", [{capture, none}]))
+    after
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"])),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
+homepage_render_legacy_text_cache_is_ignored_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    HomeBas = <<
+        "10 PRINT \"FRESH PANEL\"\n",
+        "20 HOME PUBLISH\n",
+        "30 END\n"
+    >>,
+    CachePath = filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"]),
+    FileHash = crypto:hash(sha256, HomeBas),
+    LegacyOutput = "\e[31mLEGACY TEXT\e[0m",
+    LegacyTerm = {FileHash, erlang:system_time(second), infinity, LegacyOutput},
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        ok = filelib:ensure_dir(CachePath),
+        ok = file:write_file(CachePath, term_to_binary(LegacyTerm)),
+        BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
+        Body = binary_to_list(BodyBin),
+        ?assertEqual(match, re:run(Body, "FRESH PANEL", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "LEGACY TEXT", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "\\e\\[", [{capture, none}])),
+        {ok, NewCacheBin} = file:read_file(CachePath),
+        {FileHash, _CachedAt, _TTL, CachedSections} = binary_to_term(NewCacheBin, [safe]),
+        ?assert(is_list(CachedSections)),
+        ?assert(lists:any(fun({text, _}) -> true; (_) -> false end, CachedSections))
+    after
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(CachePath),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
+homepage_render_malformed_cache_is_ignored_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    HomeBas = <<
+        "10 PRINT \"REBUILT\"\n",
+        "20 HOME PUBLISH\n",
+        "30 END\n"
+    >>,
+    CachePath = filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"]),
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        ok = filelib:ensure_dir(CachePath),
+        ok = file:write_file(CachePath, <<"not-a-valid-term">>),
+        BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
+        Body = binary_to_list(BodyBin),
+        ?assertEqual(match, re:run(Body, "REBUILT", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(Body, "not-a-valid-term", [{capture, none}]))
+    after
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(CachePath),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
 dir_groups_personal_and_example_files_test() ->
     TempDir = temp_dir(),
     OldHome = os:getenv("HOME"),
