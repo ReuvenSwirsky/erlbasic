@@ -382,25 +382,25 @@ parse_end_stmt_yecc(Rest) ->
     parse_noarg_keyword_stmt(Rest, {'end'}).
 
 parse_stop_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, stop_stmt).
+    parse_noarg_keyword_stmt(Rest, {stop_stmt}).
 
 parse_cls_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, cls).
+    parse_noarg_keyword_stmt(Rest, {cls}).
 
 parse_hgr_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, hgr).
+    parse_noarg_keyword_stmt(Rest, {hgr}).
 
 parse_hgr2_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, hgr2).
+    parse_noarg_keyword_stmt(Rest, {hgr2}).
 
 parse_text_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, text).
+    parse_noarg_keyword_stmt(Rest, {text}).
 
 parse_tron_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, tron).
+    parse_noarg_keyword_stmt(Rest, {tron}).
 
 parse_troff_stmt_yecc(Rest) ->
-    parse_noarg_keyword_stmt(Rest, troff).
+    parse_noarg_keyword_stmt(Rest, {troff}).
 
 parse_flush_stmt_yecc(Rest) ->
     case string:trim(Rest) of
@@ -506,7 +506,7 @@ parse_home_stmt_yecc(Rest) ->
     end.
 
 parse_pset_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
         {match, [XExpr, YExpr, ColorExpr]} ->
             {pset, XExpr, YExpr, ColorExpr};
         nomatch ->
@@ -514,7 +514,7 @@ parse_pset_stmt_yecc(Rest) ->
     end.
 
 parse_linegfx_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*-\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
+    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
         {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
             {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
         nomatch ->
@@ -522,7 +522,7 @@ parse_linegfx_stmt_yecc(Rest) ->
     end.
 
 parse_lineto_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
         {match, [XExpr, YExpr, ColorExpr]} ->
             {lineto, XExpr, YExpr, ColorExpr};
         nomatch ->
@@ -530,7 +530,7 @@ parse_lineto_stmt_yecc(Rest) ->
     end.
 
 parse_rect_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*-\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
+    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
         {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
             {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
         nomatch ->
@@ -538,7 +538,7 @@ parse_rect_stmt_yecc(Rest) ->
     end.
 
 parse_circle_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+?)\s*,\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
         {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} ->
             {circle, XExpr, YExpr, RadiusExpr, ColorExpr};
         nomatch ->
@@ -609,15 +609,33 @@ parser_mode() ->
             yecc;
         _ ->
             case application:get_env(erlbasic, parser_mode) of
+                {ok, legacy} -> legacy;
                 {ok, yecc} -> yecc;
-                _ -> legacy
+                _ -> yecc
             end
     end.
+
+%% Fold statement text to uppercase, preserving the content of string literals.
+%% This normalises keywords typed in any case (e.g. "if", "then", "else",
+%% "to", "step", "for", "as", "input", "output", "append", "random") so
+%% that the yecc bridge regexes — which all expect UPPERCASE tokens — match
+%% regardless of how the user typed the statement.
+normalize_statement_case(Text) ->
+    normalize_statement_case(Text, false, []).
+
+normalize_statement_case([], _InStr, Acc) ->
+    lists:reverse(Acc);
+normalize_statement_case([$" | Rest], InStr, Acc) ->
+    normalize_statement_case(Rest, not InStr, [$" | Acc]);
+normalize_statement_case([C | Rest], false, Acc) when C >= $a, C =< $z ->
+    normalize_statement_case(Rest, false, [C - 32 | Acc]);
+normalize_statement_case([C | Rest], InStr, Acc) ->
+    normalize_statement_case(Rest, InStr, [C | Acc]).
 
 %% Phase-1 yecc bridge: run statement text through yecc, then delegate
 %% to legacy parser behavior via grammar actions for exact compatibility.
 parse_statement_yecc(Command) ->
-    Trimmed = string:trim(Command),
+    Trimmed = string:trim(normalize_statement_case(Command)),
     case erlbasic_parser_yecc_lexer:tokenize_statement(Trimmed) of
         {ok, Tokens} ->
             case erlbasic_parser_yecc:parse(Tokens) of
