@@ -557,7 +557,43 @@ parse_pget_stmt_yecc(Rest) ->
     end.
 
 parse_sprite_stmt_yecc(Rest) ->
-    parse_sprite_statement(string:trim("SPRITE" ++ Rest)).
+    TrimmedRest = string:trim(Rest),
+    case re:run(TrimmedRest, "(?i)^CLEAR$", [{capture, none}]) of
+        match ->
+            {sprite_clear};
+        nomatch ->
+            case re:run(TrimmedRest, "(?i)^HIDE\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [IdExpr]} ->
+                    {sprite_hide, string:trim(IdExpr)};
+                nomatch ->
+                    case re:run(TrimmedRest, "(?i)^SHOW\\s+(.+)$", [{capture, [1], list}]) of
+                        {match, [IdExpr]} ->
+                            {sprite_show, string:trim(IdExpr)};
+                        nomatch ->
+                            case re:run(TrimmedRest, "(?i)^SCALE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [IdExpr, ScaleExpr]} ->
+                                    {sprite_scale, string:trim(IdExpr), string:trim(ScaleExpr)};
+                                nomatch ->
+                                    case re:run(TrimmedRest, "(?i)^LOAD\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+                                        {match, [IdExpr, WidthExpr, HeightExpr, SourceText]} ->
+                                            case parse_sprite_load_source(SourceText) of
+                                                {ok, SourceTarget} ->
+                                                    {sprite_load, string:trim(IdExpr), string:trim(WidthExpr), string:trim(HeightExpr), SourceTarget};
+                                                _ ->
+                                                    unknown
+                                            end;
+                                        nomatch ->
+                                            case re:run(TrimmedRest, "(?i)^(.+?)\\s*,\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)$", [{capture, [1, 2, 3], list}]) of
+                                                {match, [IdExpr, XExpr, YExpr]} ->
+                                                    {sprite_move, string:trim(IdExpr), string:trim(XExpr), string:trim(YExpr)};
+                                                nomatch ->
+                                                    unknown
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
 
 parse_noarg_keyword_stmt(Rest, Result) ->
     case string:trim(Rest) of
