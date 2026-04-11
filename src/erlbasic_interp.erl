@@ -39,7 +39,10 @@ handle_input(Line, State) ->
                     handle_immediate_or_buffer_line(Trimmed, State)
             end;
         _ ->
-            handle_pending_input(Trimmed, State)
+            %% Input pending values (GET/GETKEY/INPUT LINE/etc.) are already
+            %% normalized by the connection layer. Do not trim here, because
+            %% trimming would turn a literal SPACE keypress into an empty string.
+            handle_pending_input(Line, State)
     end.
 
 handle_program_line(LineNumber, "", State) ->

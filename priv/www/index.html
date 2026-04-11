@@ -715,6 +715,12 @@
         return;
       }
 
+      // In char mode, attachCustomKeyEventHandler already forwarded the key.
+      // Never echo to the terminal input buffer here.
+      if (charMode) {
+        return;
+      }
+
       if (code === 13) {                          // Enter
         term.write('\r\n');
         ws.send(inputBuffer + '\n');

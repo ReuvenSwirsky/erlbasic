@@ -995,6 +995,19 @@ getkey_program_test() ->
     ?assertNot(erlbasic_interp:awaiting_input(S5)),
     ?assertEqual(match, re:run(lists:flatten(Output), "X\r\n", [{capture, none}])).
 
+%% SPACE from GETKEY must remain a literal one-character string,
+%% so ASC(A$) returns 32 instead of ILLEGAL FUNCTION CALL.
+getkey_space_asc_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 GETKEY A$", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT ASC(A$)", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    ?assert(erlbasic_interp:awaiting_input(S4)),
+    {S5, Output} = erlbasic_interp:handle_input(" ", S4),
+    ?assertNot(erlbasic_interp:awaiting_input(S5)),
+    ?assertEqual(match, re:run(lists:flatten(Output), "32\\r\\n", [{capture, none}])).
+
 %% GET in a program sets pending_input = {get_nb,...} (non-blocking).
 %% Sending "" (as the conn layer does on timeout) assigns "" to the variable.   
 get_nonblocking_test() ->
