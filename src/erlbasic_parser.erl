@@ -155,34 +155,132 @@ parse_gosub_stmt_yecc(Rest) ->
     end.
 
 parse_if_stmt_yecc(Rest) ->
-    parse_if_statement(string:trim("IF" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [CondExpr, ThenStmt]} ->
+            {if_then_else, CondExpr, normalize_if_branch_statement(ThenStmt), undefined};
+        {match, [CondExpr, ThenStmt, ElseStmt]} ->
+            {if_then_else, CondExpr,
+             normalize_if_branch_statement(ThenStmt),
+             normalize_if_branch_statement(ElseStmt)};
+        nomatch ->
+            unknown
+    end.
 
 parse_for_stmt_yecc(Rest) ->
-    parse_loop_statement(string:trim("FOR" ++ Rest)).
+    case re:run(string:trim(Rest), "^" ++ ?LOOP_VAR_PATTERN ++ "\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [Var, StartExpr, EndExpr]} ->
+            case is_reserved_variable_name(Var) of
+                true -> {parse_error, reserved_word};
+                false -> {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined}
+            end;
+        {match, [Var, StartExpr, EndExpr, StepExpr]} ->
+            case is_reserved_variable_name(Var) of
+                true -> {parse_error, reserved_word};
+                false -> {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr}
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_next_stmt_yecc(Rest) ->
-    parse_next_statement(string:trim("NEXT" ++ Rest)).
+    case string:trim(Rest) of
+        "" ->
+            {next_loop, undefined};
+        VarText ->
+            case re:run(VarText, "^" ++ ?VAR_PATTERN ++ "$", [{capture, all_but_first, list}]) of
+                {match, [Var]} ->
+                    case is_reserved_variable_name(Var) of
+                        true -> {parse_error, reserved_word};
+                        false -> {next_loop, string:to_upper(Var)}
+                    end;
+                nomatch ->
+                    unknown
+            end
+    end.
 
 parse_on_stmt_yecc(Rest) ->
-    parse_jump_statement(string:trim("ON" ++ Rest)).
+    case re:run(string:trim(Rest), "(?i)^ERROR\\s+GOTO\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [TargetExpr]} ->
+            {on_error_goto, string:trim(TargetExpr)};
+        nomatch ->
+            case re:run(string:trim(Rest), "(?i)^SPRITE\\s+GOSUB\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetExpr]} ->
+                    {on_sprite_gosub, string:trim(TargetExpr)};
+                nomatch ->
+                    case re:run(string:trim(Rest), "(?i)^PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                        {match, [NExpr, TargetExpr]} ->
+                            {on_play_gosub, string:trim(NExpr), string:trim(TargetExpr)};
+                        nomatch ->
+                            case re:run(string:trim(Rest), "(?i)^TIMER\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [NExpr, TargetExpr]} ->
+                                    {on_timer_gosub, string:trim(NExpr), string:trim(TargetExpr)};
+                                nomatch ->
+                                    case re:run(string:trim(Rest), "(?i)^(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                        {match, [Expr, Targets]} ->
+                                            {on_gosub, Expr, parse_comma_separated_list(Targets)};
+                                        nomatch ->
+                                            case re:run(string:trim(Rest), "(?i)^(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                                {match, [Expr, Targets]} ->
+                                                    {on_goto, Expr, parse_comma_separated_list(Targets)};
+                                                nomatch ->
+                                                    unknown
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
 
 parse_resume_stmt_yecc(Rest) ->
-    parse_resume_statement(string:trim("RESUME" ++ Rest)).
+    case string:to_upper(string:trim(Rest)) of
+        "NEXT" ->
+            {resume_next};
+        "" ->
+            {resume};
+        LineExpr ->
+            {resume_line, LineExpr}
+    end.
 
 parse_dim_stmt_yecc(Rest) ->
-    parse_dim_statement(string:trim("DIM" ++ Rest)).
+    case parse_dim_decls(string:trim(Rest)) of
+        {ok, Decls} -> {dim, Decls};
+        {error, Reason} -> {parse_error, Reason};
+        error -> unknown
+    end.
 
 parse_def_stmt_yecc(Rest) ->
-    parse_def_fn_statement(string:trim("DEF" ++ Rest)).
+    case re:run(string:trim(Rest), "(?i)^FN([A-Za-z][A-Za-z0-9_]*)(?:\\s*\\(\\s*" ++ ?VAR_PATTERN ++ "\\s*\\))?\\s*=\\s*(.+)$", [{capture, all_but_first, list}]) of
+        {match, [FnSuffix, Expr]} ->
+            {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, Expr};
+        {match, [FnSuffix, ArgVar, Expr]} ->
+            case is_reserved_variable_name(ArgVar) of
+                true -> {parse_error, reserved_word};
+                false -> {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), Expr}
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_data_stmt_yecc(Rest) ->
-    parse_data_statement(string:trim("DATA" ++ Rest)).
+    case string:trim(Rest) of
+        "" ->
+            {data, []};
+        DataText ->
+            {data, normalize_data_items(split_commas_top_level(DataText))}
+    end.
 
 parse_read_stmt_yecc(Rest) ->
-    parse_read_statement(string:trim("READ" ++ Rest)).
+    case parse_read_vars(string:trim(Rest)) of
+        {ok, Vars} -> {read_data, Vars};
+        {error, reserved_word} -> {parse_error, reserved_word};
+        error -> unknown
+    end.
 
 parse_restore_stmt_yecc(Rest) ->
-    parse_restore_statement(string:trim("RESTORE" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> {restore, all};
+        LineExpr -> {restore, LineExpr}
+    end.
 
 parse_return_stmt_yecc(Rest) ->
     parse_noarg_keyword_stmt(Rest, {'return'}).
