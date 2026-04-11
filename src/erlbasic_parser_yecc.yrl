@@ -278,11 +278,32 @@ parse_on_stmt(TextToken) ->
             end
     end.
 
-parse_dim_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_dim_stmt_yecc(Rest).
+parse_dim_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case re:run(Rest, "(?i)^(.+)$", [{capture, [1], list}]) of
+        {match, [DeclText]} ->
+            case parse_dim_decls(split_commas_top_level(DeclText), []) of
+                {ok, Decls} -> {dim, Decls};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
-parse_def_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_def_stmt_yecc(Rest).
+parse_def_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case re:run(Rest, "(?i)^FN([A-Za-z][A-Za-z0-9_]*)(?:\\s*\\(\\s*([A-Za-z][A-Za-z0-9_]*[%&#]?)\\s*\\))?\\s*=\\s*(.+)$", [{capture, all_but_first, list}]) of
+        {match, [FnSuffix, Expr]} ->
+            {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, string:trim(Expr)};
+        {match, [FnSuffix, ArgVar, Expr]} ->
+            case erlbasic_keywords:is_reserved_variable_name(string:to_upper(ArgVar)) of
+                true -> {parse_error, reserved_word};
+                false -> {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), string:trim(Expr)}
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_data_stmt(TextToken) ->
     Rest = string:trim(trim_text(TextToken)),
@@ -683,6 +704,35 @@ parse_field_specs([Part | Rest], Acc) ->
             end;
         nomatch ->
             error
+    end.
+
+parse_dim_decls([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_dim_decls([Part | Rest], Acc) ->
+    case parse_dim_decl(string:trim(Part)) of
+        {ok, Decl} -> parse_dim_decls(Rest, [Decl | Acc]);
+        {error, Reason} -> {error, Reason};
+        error -> error
+    end.
+
+parse_dim_decl(Text) ->
+    Pattern = "^([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)\\s*\\((.*)\\)$",
+    case re:run(Text, Pattern, [{capture, [1, 2], list}]) of
+        {match, [Var, DimText]} ->
+            VarUp = string:to_upper(Var),
+            case erlbasic_keywords:is_reserved_variable_name(VarUp) of
+                true -> {error, reserved_word};
+                false ->
+                    case parse_index_exprs(DimText) of
+                        {ok, IndexExprs} when length(IndexExprs) =:= 1; length(IndexExprs) =:= 2; length(IndexExprs) =:= 3 ->
+                            {ok, {VarUp, IndexExprs}};
+                        _ -> error
+                    end
+            end;
+        nomatch -> error
     end.
 
 cond_expr(LeftTok, Op, RightTok) ->
