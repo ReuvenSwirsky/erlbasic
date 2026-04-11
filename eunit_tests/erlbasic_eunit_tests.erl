@@ -20,6 +20,7 @@ keyword_category_intent_test() ->
     ?assert(erlbasic_keywords:is_expr_keyword("AND")),
     ?assert(erlbasic_keywords:is_expr_keyword("LEFT$")),
     ?assert(erlbasic_keywords:is_expr_keyword("TIMER")),
+    ?assert(erlbasic_keywords:is_expr_keyword("MEM_USED")),
     ?assert(erlbasic_keywords:is_expr_keyword("STRING$")),
     ?assertNot(erlbasic_keywords:is_expr_keyword("PRINT")),
     ?assert(erlbasic_keywords:is_list_keyword("PRINT")),
@@ -28,6 +29,7 @@ keyword_category_intent_test() ->
     ?assert(erlbasic_keywords:is_list_keyword("TROFF")),
     ?assertNot(erlbasic_keywords:is_list_keyword("LEFT$")),
     ?assert(erlbasic_keywords:is_builtin_function_keyword("TIMER")),
+    ?assert(erlbasic_keywords:is_builtin_function_keyword("MEM_USED")),
     ?assert(erlbasic_keywords:is_builtin_function_keyword("STRING$")).
 
 keyword_consistency_union_reserved_test() ->
@@ -71,6 +73,36 @@ builtin_instr_space_pos_test() ->
             undefined -> erlang:erase(erlbasic_print_col);
             _ -> erlang:put(erlbasic_print_col, PrevCol)
         end
+    end.
+
+mem_used_builtin_test() ->
+    PrevVars = erlang:get(erlbasic_mem_vars),
+    PrevFuncs = erlang:get(erlbasic_mem_funcs),
+    PrevProg = erlang:get(erlbasic_mem_prog),
+    PrevData = erlang:get(erlbasic_mem_data_items),
+    PrevLoop = erlang:get(erlbasic_mem_loopstack),
+    PrevCall = erlang:get(erlbasic_mem_callstack),
+    erlang:put(erlbasic_mem_vars, #{"A" => 1}),
+    erlang:put(erlbasic_mem_funcs, #{}),
+    erlang:put(erlbasic_mem_prog, [{10, "PRINT MEM_USED"}]),
+    erlang:put(erlbasic_mem_data_items, [1, 2, 3]),
+    erlang:put(erlbasic_mem_loopstack, [10]),
+    erlang:put(erlbasic_mem_callstack, [20, 30]),
+    try
+        Expected = erlang:external_size(#{"A" => 1})
+            + erlang:external_size(#{})
+            + erlang:external_size([{10, "PRINT MEM_USED"}])
+            + erlang:external_size([1, 2, 3])
+            + erlang:external_size([10])
+            + erlang:external_size([20, 30]),
+        ?assertEqual({ok, Expected}, erlbasic_eval_builtins:apply_math_function("MEM_USED", []))
+    after
+        case PrevVars of undefined -> erlang:erase(erlbasic_mem_vars); _ -> erlang:put(erlbasic_mem_vars, PrevVars) end,
+        case PrevFuncs of undefined -> erlang:erase(erlbasic_mem_funcs); _ -> erlang:put(erlbasic_mem_funcs, PrevFuncs) end,
+        case PrevProg of undefined -> erlang:erase(erlbasic_mem_prog); _ -> erlang:put(erlbasic_mem_prog, PrevProg) end,
+        case PrevData of undefined -> erlang:erase(erlbasic_mem_data_items); _ -> erlang:put(erlbasic_mem_data_items, PrevData) end,
+        case PrevLoop of undefined -> erlang:erase(erlbasic_mem_loopstack); _ -> erlang:put(erlbasic_mem_loopstack, PrevLoop) end,
+        case PrevCall of undefined -> erlang:erase(erlbasic_mem_callstack); _ -> erlang:put(erlbasic_mem_callstack, PrevCall) end
     end.
 
 hex_literal_eval_test() ->

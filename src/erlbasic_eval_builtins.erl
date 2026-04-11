@@ -54,6 +54,8 @@ apply_math_function("TERM$", []) ->
         websocket -> {ok, "XTERM"};
         _         -> {ok, "TELNET"}
     end;
+apply_math_function("MEM_USED", []) ->
+    {ok, approximate_current_memory_bytes()};
 apply_math_function("FREE", []) ->
     {ok, free_memory_value()};
 apply_math_function("TIMER", []) ->

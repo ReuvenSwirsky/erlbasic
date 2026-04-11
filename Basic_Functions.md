@@ -605,6 +605,27 @@ PRINT FREE
 
 ---
 
+### MEM_USED
+
+Returns the interpreter's current estimate of how many bytes of memory the current BASIC session is using.
+
+Syntax:
+- `MEM_USED()`
+- `MEM_USED`
+
+Notes:
+- This is the same approximation used by `FREE()` and the session memory watchdog.
+- It measures the serialized size of the current program, variables, DATA items, loop stack, call stack, and user functions.
+- It is an approximation of interpreter state size, not a full Erlang VM process-memory reading.
+
+Example:
+```text
+PRINT "USED: "; MEM_USED
+PRINT "FREE: "; FREE
+```
+
+---
+
 ### LOF
 
 Returns the length (in bytes) of the open file on *channel*.

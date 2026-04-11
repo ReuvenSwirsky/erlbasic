@@ -660,6 +660,28 @@
     let inputBuffer  = '';
     let passwordMode = false;
     let charMode     = false;
+
+    // attachCustomKeyEventHandler fires BEFORE xterm.js processes any key.
+    // Returning false prevents xterm from consuming the event (which matters
+    // for Space, which xterm can swallow as a scroll gesture).
+    term.attachCustomKeyEventHandler(function(domEvent) {
+      if (!charMode || domEvent.type !== 'keydown') return true;
+      const code = domEvent.keyCode;
+      // Let Ctrl-C through so the onKey handler can cancel the program.
+      if (domEvent.ctrlKey && code === 67) return true;
+      // Unlock audio on any user gesture while in char mode.
+      unlockAudioFromGesture();
+      const isSpace = domEvent.code === 'Space' ||
+                      domEvent.key === ' ' ||
+                      domEvent.key === 'Spacebar' ||
+                      code === 32;
+      const ch = isSpace ? ' ' : (domEvent.key && domEvent.key.length === 1 ? domEvent.key : '');
+      if (ch) {
+        ws.send(ch + '\n');
+      }
+      return false; // suppress xterm.js default handling for this key
+    });
+
     term.onKey(({ key, domEvent }) => {
       const code = domEvent.keyCode;
 
@@ -690,16 +712,6 @@
         graphicsMode = 'none';
         document.getElementById('terminal-container').classList.remove('graphics-mode');
         clearSprites();
-        return;
-      }
-
-      if (charMode) {
-        domEvent.preventDefault();
-        // In char mode: send the raw character immediately, no echo, no buffering.
-        const ch = (domEvent.code === 'Space') ? ' ' : key;
-        if (ch && ch.length === 1) {
-          ws.send(ch + '\n');
-        }
         return;
       }
 
