@@ -198,7 +198,10 @@ parse_buffer_stmt_yecc(Rest) ->
     end.
 
 parse_sleep_stmt_yecc(Rest) ->
-    parse_sleep_statement(string:trim("SLEEP" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> {sleep_keypress};
+        Expr -> {sleep, Expr}
+    end.
 
 parse_sound_stmt_yecc(Rest) ->
     parse_sound_statement(string:trim("SOUND" ++ Rest)).
