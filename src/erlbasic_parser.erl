@@ -158,37 +158,44 @@ parse_restore_stmt_yecc(Rest) ->
     parse_restore_statement(string:trim("RESTORE" ++ Rest)).
 
 parse_return_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("RETURN" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, {'return'}).
 
 parse_end_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("END" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, {'end'}).
 
 parse_stop_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("STOP" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, stop_stmt).
 
 parse_cls_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("CLS" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, cls).
 
 parse_hgr_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("HGR" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, hgr).
 
 parse_hgr2_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("HGR2" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, hgr2).
 
 parse_text_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("TEXT" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, text).
 
 parse_tron_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("TRON" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, tron).
 
 parse_troff_stmt_yecc(Rest) ->
-    parse_keyword_statement(string:trim("TROFF" ++ Rest)).
+    parse_noarg_keyword_stmt(Rest, troff).
 
 parse_flush_stmt_yecc(Rest) ->
-    parse_flush_buffer_statement(string:trim("FLUSH" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> {flush_stmt};
+        _ -> unknown
+    end.
 
 parse_buffer_stmt_yecc(Rest) ->
-    parse_flush_buffer_statement(string:trim("BUFFER" ++ Rest)).
+    case string:to_upper(string:trim(Rest)) of
+        "ON" -> {buffer_mode, on};
+        "OFF" -> {buffer_mode, off};
+        _ -> unknown
+    end.
 
 parse_sleep_stmt_yecc(Rest) ->
     parse_sleep_statement(string:trim("SLEEP" ++ Rest)).
@@ -243,6 +250,12 @@ parse_pget_stmt_yecc(Rest) ->
 
 parse_sprite_stmt_yecc(Rest) ->
     parse_sprite_statement(string:trim("SPRITE" ++ Rest)).
+
+parse_noarg_keyword_stmt(Rest, Result) ->
+    case string:trim(Rest) of
+        "" -> Result;
+        _ -> unknown
+    end.
 
 parser_mode() ->
     case get(erlbasic_parser_mode) of
