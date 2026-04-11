@@ -13,7 +13,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Full expression engine: numeric operators, exponentiation, decimal and `0x...` hexadecimal integer literals, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
-- **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and serves the output as an HTML page at `/:username`; supports `COLOR`, `LOCATE`, `PRINT` text panels and `HGR`/`RECT`/`CIRCLE`/`LINE` graphics panels (rendered as inline SVG)
+- **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and renders the output as a styled HTML page at `/:username`; text output is captured as coloured terminal panels; `HGR`/`HGR2` graphics output is captured as inline SVG panels; `HOME PUBLISH` flushes the current screen as a panel and resets for the next one — multiple panels per page are supported
 - RSTS/E-style PPN login (`[Project,Programmer]`) with PBKDF2-SHA256 password hashing
 - Per-user disk quotas, per-session memory quotas (watchdog process), per-PPN session limits
 - HTTPS support (self-signed or Let's Encrypt)
@@ -92,13 +92,16 @@ Access via `https://localhost:8443/`. For production Let's Encrypt deployment se
 
 Every user account gets a public homepage at `/:username` (e.g. `http://localhost:8081/alice`).
 
-If a file named `HOME.BAS` (or `home.bas`) exists in the user's program directory, the interpreter runs it and serves the terminal output wrapped in an HTML page. If the file is absent, a styled default page is shown instead.
+If a file named `HOME.BAS` (or `home.bas`) exists in the user's program directory, the interpreter runs it server-side and renders the output as a styled HTML page. The program uses ordinary `PRINT`, `COLOR`, `LOCATE`, and graphics statements to build panels, then calls `HOME PUBLISH` to flush the current screen as a rendered panel. Multiple `HOME PUBLISH` calls produce multiple stacked panels. If `HOME.BAS` is absent, a styled default page is shown instead.
 
-**Caching policy** — output is cached by file SHA-256 hash:
-- Programs using `INPUT`, `INKEY$`, `GETKEY`, `RND`, or `RANDOMIZE` are **never cached** (volatile).
+See [HOMEPAGE_GUIDE.md](HOMEPAGE_GUIDE.md) for authoring instructions and examples.
+
+**Caching policy** — rendered output is cached keyed on the file's SHA-256 hash:
+- Programs using `INPUT`, `GET`, `GETKEY`, `RND`, or `RANDOMIZE` are **never cached** (volatile).
 - Programs using `TIME$` or `TIMER` are cached for **30 seconds**.
 - Programs using `DATE$` are cached for **1 hour**.
-- Static programs are cached **until the file changes**.
+- All other programs are cached **until the file changes** (hash-keyed, infinite TTL).
+- Legacy cache entries stored in an old format are silently discarded and rebuilt on next request.
 
 ## Example session
 
@@ -157,6 +160,11 @@ See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase is
 - [examples/life.bas](examples/life.bas) — Graphics-mode Conway's Life
 - [examples/asciilife.bas](examples/asciilife.bas) — Text-mode Conway's Life using `#` for occupied cells
 - [examples/file_io.bas](examples/file_io.bas) — Sequential and random file I/O demo
+- [examples/playmusic.bas](examples/playmusic.bas) — MML background music demo using `PLAY` background mode and `ON PLAY(...) GOSUB` refill callback
+- [examples/scale.bas](examples/scale.bas) — C major scale played with `SOUND` (two octaves up and down)
+- [examples/stripesfx.bas](examples/stripesfx.bas) — Stars & Stripes ASCII fireworks display with `SOUND`, `LOCATE`, `COLOR`
+- [examples/animtest.bas](examples/animtest.bas) — Simple HGR animation test using `BUFFER`/`FLUSH` double-buffering
+- [examples/space_sprites.bas](examples/space_sprites.bas) — Space Invaders-style game in HGR2 mode: sprite fleet, player launcher, collision detection via `ON SPRITE GOSUB`, autonomous fleet movement via `ON TIMER(0.08) GOSUB`
 
 ## Testing
 
