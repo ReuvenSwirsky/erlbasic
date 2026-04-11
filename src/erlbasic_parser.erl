@@ -228,7 +228,10 @@ parse_locate_stmt_yecc(Rest) ->
     parse_locate_statement(string:trim("LOCATE" ++ Rest)).
 
 parse_home_stmt_yecc(Rest) ->
-    parse_home_statement(string:trim("HOME" ++ Rest)).
+    case string:to_upper(string:trim(Rest)) of
+        "PUBLISH" -> {home_publish};
+        _ -> unknown
+    end.
 
 parse_pset_stmt_yecc(Rest) ->
     parse_pset_statement(string:trim("PSET" ++ Rest)).
