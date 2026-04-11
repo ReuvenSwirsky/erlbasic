@@ -235,8 +235,9 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                     {BreakState, lists:reverse(CombinedOutput)}
             end;
         {stop, Output} ->
-            CombinedOutput = lists:reverse(Output) ++ TraceAcc,
+            CombinedOutput = sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ lists:reverse(Output) ++ TraceAcc,
             flush_output(CombinedOutput),
+            music_reset(),
             case should_flush_output() of
                 true ->
                     {State, []};

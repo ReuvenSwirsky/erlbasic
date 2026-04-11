@@ -219,6 +219,43 @@ sound_immediate_websocket_emits_control_frame_test() ->
         end
     end.
 
+sound_run_end_stops_audio_test() ->
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        S0 = erlbasic_interp:new_state(),
+        {S1, _} = erlbasic_interp:handle_input("10 SOUND 1,90,10,12", S0),
+        {S2, _} = erlbasic_interp:handle_input("20 END", S1),
+        {_S3, Output} = erlbasic_interp:handle_input("RUN", S2),
+        Text = lists:flatten(Output),
+        ?assertEqual(match, re:run(Text, "\x02SND:STOPALL", [{capture, none}])),
+        ?assertEqual(match, re:run(Text, "Program ended", [{capture, none}]))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
+
+sound_run_error_stops_audio_test() ->
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        S0 = erlbasic_interp:new_state(),
+        {S1, _} = erlbasic_interp:handle_input("10 SOUND 1,90,10,12", S0),
+        {S2, _} = erlbasic_interp:handle_input("20 DIM A(1)", S1),
+        {S3, _} = erlbasic_interp:handle_input("30 PRINT A(2)", S2),
+        {_S4, Output} = erlbasic_interp:handle_input("RUN", S3),
+        Text = lists:flatten(Output),
+        ?assertEqual(match, re:run(Text, "\x02SND:STOPALL", [{capture, none}])),
+        ?assertEqual(match, re:run(Text, "SUBSCRIPT OUT OF RANGE", [{capture, none}]))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
+
 sound_run_requires_websocket_with_line_number_test() ->
     PrevConnType = erlang:get(erlbasic_conn_type),
     erlang:put(erlbasic_conn_type, tcp),
