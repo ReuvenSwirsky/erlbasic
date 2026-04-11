@@ -89,28 +89,121 @@ parse_statement_legacy(Command) ->
     end.
 
 parse_print_stmt_yecc(Rest) ->
-    parse_print_statement(string:trim("PRINT" ++ Rest)).
+    TrimmedRest = string:trim(Rest),
+    case re:run(TrimmedRest, "(?i)^USING\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [UsingText]} ->
+            case parse_print_using_items(UsingText) of
+                {ok, FormatExpr, Items, EndWithNewline} -> {print_using, FormatExpr, Items, EndWithNewline};
+                error -> unknown
+            end;
+        nomatch ->
+            case re:run(TrimmedRest, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+                {match, [ChannelExpr]} ->
+                    {file_print, string:trim(ChannelExpr), [], true};
+                {match, [ChannelExpr, ItemsText]} ->
+                    case parse_print_items(ItemsText) of
+                        {ok, Items, EndWithNewline} -> {file_print, string:trim(ChannelExpr), Items, EndWithNewline};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    case TrimmedRest of
+                        "" -> {print, [], true};
+                        ItemsText ->
+                            case parse_print_items(ItemsText) of
+                                {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+                                error -> unknown
+                            end
+                    end
+            end
+    end.
 
 parse_write_stmt_yecc(Rest) ->
-    parse_print_statement(string:trim("WRITE" ++ Rest)).
+    case re:run(string:trim(Rest), "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+        {match, [ChannelExpr]} ->
+            {file_write, string:trim(ChannelExpr), []};
+        {match, [ChannelExpr, ItemsText]} ->
+            case parse_write_items(ItemsText) of
+                {ok, Exprs} -> {file_write, string:trim(ChannelExpr), Exprs};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_qmark_stmt_yecc(Rest) ->
-    parse_print_or_qmark_statement(string:trim("?" ++ Rest)).
+    case parse_print_items(string:trim(Rest)) of
+        {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+        error -> unknown
+    end.
 
 parse_let_stmt_yecc(Rest) ->
-    parse_let_statement(string:trim("LET" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [TargetText, Expr]} ->
+            case parse_assignment_target(TargetText) of
+                {ok, Target} -> {'let', Target, Expr};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_rem_stmt_yecc(_Rest) ->
     {remark}.
 
 parse_implicit_let_stmt_yecc(Rest) ->
-    parse_implicit_let_statement(string:trim(Rest)).
+    case re:run(string:trim(Rest), "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [TargetText, Expr]} ->
+            case parse_assignment_target(TargetText) of
+                {ok, Target} -> {'let', Target, Expr};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_line_input_stmt_yecc(Rest) ->
-    parse_input_statement(string:trim("LINE INPUT" ++ Rest)).
+    case re:run(string:trim(Rest), "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {file_line_input, string:trim(ChannelExpr), Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_input_stmt_yecc(Rest) ->
-    parse_input_statement(string:trim("INPUT" ++ Rest)).
+    TrimmedRest = string:trim(Rest),
+    case re:run(TrimmedRest, "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, TargetsText]} ->
+            case parse_input_target_list(split_commas_top_level(TargetsText), []) of
+                {ok, Targets} -> {file_input, string:trim(ChannelExpr), Targets};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            case re:run(TrimmedRest, "(?i)^LINE\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetText]} ->
+                    case parse_assignment_target(string:trim(TargetText)) of
+                        {ok, Target} -> {input_line, Target};
+                        {error, Reason} -> {parse_error, Reason};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    case TrimmedRest of
+                        "" -> unknown;
+                        TargetsText ->
+                            case parse_input_target_list(split_commas_top_level(TargetsText), []) of
+                                {ok, Targets} -> {input, Targets};
+                                {error, Reason} -> {parse_error, Reason};
+                                error -> unknown
+                            end
+                    end
+            end
+    end.
 
 parse_get_stmt_yecc(Rest) ->
     case re:run(string:trim(Rest), "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
