@@ -204,13 +204,24 @@ parse_sleep_stmt_yecc(Rest) ->
     end.
 
 parse_sound_stmt_yecc(Rest) ->
-    parse_sound_statement(string:trim("SOUND" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+        {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
+            {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_play_stmt_yecc(Rest) ->
-    parse_play_statement(string:trim("PLAY" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> unknown;
+        Expr -> {play_stmt, Expr}
+    end.
 
 parse_chain_stmt_yecc(Rest) ->
-    parse_chain_statement(string:trim("CHAIN" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> unknown;
+        FileExpr -> {chain, FileExpr}
+    end.
 
 parse_open_stmt_yecc(Rest) ->
     parse_file_misc_statement(string:trim("OPEN" ++ Rest)).
@@ -225,10 +236,22 @@ parse_put_stmt_yecc(Rest) ->
     parse_file_misc_statement(string:trim("PUT" ++ Rest)).
 
 parse_color_stmt_yecc(Rest) ->
-    parse_color_statement(string:trim("COLOR" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [FgExpr]} ->
+            {color, FgExpr, undefined};
+        {match, [FgExpr, BgExpr]} ->
+            {color, FgExpr, BgExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_locate_stmt_yecc(Rest) ->
-    parse_locate_statement(string:trim("LOCATE" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [RowExpr, ColExpr]} ->
+            {locate, RowExpr, ColExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_home_stmt_yecc(Rest) ->
     case string:to_upper(string:trim(Rest)) of
