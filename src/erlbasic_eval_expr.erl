@@ -176,9 +176,6 @@ parse_primary([{kw, Name}, lparen | Rest]) ->
         {ok, Args, Next} -> {ok, {call, Name, Args}, Next};
         Error -> Error
     end;
-parse_primary([{kw, Name} | Rest]) ->
-    %% Zero-argument builtin keyword used without parentheses, e.g. FREE, TIMER, MEM_USED
-    {ok, {call, Name, []}, Rest};
 parse_primary([{var, Name}, lparen | Rest]) ->
     case parse_call_args(Rest) of
         {ok, Args, Next} -> {ok, {call, string:to_upper(Name), Args}, Next};

@@ -611,7 +611,6 @@ Returns the interpreter's current estimate of how many bytes of memory the curre
 
 Syntax:
 - `MEM_USED()`
-- `MEM_USED`
 
 Notes:
 - This is the same approximation used by `FREE()` and the session memory watchdog.
@@ -620,7 +619,7 @@ Notes:
 
 Example:
 ```text
-PRINT "USED: "; MEM_USED
+PRINT "USED: "; MEM_USED()
 PRINT "FREE: "; FREE
 ```
 

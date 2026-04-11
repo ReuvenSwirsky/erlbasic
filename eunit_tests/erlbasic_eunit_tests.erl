@@ -84,14 +84,14 @@ mem_used_builtin_test() ->
     PrevCall = erlang:get(erlbasic_mem_callstack),
     erlang:put(erlbasic_mem_vars, #{"A" => 1}),
     erlang:put(erlbasic_mem_funcs, #{}),
-    erlang:put(erlbasic_mem_prog, [{10, "PRINT MEM_USED"}]),
+    erlang:put(erlbasic_mem_prog, [{10, "PRINT MEM_USED()"}]),
     erlang:put(erlbasic_mem_data_items, [1, 2, 3]),
     erlang:put(erlbasic_mem_loopstack, [10]),
     erlang:put(erlbasic_mem_callstack, [20, 30]),
     try
         Expected = erlang:external_size(#{"A" => 1})
             + erlang:external_size(#{})
-            + erlang:external_size([{10, "PRINT MEM_USED"}])
+            + erlang:external_size([{10, "PRINT MEM_USED()"}])
             + erlang:external_size([1, 2, 3])
             + erlang:external_size([10])
             + erlang:external_size([20, 30]),
