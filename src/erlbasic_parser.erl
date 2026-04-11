@@ -113,19 +113,46 @@ parse_input_stmt_yecc(Rest) ->
     parse_input_statement(string:trim("INPUT" ++ Rest)).
 
 parse_get_stmt_yecc(Rest) ->
-    parse_get_statement(string:trim("GET" ++ Rest)).
+    case re:run(string:trim(Rest), "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {file_get_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
+        nomatch ->
+            case parse_assignment_target(string:trim(Rest)) of
+                {ok, Target} -> {get, Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end
+    end.
 
 parse_getkey_stmt_yecc(Rest) ->
-    parse_get_statement(string:trim("GETKEY" ++ Rest)).
+    case parse_assignment_target(string:trim(Rest)) of
+        {ok, Target} -> {getkey, Target};
+        {error, Reason} -> {parse_error, Reason};
+        error -> unknown
+    end.
 
 parse_getchar_stmt_yecc(Rest) ->
-    parse_getchar_statement(string:trim("GETCHAR" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+),(.+),(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [RowExpr, ColExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {getchar, string:trim(RowExpr), string:trim(ColExpr), Target};
+                _ -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_goto_stmt_yecc(Rest) ->
-    parse_simple_jump_statement(string:trim("GOTO" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> unknown;
+        LineExpr -> {goto, LineExpr}
+    end.
 
 parse_gosub_stmt_yecc(Rest) ->
-    parse_simple_jump_statement(string:trim("GOSUB" ++ Rest)).
+    case string:trim(Rest) of
+        "" -> unknown;
+        LineExpr -> {gosub, LineExpr}
+    end.
 
 parse_if_stmt_yecc(Rest) ->
     parse_if_statement(string:trim("IF" ++ Rest)).
