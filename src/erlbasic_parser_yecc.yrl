@@ -126,8 +126,18 @@ parse_implicit_let_stmt(TextToken) ->
             unknown
     end.
 
-parse_line_input_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_line_input_stmt_yecc(Rest).
+parse_line_input_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {file_line_input, string:trim(ChannelExpr), Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_input_stmt(TextToken) ->
     Rest = trim_text(TextToken),
