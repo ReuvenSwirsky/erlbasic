@@ -256,8 +256,13 @@ parse_sleep_stmt(TextToken) ->
         Expr -> {sleep, Expr}
     end.
 
-parse_sound_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_sound_stmt_yecc(Rest).
+parse_sound_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+        {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
+            {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_play_stmt(TextToken) ->
     parse_required_expr_stmt(TextToken, play_stmt).
@@ -277,11 +282,23 @@ parse_field_stmt({text, _Line, Rest}) ->
 parse_put_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_put_stmt_yecc(Rest).
 
-parse_color_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_color_stmt_yecc(Rest).
+parse_color_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [FgExpr]} ->
+            {color, FgExpr, undefined};
+        {match, [FgExpr, BgExpr]} ->
+            {color, FgExpr, BgExpr};
+        nomatch ->
+            unknown
+    end.
 
-parse_locate_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_locate_stmt_yecc(Rest).
+parse_locate_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [RowExpr, ColExpr]} ->
+            {locate, RowExpr, ColExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_home_stmt(TextToken) ->
     case string:to_upper(trim_text(TextToken)) of
@@ -289,20 +306,45 @@ parse_home_stmt(TextToken) ->
         _ -> unknown
     end.
 
-parse_pset_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_pset_stmt_yecc(Rest).
+parse_pset_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, ColorExpr]} ->
+            {pset, XExpr, YExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
-parse_linegfx_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_linegfx_stmt_yecc(Rest).
+parse_linegfx_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
+        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
+            {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
-parse_lineto_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_lineto_stmt_yecc(Rest).
+parse_lineto_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, ColorExpr]} ->
+            {lineto, XExpr, YExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
-parse_rect_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_rect_stmt_yecc(Rest).
+parse_rect_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
+        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
+            {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
-parse_circle_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_circle_stmt_yecc(Rest).
+parse_circle_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+        {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} ->
+            {circle, XExpr, YExpr, RadiusExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_pget_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_pget_stmt_yecc(Rest).
