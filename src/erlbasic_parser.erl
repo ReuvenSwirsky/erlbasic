@@ -224,16 +224,44 @@ parse_chain_stmt_yecc(Rest) ->
     end.
 
 parse_open_stmt_yecc(Rest) ->
-    parse_file_misc_statement(string:trim("OPEN" ++ Rest)).
+    case re:run(string:trim(Rest), "^(.+?)\\s+FOR\\s+(INPUT|OUTPUT|APPEND|RANDOM)\\s+AS\\s*#\\s*(.+?)(?:\\s+LEN\\s*=\\s*(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [PathExpr, Mode, ChannelExpr]} ->
+            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), undefined};
+        {match, [PathExpr, Mode, ChannelExpr, RecLenExpr]} ->
+            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), string:trim(RecLenExpr)};
+        nomatch ->
+            unknown
+    end.
 
 parse_close_stmt_yecc(Rest) ->
-    parse_file_misc_statement(string:trim("CLOSE" ++ Rest)).
+    case string:trim(Rest) of
+        "" ->
+            {file_close, all};
+        ChannelsText ->
+            case parse_file_channels(ChannelsText) of
+                {ok, Channels} -> {file_close, Channels};
+                error -> unknown
+            end
+    end.
 
 parse_field_stmt_yecc(Rest) ->
-    parse_file_misc_statement(string:trim("FIELD" ++ Rest)).
+    case re:run(string:trim(Rest), "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, SpecsText]} ->
+            case parse_field_specs(SpecsText) of
+                {ok, Specs} -> {file_field, string:trim(ChannelExpr), Specs};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_put_stmt_yecc(Rest) ->
-    parse_file_misc_statement(string:trim("PUT" ++ Rest)).
+    case re:run(string:trim(Rest), "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {file_put_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
+        nomatch ->
+            unknown
+    end.
 
 parse_color_stmt_yecc(Rest) ->
     case re:run(string:trim(Rest), "^(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
@@ -300,7 +328,15 @@ parse_circle_stmt_yecc(Rest) ->
     end.
 
 parse_pget_stmt_yecc(Rest) ->
-    parse_pget_statement(string:trim("PGET" ++ Rest)).
+    case re:run(string:trim(Rest), "^\\((.+),(.+)\\),(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {pget, string:trim(XExpr), string:trim(YExpr), Target};
+                _ -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_sprite_stmt_yecc(Rest) ->
     parse_sprite_statement(string:trim("SPRITE" ++ Rest)).
