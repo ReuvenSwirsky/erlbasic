@@ -1990,6 +1990,13 @@ on_timer_gosub_fires_during_run_test() ->
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "FIRED", [{capture, none}])).
 
+normalize_char_input_space_test() ->
+    %% SPACE (ASCII 32) must survive normalization so GET K$ can match K$=" ".
+    %% The browser sends key+newline; normalize_char_input strips only CR/LF.
+    ?assertEqual(" ", erlbasic_conn:normalize_char_input(<<" \n">>)),
+    ?assertEqual("A", erlbasic_conn:normalize_char_input(<<"A\n">>)),
+    ?assertEqual("",  erlbasic_conn:normalize_char_input(<<"\n">>)).
+
 restore_env(Name, false) ->
     true = os:unsetenv(Name),
     ok;

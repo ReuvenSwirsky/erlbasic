@@ -1,7 +1,8 @@
 -module(erlbasic_conn).
 
 -export([start/1, start_ws/1, send_input/2,
-         parse_hello/1, parse_ppn_only/1, parse_os_command/1]).
+         parse_hello/1, parse_ppn_only/1, parse_os_command/1,
+         normalize_char_input/1]).
 
 %% ---- TCP mode ----
 
@@ -354,7 +355,14 @@ ws_loop(WsPid, State, {P, N} = PPN) ->
             %% Stale message arriving when no program is running; discard.
             ws_loop(WsPid, State, PPN);
         {input, RawLine} ->
-            Line = normalize_input_line(list_to_binary(RawLine)),
+            %% In char mode (GET/GETKEY) use a whitespace-preserving normalizer
+            %% so that SPACE (ASCII 32) is not stripped by string:trim.
+            InCharMode = erlbasic_interp:awaiting_input_nonblocking(State) orelse
+                         erlbasic_interp:awaiting_input_getkey(State),
+            Line = case InCharMode of
+                true  -> normalize_char_input(list_to_binary(RawLine));
+                false -> normalize_input_line(list_to_binary(RawLine))
+            end,
             %% Only intercept OS commands when the BASIC interpreter is not
             %% waiting for an INPUT statement response.
             case erlbasic_interp:awaiting_input(State) of
@@ -443,6 +451,16 @@ ws_handle_basic(WsPid, State, PPN, Line) ->
 normalize_input_line(Bin) ->
     EditedChars = apply_line_editing(binary_to_list(Bin), []),
     string:trim(lists:reverse(EditedChars)).
+
+%% For GET/GETKEY char mode: the browser sends exactly one printable character
+%% followed by a newline.  Strip only CR/LF — do NOT trim whitespace, so that
+%% SPACE (ASCII 32) is preserved and correctly matched by programs.
+normalize_char_input(Bin) ->
+    Chars = [C || C <- binary_to_list(Bin), C =/= $\r, C =/= $\n],
+    case Chars of
+        [Single | _] -> [Single];
+        []           -> ""
+    end.
 
 apply_line_editing([], Acc) ->
     Acc;
