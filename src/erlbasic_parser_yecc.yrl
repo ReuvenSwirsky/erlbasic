@@ -109,17 +109,67 @@ parse_implicit_let_stmt({text, _Line, Rest}) ->
 parse_line_input_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_line_input_stmt_yecc(Rest).
 
-parse_input_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_input_stmt_yecc(Rest).
+parse_input_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, TargetsText]} ->
+            case parse_input_target_list(split_commas_top_level(TargetsText), []) of
+                {ok, Targets} -> {file_input, string:trim(ChannelExpr), Targets};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            case re:run(Rest, "^LINE\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetText]} ->
+                    case parse_assignment_target(string:trim(TargetText)) of
+                        {ok, Target} -> {input_line, Target};
+                        {error, Reason} -> {parse_error, Reason};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    case Rest of
+                        "" -> unknown;
+                        TargetsText ->
+                            case parse_input_target_list(split_commas_top_level(TargetsText), []) of
+                                {ok, Targets} -> {input, Targets};
+                                {error, Reason} -> {parse_error, Reason};
+                                error -> unknown
+                            end
+                    end
+            end
+    end.
 
-parse_get_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_get_stmt_yecc(Rest).
+parse_get_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {file_get_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
+        nomatch ->
+            case parse_assignment_target(Rest) of
+                {ok, Target} -> {get, Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end
+    end.
 
-parse_getkey_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_getkey_stmt_yecc(Rest).
+parse_getkey_stmt(TextToken) ->
+    case parse_assignment_target(trim_text(TextToken)) of
+        {ok, Target} -> {getkey, Target};
+        {error, Reason} -> {parse_error, Reason};
+        error -> unknown
+    end.
 
-parse_getchar_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_getchar_stmt_yecc(Rest).
+parse_getchar_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^(.+),(.+),(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [RowExpr, ColExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {getchar, string:trim(RowExpr), string:trim(ColExpr), Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_goto_stmt(TextToken) ->
     parse_required_expr_stmt(TextToken, goto).
@@ -346,8 +396,17 @@ parse_circle_stmt(TextToken) ->
             unknown
     end.
 
-parse_pget_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_pget_stmt_yecc(Rest).
+parse_pget_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\((.+),(.+)\\),(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, TargetText]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {pget, string:trim(XExpr), string:trim(YExpr), Target};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_sprite_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_sprite_stmt_yecc(Rest).
@@ -404,6 +463,76 @@ parse_next_var(Var) ->
 
 trim_optional(undefined) -> undefined;
 trim_optional(Text) -> string:trim(Text).
+
+parse_input_target_list([], []) ->
+    error;
+parse_input_target_list([], Acc) ->
+    {ok, lists:reverse(Acc)};
+parse_input_target_list([Part | Rest], Acc) ->
+    case parse_assignment_target(string:trim(Part)) of
+        {ok, Target} -> parse_input_target_list(Rest, [Target | Acc]);
+        {error, Reason} -> {error, Reason};
+        error -> error
+    end.
+
+parse_assignment_target(Text) ->
+    Trimmed = string:trim(Text),
+    Pattern = "^([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)(?:\\((.*)\\))?$",
+    case re:run(Trimmed, Pattern, [{capture, all_but_first, list}]) of
+        {match, [Var]} ->
+            VarUp = string:to_upper(Var),
+            case erlbasic_keywords:is_reserved_variable_name(VarUp) of
+                true -> {error, reserved_word};
+                false -> {ok, {var_target, VarUp}}
+            end;
+        {match, [Var, IndexText]} ->
+            VarUp = string:to_upper(Var),
+            case erlbasic_keywords:is_reserved_variable_name(VarUp) of
+                true ->
+                    {error, reserved_word};
+                false ->
+                    case parse_index_exprs(IndexText) of
+                        {ok, IndexExprs} when length(IndexExprs) =:= 1; length(IndexExprs) =:= 2; length(IndexExprs) =:= 3 ->
+                            {ok, {array_target, VarUp, IndexExprs}};
+                        _ ->
+                            error
+                    end
+            end;
+        nomatch ->
+            error
+    end.
+
+parse_index_exprs(Text) ->
+    Parts = split_commas_top_level(Text),
+    parse_non_empty_parts(Parts, []).
+
+parse_non_empty_parts([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_non_empty_parts([Part | Rest], Acc) ->
+    Trimmed = string:trim(Part),
+    case Trimmed of
+        "" -> error;
+        _ -> parse_non_empty_parts(Rest, [Trimmed | Acc])
+    end.
+
+split_commas_top_level(Text) ->
+    split_commas_top_level(Text, [], [], false, 0).
+
+split_commas_top_level([], CurrentRev, PartsRev, _InString, _Depth) ->
+    lists:reverse([lists:reverse(CurrentRev) | PartsRev]);
+split_commas_top_level([$" | Rest], CurrentRev, PartsRev, InString, Depth) ->
+    split_commas_top_level(Rest, [$" | CurrentRev], PartsRev, not InString, Depth);
+split_commas_top_level([$( | Rest], CurrentRev, PartsRev, false, Depth) ->
+    split_commas_top_level(Rest, [$( | CurrentRev], PartsRev, false, Depth + 1);
+split_commas_top_level([$) | Rest], CurrentRev, PartsRev, false, Depth) when Depth > 0 ->
+    split_commas_top_level(Rest, [$) | CurrentRev], PartsRev, false, Depth - 1);
+split_commas_top_level([$, | Rest], CurrentRev, PartsRev, false, 0) ->
+    split_commas_top_level(Rest, [], [lists:reverse(CurrentRev) | PartsRev], false, 0);
+split_commas_top_level([Ch | Rest], CurrentRev, PartsRev, InString, Depth) ->
+    split_commas_top_level(Rest, [Ch | CurrentRev], PartsRev, InString, Depth).
 
 cond_expr(LeftTok, Op, RightTok) ->
     string:trim(text_value(LeftTok)) ++ Op ++ string:trim(text_value(RightTok)).
