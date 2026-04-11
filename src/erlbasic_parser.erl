@@ -260,19 +260,44 @@ parse_home_stmt_yecc(Rest) ->
     end.
 
 parse_pset_stmt_yecc(Rest) ->
-    parse_pset_statement(string:trim("PSET" ++ Rest)).
+    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, ColorExpr]} ->
+            {pset, XExpr, YExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_linegfx_stmt_yecc(Rest) ->
-    parse_pset_statement(string:trim("LINE" ++ Rest)).
+    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*-\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
+        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
+            {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_lineto_stmt_yecc(Rest) ->
-    parse_pset_statement(string:trim("LINETO" ++ Rest)).
+    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [XExpr, YExpr, ColorExpr]} ->
+            {lineto, XExpr, YExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_rect_stmt_yecc(Rest) ->
-    parse_pset_statement(string:trim("RECT" ++ Rest)).
+    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*-\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
+        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
+            {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_circle_stmt_yecc(Rest) ->
-    parse_pset_statement(string:trim("CIRCLE" ++ Rest)).
+    case re:run(string:trim(Rest), "^\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*,\s*(.+?)\s*,\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+        {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} ->
+            {circle, XExpr, YExpr, RadiusExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
 
 parse_pget_stmt_yecc(Rest) ->
     parse_pget_statement(string:trim("PGET" ++ Rest)).
