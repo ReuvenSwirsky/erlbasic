@@ -373,17 +373,49 @@ parse_play_stmt(TextToken) ->
 parse_chain_stmt(TextToken) ->
     parse_required_expr_stmt(TextToken, chain).
 
-parse_open_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_open_stmt_yecc(Rest).
+parse_open_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case re:run(Rest, "(?i)^(.+?)\\s+FOR\\s+(INPUT|OUTPUT|APPEND|RANDOM)\\s+AS\\s*#\\s*(.+?)(?:\\s+LEN\\s*=\\s*(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [PathExpr, Mode, ChannelExpr]} ->
+            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), undefined};
+        {match, [PathExpr, Mode, ChannelExpr, RecLenExpr]} ->
+            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), string:trim(RecLenExpr)};
+        nomatch ->
+            unknown
+    end.
 
-parse_close_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_close_stmt_yecc(Rest).
+parse_close_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case Rest of
+        "" ->
+            {file_close, all};
+        ChannelsText ->
+            case parse_file_channels(split_commas_top_level(ChannelsText), []) of
+                {ok, Channels} -> {file_close, Channels};
+                error -> unknown
+            end
+    end.
 
-parse_field_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_field_stmt_yecc(Rest).
+parse_field_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case re:run(Rest, "(?i)^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, SpecsText]} ->
+            case parse_field_specs(split_commas_top_level(SpecsText), []) of
+                {ok, Specs} -> {file_field, string:trim(ChannelExpr), Specs};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
-parse_put_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_put_stmt_yecc(Rest).
+parse_put_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case re:run(Rest, "(?i)^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {file_put_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
+        nomatch ->
+            unknown
+    end.
 
 parse_color_stmt(TextToken) ->
     case re:run(trim_text(TextToken), "^(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
@@ -617,6 +649,40 @@ parse_read_vars([Part | Rest], Acc) ->
         {ok, Target} -> parse_read_vars(Rest, [Target | Acc]);
         {error, Reason} -> {error, Reason};
         error -> error
+    end.
+
+parse_file_channels([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_file_channels([Part | Rest], Acc) ->
+    Trimmed = string:trim(Part),
+    case string:prefix(Trimmed, "#") of
+        nomatch -> error;
+        ChannelExpr ->
+            Expr = string:trim(ChannelExpr),
+            case Expr of
+                "" -> error;
+                _ -> parse_file_channels(Rest, [Expr | Acc])
+            end
+    end.
+
+parse_field_specs([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_field_specs([Part | Rest], Acc) ->
+    case re:run(string:trim(Part), "(?i)^(.+?)\\s+AS\\s+([A-Za-z][A-Za-z0-9_]*\\$?)$", [{capture, [1, 2], list}]) of
+        {match, [LenExpr, Var]} ->
+            VarUp = string:to_upper(Var),
+            case erlbasic_keywords:is_reserved_variable_name(VarUp) of
+                true -> error;
+                false -> parse_field_specs(Rest, [{string:trim(LenExpr), VarUp} | Acc])
+            end;
+        nomatch ->
+            error
     end.
 
 cond_expr(LeftTok, Op, RightTok) ->
