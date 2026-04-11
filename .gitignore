@@ -27,3 +27,6 @@ test_auth.escript
 # Test output files
 test_output.txt
 *.test.log
+
+# Generated from leex source
+src/erlbasic_eval_lexer_leex.erl

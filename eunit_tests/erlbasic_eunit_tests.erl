@@ -117,6 +117,40 @@ hex_literal_64bit_promotion_test() ->
     {_S2, Output} = erlbasic_interp:handle_input("PRINT BIG%", S1),
     ?assertEqual(match, re:run(lists:flatten(Output), "18446744073709551615", [{capture, none}])).
 
+expr_lexer_operator_token_contract_test() ->
+    ?assertEqual(
+        {ok, [{num, 1}, plus, {num, 2}, minus, {num, 3}, mul, {num, 4}, divi, {num, 5}, intdiv, {num, 6}, pow, {num, 2}, comma, lparen, {num, 8}, rparen]},
+        erlbasic_eval_lexer:tokenize_expr("1+2-3*4/5\\6^2,(8)")).
+
+expr_lexer_identifier_keyword_contract_test() ->
+    ?assertEqual(
+        {ok, [{kw, "LEFT$"}, lparen, {var, "A$"}, comma, {num, 1}, rparen, plus, {kw, "MEM_USED"}, lparen, rparen, plus, {var, "X%"}, plus, {var, "Y&"}, plus, {var, "Z#"}]},
+        erlbasic_eval_lexer:tokenize_expr("LEFT$(A$,1)+MEM_USED()+X%+Y&+Z#")).
+
+expr_lexer_number_contract_test() ->
+    ?assertEqual(
+        {ok, [{num, 16}, plus, {num, 0.6}, plus, {num, 1.25}, plus, {num, 12}]},
+        erlbasic_eval_lexer:tokenize_expr("0x10 + .6 + 1.25 + 12")).
+
+expr_lexer_string_contract_test() ->
+    ?assertEqual(
+        {ok, [{str, "HELLO"}, plus, {str, " WORLD"}]},
+        erlbasic_eval_lexer:tokenize_expr("\"HELLO\"+\" WORLD\" ")).
+
+expr_lexer_error_contract_test() ->
+    ?assertEqual(error, erlbasic_eval_lexer:tokenize_expr("\"unterminated")),
+    ?assertEqual(error, erlbasic_eval_lexer:tokenize_expr(".")),
+    ?assertEqual(error, erlbasic_eval_lexer:tokenize_expr("0x")),
+    ?assertEqual(error, erlbasic_eval_lexer:tokenize_expr("@")),
+    ?assertEqual(error, erlbasic_eval_lexer:tokenize_expr("1 + @")).
+
+expr_eval_precedence_regression_test() ->
+    ?assertEqual({ok, 14, #{}}, erlbasic_eval:eval_expr_result("2+3*4", #{})),
+    ?assertEqual({ok, 20, #{}}, erlbasic_eval:eval_expr_result("(2+3)*4", #{})),
+    ?assertEqual({ok, 512, #{}}, erlbasic_eval:eval_expr_result("2^3^2", #{})),
+    ?assertEqual({ok, 3, #{}}, erlbasic_eval:eval_expr_result("7\\2", #{})),
+    ?assertEqual({ok, 3, #{}}, erlbasic_eval:eval_expr_result("7 MOD 4", #{})).
+
 file_io_parser_and_builtins_test() ->
     ?assertEqual(
         {file_open, "\"tmp.dat\"", "RANDOM", "1", "32"},
