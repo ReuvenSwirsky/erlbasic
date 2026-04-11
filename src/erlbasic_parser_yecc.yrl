@@ -215,4 +215,5 @@ parse_sprite_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_sprite_stmt_yecc(Rest).
 
 parse_raw_stmt({raw_stmt, _Line, Command}) ->
-    erlbasic_parser:parse_statement_legacy(Command).
+    _ = Command,
+    unknown.

@@ -82,11 +82,7 @@ clear_parser_mode() ->
     ok.
 
 parse_statement_legacy(Command) ->
-    Trimmed = string:trim(Command),
-    case re:run(Trimmed, "(?i)^REM(\\s|$)", [{capture, none}]) of
-        match  -> {remark};
-        nomatch -> parse_print_statement(Trimmed)
-    end.
+    parse_statement_yecc(Command).
 
 parse_print_stmt_yecc(Rest) ->
     TrimmedRest = string:trim(Rest),
@@ -655,50 +651,6 @@ validate_program_line(Command) ->
             validate_statement_sequence(Trimmed)
     end.
 
-parse_print_statement(Trimmed) ->
-    case parse_file_print_or_write_statement(Trimmed) of
-        nomatch ->
-            parse_print_statement_inner(Trimmed);
-        Result ->
-            Result
-    end.
-
-parse_print_statement_inner(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PRINT\\s+USING\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [UsingText]} ->
-            case parse_print_using_items(UsingText) of
-                {ok, FormatExpr, Items, EndWithNewline} -> {print_using, FormatExpr, Items, EndWithNewline};
-                error -> unknown
-            end;
-        nomatch ->
-            parse_print_or_qmark_statement(Trimmed)
-    end.
-
-parse_file_print_or_write_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PRINT\\s*#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
-        {match, [ChannelExpr]} ->
-            {file_print, string:trim(ChannelExpr), [], true};
-        {match, [ChannelExpr, ItemsText]} ->
-            case parse_print_items(ItemsText) of
-                {ok, Items, EndWithNewline} ->
-                    {file_print, string:trim(ChannelExpr), Items, EndWithNewline};
-                error ->
-                    unknown
-            end;
-        nomatch ->
-            case re:run(Trimmed, "(?i)^WRITE\\s*#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
-                {match, [ChannelExpr]} ->
-                    {file_write, string:trim(ChannelExpr), []};
-                {match, [ChannelExpr, ItemsText]} ->
-                    case parse_write_items(ItemsText) of
-                        {ok, Exprs} -> {file_write, string:trim(ChannelExpr), Exprs};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    nomatch
-            end
-    end.
-
 parse_write_items(Text) ->
     Parts = split_commas_top_level(Text),
     parse_write_items(Parts, []).
@@ -710,27 +662,6 @@ parse_write_items([Part | Rest], Acc) ->
     case Expr of
         "" -> error;
         _ -> parse_write_items(Rest, [Expr | Acc])
-    end.
-
-parse_print_or_qmark_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PRINT(?:\\s+(.*))?$", [{capture, all_but_first, list}]) of
-        {match, []} ->
-            {print, [], true};
-        {match, [ItemsText]} ->
-            case parse_print_items(ItemsText) of
-                {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
-                error -> unknown
-            end;
-        nomatch ->
-            case re:run(Trimmed, "^\\?\\s*(.*)$", [{capture, [1], list}]) of
-                {match, [ItemsText]} ->
-                    case parse_print_items(ItemsText) of
-                        {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    parse_input_statement(Trimmed)
-            end
     end.
 
 parse_print_using_items(Text) ->
@@ -780,83 +711,6 @@ push_print_part(Rest, CurrentRev, PartsRev, Sep) ->
             parse_print_items(Rest, [], [{Expr, Sep} | PartsRev], false, 0)
     end.
 
-parse_input_statement(Trimmed) ->
-    %% INPUT LINE must be checked before plain INPUT to avoid prefix ambiguity.
-    case re:run(Trimmed, "(?i)^LINE\\s+INPUT\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [ChannelExpr, TargetText]} ->
-            case parse_assignment_target(string:trim(TargetText)) of
-                {ok, Target} -> {file_line_input, string:trim(ChannelExpr), Target};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            parse_input_statement_inner(Trimmed)
-    end.
-
-parse_input_statement_inner(Trimmed) ->
-    case re:run(Trimmed, "(?i)^INPUT\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [ChannelExpr, TargetsText]} ->
-            case parse_input_target_list(split_commas_top_level(TargetsText), []) of
-                {ok, Targets} -> {file_input, string:trim(ChannelExpr), Targets};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            parse_input_statement_console(Trimmed)
-    end.
-
-parse_input_statement_console(Trimmed) ->
-    %% INPUT LINE must be checked before plain INPUT to avoid prefix ambiguity.
-    case re:run(Trimmed, "(?i)^INPUT\\s+LINE\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [TargetText]} ->
-            case parse_assignment_target(string:trim(TargetText)) of
-                {ok, Target} -> {input_line, Target};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            case re:run(Trimmed, "(?i)^INPUT\\s+(.+)$", [{capture, [1], list}]) of
-                {match, [TargetsText]} ->
-                    case parse_input_target_list(split_commas_top_level(TargetsText), []) of
-                        {ok, Targets} -> {input, Targets};
-                        {error, Reason} -> {parse_error, Reason};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    parse_get_statement(Trimmed)
-            end
-    end.
-
-%% GETKEY must be matched before GET to avoid prefix collision.
-parse_get_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^GET\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [ChannelExpr, RecordExpr]} ->
-            {file_get_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
-        nomatch ->
-            parse_get_statement_inner(Trimmed)
-    end.
-
-parse_get_statement_inner(Trimmed) ->
-    case re:run(Trimmed, "(?i)^GETKEY\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [TargetText]} ->
-            case parse_assignment_target(string:trim(TargetText)) of
-                {ok, Target} -> {getkey, Target};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            case re:run(Trimmed, "(?i)^GET\\s+(.+)$", [{capture, [1], list}]) of
-                {match, [TargetText]} ->
-                    case parse_assignment_target(string:trim(TargetText)) of
-                        {ok, Target} -> {get, Target};
-                        {error, Reason} -> {parse_error, Reason};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    parse_let_statement(Trimmed)
-            end
-    end.
-
 parse_input_target_list([], []) ->
     error;
 parse_input_target_list([], Acc) ->
@@ -866,30 +720,6 @@ parse_input_target_list([Part | Rest], Acc) ->
         {ok, Target} -> parse_input_target_list(Rest, [Target | Acc]);
         {error, Reason} -> {error, Reason};
         error -> error
-    end.
-
-parse_let_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^LET\\s+(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [TargetText, Expr]} ->
-            case parse_assignment_target(TargetText) of
-                {ok, Target} -> {'let', Target, Expr};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            parse_dim_statement(Trimmed)
-    end.
-
-parse_dim_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^DIM\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [DeclText]} ->
-            case parse_dim_decls(DeclText) of
-                {ok, Decls} -> {dim, Decls};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            parse_def_fn_statement(Trimmed)
     end.
 
 parse_dim_decls(Text) ->
@@ -926,36 +756,6 @@ parse_dim_decl(Text) ->
             error
     end.
 
-parse_def_fn_statement(Trimmed) ->
-    case re:run(
-        Trimmed,
-        "(?i)^DEF\\s+FN([A-Za-z][A-Za-z0-9_]*)(?:\\s*\\(\\s*" ++ ?VAR_PATTERN ++ "\\s*\\))?\\s*=\\s*(.+)$",
-        [{capture, all_but_first, list}]) of
-        {match, [FnSuffix, Expr]} ->
-            {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, Expr};
-        {match, [FnSuffix, ArgVar, Expr]} ->
-            case is_reserved_variable_name(ArgVar) of
-                true ->
-                    {parse_error, reserved_word};
-                false ->
-                    {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), Expr}
-            end;
-        nomatch ->
-            parse_if_statement(Trimmed)
-    end.
-
-parse_if_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^IF\\s+(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
-        {match, [CondExpr, ThenStmt]} ->
-            {if_then_else, CondExpr, normalize_if_branch_statement(ThenStmt), undefined};
-        {match, [CondExpr, ThenStmt, ElseStmt]} ->
-            {if_then_else, CondExpr,
-             normalize_if_branch_statement(ThenStmt),
-             normalize_if_branch_statement(ElseStmt)};
-        nomatch ->
-            parse_error_handler_statement(Trimmed)
-    end.
-
 normalize_if_branch_statement(Stmt) ->
     Trimmed = string:trim(Stmt),
     case re:run(Trimmed, "^(\\d+)$", [{capture, [1], list}]) of
@@ -965,143 +765,9 @@ normalize_if_branch_statement(Stmt) ->
             Trimmed
     end.
 
-parse_error_handler_statement(Trimmed) ->
-    %% Check for ON ERROR GOTO
-    case re:run(Trimmed, "(?i)^ON\\s+ERROR\\s+GOTO\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [TargetExpr]} ->
-            {on_error_goto, string:trim(TargetExpr)};
-        nomatch ->
-            parse_resume_statement(Trimmed)
-    end.
-
-parse_resume_statement(Trimmed) ->
-    %% Check for RESUME variants
-    case re:run(Trimmed, "(?i)^RESUME\\s+NEXT$", [{capture, none}]) of
-        match ->
-            {resume_next};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^RESUME\\s+(.+)$", [{capture, [1], list}]) of
-                {match, [LineExpr]} ->
-                    case string:trim(LineExpr) of
-                        "0" -> {resume};  % RESUME 0 is same as RESUME
-                        Other -> {resume_line, Other}
-                    end;
-                nomatch ->
-                    case re:run(Trimmed, "(?i)^RESUME$", [{capture, none}]) of
-                        match ->
-                            {resume};
-                        nomatch ->
-                            parse_jump_statement(Trimmed)
-                    end
-            end
-    end.
-
-parse_jump_statement(Trimmed) ->
-    %% Check for ON SPRITE GOSUB before generic ON...GOSUB.
-    case re:run(Trimmed, "(?i)^ON\\s+SPRITE\\s+GOSUB\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [TargetExpr]} ->
-            {on_sprite_gosub, string:trim(TargetExpr)};
-        nomatch ->
-            %% Check for ON PLAY(n) GOSUB before general ON...GOSUB to avoid swallowing it
-            case re:run(Trimmed, "(?i)^ON\\s+PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
-                {match, [NExpr, TargetExpr]} ->
-                    {on_play_gosub, string:trim(NExpr), string:trim(TargetExpr)};
-                nomatch ->
-                    %% Check for ON TIMER(n) GOSUB before general ON...GOSUB.
-                    case re:run(Trimmed, "(?i)^ON\\s+TIMER\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
-                        {match, [NExpr, TargetExpr]} ->
-                            {on_timer_gosub, string:trim(NExpr), string:trim(TargetExpr)};
-                        nomatch ->
-                            %% Check for ON...GOSUB / ON...GOTO first (computed jump)
-                            case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1,2], list}]) of
-                                {match, [Expr, Targets]} ->
-                                    TargetList = parse_comma_separated_list(Targets),
-                                    {on_gosub, Expr, TargetList};
-                                nomatch ->
-                                    case re:run(Trimmed, "(?i)^ON\\s+(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1,2], list}]) of
-                                        {match, [Expr, Targets]} ->
-                                            TargetList = parse_comma_separated_list(Targets),
-                                            {on_goto, Expr, TargetList};
-                                        nomatch ->
-                                            parse_simple_jump_statement(Trimmed)
-                                    end
-                            end
-                    end
-            end
-    end.
-
-parse_simple_jump_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^GOTO\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [LineExpr]} ->
-            {goto, LineExpr};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^GOSUB\\s+(.+)$", [{capture, [1], list}]) of
-                {match, [LineExpr]} ->
-                    {gosub, LineExpr};
-                nomatch ->
-                    parse_loop_statement(Trimmed)
-            end
-    end.
-
 parse_comma_separated_list(Str) ->
     Parts = string:split(string:trim(Str), ",", all),
     [string:trim(P) || P <- Parts].
-
-parse_loop_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^FOR\\s+" ++ ?LOOP_VAR_PATTERN ++ "\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$", [{capture, all_but_first, list}]) of
-        {match, [Var, StartExpr, EndExpr]} ->
-            case is_reserved_variable_name(Var) of
-                true -> {parse_error, reserved_word};
-                false -> {for_loop, string:to_upper(Var), StartExpr, EndExpr, undefined}
-            end;
-        {match, [Var, StartExpr, EndExpr, StepExpr]} ->
-            case is_reserved_variable_name(Var) of
-                true -> {parse_error, reserved_word};
-                false -> {for_loop, string:to_upper(Var), StartExpr, EndExpr, StepExpr}
-            end;
-        nomatch ->
-            parse_next_statement(Trimmed)
-    end.
-
-parse_next_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^NEXT(?:\\s+" ++ ?VAR_PATTERN ++ ")?$", [{capture, all_but_first, list}]) of
-        {match, []} ->
-            {next_loop, undefined};
-        {match, [Var]} ->
-            case is_reserved_variable_name(Var) of
-                true -> {parse_error, reserved_word};
-                false -> {next_loop, string:to_upper(Var)}
-            end;
-        nomatch ->
-            parse_locate_statement(Trimmed)
-    end.
-
-parse_locate_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^LOCATE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [RowExpr, ColExpr]} ->
-            {locate, RowExpr, ColExpr};
-        nomatch ->
-            parse_data_or_read_statement(Trimmed)
-    end.
-
-parse_data_or_read_statement(Trimmed) ->
-    case parse_read_statement(Trimmed) of
-        nomatch ->
-            parse_data_statement(Trimmed);
-        Result ->
-            Result
-    end.
-
-parse_read_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^READ\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [VarText]} ->
-            case parse_read_vars(VarText) of
-                {ok, Vars} -> {read_data, Vars};
-                error -> unknown
-            end;
-        nomatch ->
-            nomatch
-    end.
 
 parse_read_vars(Text) ->
     Parts = split_commas_top_level(Text),
@@ -1120,38 +786,6 @@ parse_read_vars([Part | Rest], Acc) ->
             {error, Reason};
         error ->
             error
-    end.
-
-parse_data_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^DATA(?:\\s+(.*))?$", [{capture, all_but_first, list}]) of
-        {match, []} ->
-            {data, []};
-        {match, [DataText]} ->
-            {data, normalize_data_items(split_commas_top_level(DataText))};
-        nomatch ->
-            parse_restore_statement(Trimmed)
-    end.
-
-parse_restore_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^RESTORE\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [LineExpr]} ->
-            {restore, LineExpr};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^RESTORE$", [{capture, none}]) of
-                match   -> {restore, all};
-                nomatch -> parse_home_statement(Trimmed)
-            end
-    end.
-
-parse_home_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^HOME\\s+(\\S+)$", [{capture, [1], list}]) of
-        {match, [Sub]} ->
-            case string:to_upper(Sub) of
-                "PUBLISH" -> {home_publish};
-                _         -> unknown
-            end;
-        nomatch ->
-            parse_keyword_statement(Trimmed)
     end.
 
 split_commas_top_level(Text) ->
@@ -1232,135 +866,6 @@ unquote_data_item([$" | Rest]) ->
 unquote_data_item(_Other) ->
     error.
 
-parse_keyword_statement(Trimmed) ->
-    case string:to_upper(Trimmed) of
-        "CLS"  -> {cls};
-        "HGR"  -> {hgr};
-        "HGR2" -> {hgr2};
-        "TEXT" -> {text};
-        "STOP" -> {stop_stmt};
-        "TRON" -> {tron};
-        "TROFF" -> {troff};
-        "RETURN" -> {'return'};
-        "END" -> {'end'};
-        _ -> parse_pset_statement(Trimmed)
-    end.
-
-parse_pset_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PSET\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, ColorExpr]} -> {pset, XExpr, YExpr, ColorExpr};
-        nomatch -> parse_line_statement(Trimmed)
-    end.
-
-parse_line_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^LINE\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", 
-                [{capture, [1, 2, 3, 4, 5], list}]) of
-        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} -> 
-            {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
-        nomatch -> parse_lineto_statement(Trimmed)
-    end.
-
-parse_lineto_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^LINETO\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", 
-                [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, ColorExpr]} -> 
-            {lineto, XExpr, YExpr, ColorExpr};
-        nomatch -> parse_rect_statement(Trimmed)
-    end.
-
-parse_rect_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^RECT\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", 
-                [{capture, [1, 2, 3, 4, 5], list}]) of
-        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} -> 
-            {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
-        nomatch -> parse_circle_statement(Trimmed)
-    end.
-
-parse_circle_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^CIRCLE\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", 
-                [{capture, [1, 2, 3, 4], list}]) of
-        {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} -> 
-            {circle, XExpr, YExpr, RadiusExpr, ColorExpr};
-        nomatch -> parse_sleep_statement(Trimmed)
-    end.
-
-parse_sleep_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^SLEEP\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [Expr]} -> {sleep, Expr};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^SLEEP$", [{capture, none}]) of
-                match   -> {sleep_keypress};
-                nomatch -> parse_flush_buffer_statement(Trimmed)
-            end
-    end.
-
-parse_flush_buffer_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^FLUSH$", [{capture, none}]) of
-        match -> {flush_stmt};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^BUFFER\\s+(ON|OFF)$", [{capture, [1], list}]) of
-                {match, [OnOff]} ->
-                    case string:to_upper(OnOff) of
-                        "ON"  -> {buffer_mode, on};
-                        "OFF" -> {buffer_mode, off}
-                    end;
-                nomatch -> parse_sound_statement(Trimmed)
-            end
-    end.
-
-parse_sound_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^SOUND\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
-        {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
-            {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr};
-        nomatch ->
-            parse_play_statement(Trimmed)
-    end.
-
-parse_play_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PLAY\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [Expr]} -> {play_stmt, string:trim(Expr)};
-        nomatch         -> parse_chain_statement(Trimmed)
-    end.
-
-parse_chain_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^CHAIN\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [FileExpr]} -> {chain, string:trim(FileExpr)};
-        nomatch             -> parse_file_misc_statement(Trimmed)
-    end.
-
-parse_file_misc_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^OPEN\\s+(.+?)\\s+FOR\\s+(INPUT|OUTPUT|APPEND|RANDOM)\\s+AS\\s*#\\s*(.+?)(?:\\s+LEN\\s*=\\s*(.+))?$", [{capture, all_but_first, list}]) of
-        {match, [PathExpr, Mode, ChannelExpr]} ->
-            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), undefined};
-        {match, [PathExpr, Mode, ChannelExpr, RecLenExpr]} ->
-            {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), string:trim(RecLenExpr)};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^CLOSE(?:\\s+(.+))?$", [{capture, all_but_first, list}]) of
-                {match, []} ->
-                    {file_close, all};
-                {match, [ChannelsText]} ->
-                    case parse_file_channels(ChannelsText) of
-                        {ok, Channels} -> {file_close, Channels};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    case re:run(Trimmed, "(?i)^FIELD\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-                        {match, [ChannelExpr, SpecsText]} ->
-                            case parse_field_specs(SpecsText) of
-                                {ok, Specs} -> {file_field, string:trim(ChannelExpr), Specs};
-                                error -> unknown
-                            end;
-                        nomatch ->
-                            case re:run(Trimmed, "(?i)^PUT\\s*#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-                                {match, [ChannelExpr, RecordExpr]} ->
-                                    {file_put_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
-                                nomatch ->
-                                    parse_color_statement(Trimmed)
-                            end
-                    end
-            end
-    end.
-
 parse_file_channels(Text) ->
     Parts = split_commas_top_level(Text),
     parse_file_channels(Parts, []).
@@ -1407,91 +912,12 @@ parse_field_specs([Part | Rest], Acc) ->
             error
     end.
 
-parse_color_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^COLOR\\s+(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
-        {match, [FgExpr]} ->
-            {color, FgExpr, undefined};
-        {match, [FgExpr, BgExpr]} ->
-            {color, FgExpr, BgExpr};
-        nomatch ->
-            parse_pget_statement(Trimmed)
-    end.
-
-parse_pget_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^PGET\\s*\\((.+),(.+)\\),(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, TargetText]} ->
-            case parse_assignment_target(string:trim(TargetText)) of
-                {ok, Target} -> {pget, string:trim(XExpr), string:trim(YExpr), Target};
-                _            -> unknown
-            end;
-        nomatch -> parse_sprite_statement(Trimmed)
-    end.
-
-parse_sprite_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^SPRITE\\s+CLEAR$", [{capture, none}]) of
-        match -> {sprite_clear};
-        nomatch ->
-            case re:run(Trimmed, "(?i)^SPRITE\\s+HIDE\\s+(.+)$", [{capture, [1], list}]) of
-                {match, [IdExpr]} ->
-                    {sprite_hide, string:trim(IdExpr)};
-                nomatch ->
-                    case re:run(Trimmed, "(?i)^SPRITE\\s+SHOW\\s+(.+)$", [{capture, [1], list}]) of
-                        {match, [IdExpr]} ->
-                            {sprite_show, string:trim(IdExpr)};
-                        nomatch ->
-                            case re:run(Trimmed, "(?i)^SPRITE\\s+SCALE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-                                {match, [IdExpr, ScaleExpr]} ->
-                                    {sprite_scale, string:trim(IdExpr), string:trim(ScaleExpr)};
-                                nomatch ->
-                                    case re:run(Trimmed, "(?i)^SPRITE\\s+LOAD\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
-                                        {match, [IdExpr, WidthExpr, HeightExpr, SourceText]} ->
-                                            case parse_sprite_load_source(SourceText) of
-                                                {ok, SourceTarget} ->
-                                                    {sprite_load, string:trim(IdExpr), string:trim(WidthExpr), string:trim(HeightExpr), SourceTarget};
-                                                _ ->
-                                                    unknown
-                                            end;
-                                        nomatch ->
-                                            case re:run(Trimmed, "(?i)^SPRITE\\s+(.+?)\\s*,\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)$", [{capture, [1, 2, 3], list}]) of
-                                                {match, [IdExpr, XExpr, YExpr]} ->
-                                                    {sprite_move, string:trim(IdExpr), string:trim(XExpr), string:trim(YExpr)};
-                                                nomatch ->
-                                                    parse_getchar_statement(Trimmed)
-                                            end
-                                    end
-                            end
-                    end
-            end
-    end.
-
 parse_sprite_load_source(Text) ->
     case parse_assignment_target(string:trim(Text)) of
         {ok, Target = {array_target, _Var, [_]}} ->
             {ok, Target};
         _ ->
             error
-    end.
-
-parse_getchar_statement(Trimmed) ->
-    case re:run(Trimmed, "(?i)^GETCHAR\\s+(.+),(.+),(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [RowExpr, ColExpr, TargetText]} ->
-            case parse_assignment_target(string:trim(TargetText)) of
-                {ok, Target} -> {getchar, string:trim(RowExpr), string:trim(ColExpr), Target};
-                _            -> unknown
-            end;
-        nomatch -> parse_implicit_let_statement(Trimmed)
-    end.
-
-parse_implicit_let_statement(Trimmed) ->
-    case re:run(Trimmed, "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [TargetText, Expr]} ->
-            case parse_assignment_target(TargetText) of
-                {ok, Target} -> {'let', Target, Expr};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            unknown
     end.
 
 should_split_top_level_sequence(Command) ->
