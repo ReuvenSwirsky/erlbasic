@@ -1,5 +1,5 @@
-Nonterminals stmt.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark text.
+Nonterminals stmt cond.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge text.
 Rootsymbol stmt.
 
 stmt -> kw_print text : parse_print_stmt('$2').
@@ -14,14 +14,14 @@ stmt -> kw_getkey text : parse_getkey_stmt('$2').
 stmt -> kw_getchar text : parse_getchar_stmt('$2').
 stmt -> kw_goto text : parse_goto_stmt('$2').
 stmt -> kw_gosub text : parse_gosub_stmt('$2').
-stmt -> kw_if text kw_then text :
+stmt -> kw_if cond kw_then text :
     {if_then_else,
-     text_value('$2'),
+    '$2',
      normalize_if_branch_statement(text_value('$4')),
      undefined}.
-stmt -> kw_if text kw_then text kw_else text :
+stmt -> kw_if cond kw_then text kw_else text :
     {if_then_else,
-     text_value('$2'),
+    '$2',
      normalize_if_branch_statement(text_value('$4')),
      normalize_if_branch_statement(text_value('$6'))}.
 stmt -> kw_if text : parse_if_stmt('$2').
@@ -77,6 +77,14 @@ stmt -> kw_pget text : parse_pget_stmt('$2').
 stmt -> kw_sprite text : parse_sprite_stmt('$2').
 stmt -> qmark text : parse_qmark_stmt('$2').
 stmt -> raw_stmt : parse_raw_stmt('$1').
+
+cond -> text : text_value('$1').
+cond -> text op_lt text : cond_expr('$1', "<", '$3').
+cond -> text op_gt text : cond_expr('$1', ">", '$3').
+cond -> text op_eq text : cond_expr('$1', "=", '$3').
+cond -> text op_ne text : cond_expr('$1', "<>", '$3').
+cond -> text op_le text : cond_expr('$1', "<=", '$3').
+cond -> text op_ge text : cond_expr('$1', ">=", '$3').
 
 Erlang code.
 
@@ -280,6 +288,9 @@ parse_next_ident({ident, _Line, Var0}) ->
 parse_on_targets(TargetsText) ->
     Parts = string:split(string:trim(TargetsText), ",", all),
     [string:trim(P) || P <- Parts].
+
+cond_expr(LeftTok, Op, RightTok) ->
+    string:trim(text_value(LeftTok)) ++ Op ++ string:trim(text_value(RightTok)).
 
 trim_text({text, _Line, Rest}) ->
     string:trim(Rest).

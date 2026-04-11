@@ -46,9 +46,8 @@ tokenize_if_statement(Rest) ->
                                 {"", _} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
                                 {_, ""} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
                                 _ ->
-                                    {ok, [
-                                        {kw_if, 1},
-                                        {text, 1, Cond},
+                                    CondTokens = condition_tokens(Cond),
+                                    {ok, [{kw_if, 1} | CondTokens] ++ [
                                         {kw_then, 1},
                                         {text, 1, ThenStmt},
                                         {kw_else, 1},
@@ -56,9 +55,8 @@ tokenize_if_statement(Rest) ->
                                     ]}
                             end;
                         nomatch ->
-                            {ok, [
-                                {kw_if, 1},
-                                {text, 1, Cond},
+                            CondTokens = condition_tokens(Cond),
+                            {ok, [{kw_if, 1} | CondTokens] ++ [
                                 {kw_then, 1},
                                 {text, 1, ThenElse}
                             ]}
@@ -67,6 +65,30 @@ tokenize_if_statement(Rest) ->
         nomatch ->
             {ok, [{kw_if, 1}, {text, 1, Rest}]}
     end.
+
+condition_tokens(Cond0) ->
+    Cond = string:trim(Cond0),
+    case re:run(Cond, "^(.+?)(<=|>=|<>|=|<|>)(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [LeftText, OpText, RightText]} ->
+            Left = string:trim(LeftText),
+            Right = string:trim(RightText),
+            case {Left, Right, comparator_token(OpText)} of
+                {"", _, _} -> [{text, 1, Cond}];
+                {_, "", _} -> [{text, 1, Cond}];
+                {_, _, undefined} -> [{text, 1, Cond}];
+                {_, _, OpToken} -> [{text, 1, Left}, {OpToken, 1}, {text, 1, Right}]
+            end;
+        nomatch ->
+            [{text, 1, Cond}]
+    end.
+
+comparator_token("<") -> op_lt;
+comparator_token(">") -> op_gt;
+comparator_token("=") -> op_eq;
+comparator_token("<>") -> op_ne;
+comparator_token("<=") -> op_le;
+comparator_token(">=") -> op_ge;
+comparator_token(_Other) -> undefined.
 
 tokenize_for_statement(Rest) ->
     Trimmed = string:trim(Rest),
