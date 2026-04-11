@@ -284,14 +284,37 @@ parse_dim_stmt({text, _Line, Rest}) ->
 parse_def_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_def_stmt_yecc(Rest).
 
-parse_data_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_data_stmt_yecc(Rest).
+parse_data_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case Rest of
+        "" ->
+            {data, []};
+        DataText ->
+            Items = normalize_data_items(split_commas_top_level(DataText)),
+            {data, Items}
+    end.
 
-parse_read_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_read_stmt_yecc(Rest).
+parse_read_stmt(TextToken) ->
+    Rest = string:trim(trim_text(TextToken)),
+    case Rest of
+        "" ->
+            unknown;
+        VarText ->
+            case parse_read_vars(split_commas_top_level(VarText), []) of
+                {ok, Vars} -> {read_data, Vars};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end
+    end.
 
-parse_restore_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_restore_stmt_yecc(Rest).
+parse_restore_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case string:trim(Rest) of
+        "" ->
+            {restore, all};
+        LineExpr ->
+            {restore, string:trim(LineExpr)}
+    end.
 
 parse_return_stmt(TextToken) ->
     parse_noarg_stmt(TextToken, {'return'}).
@@ -563,6 +586,38 @@ split_commas_top_level([$, | Rest], CurrentRev, PartsRev, false, 0) ->
     split_commas_top_level(Rest, [], [lists:reverse(CurrentRev) | PartsRev], false, 0);
 split_commas_top_level([Ch | Rest], CurrentRev, PartsRev, InString, Depth) ->
     split_commas_top_level(Rest, [Ch | CurrentRev], PartsRev, InString, Depth).
+
+normalize_data_items(Parts) ->
+    [normalize_data_item(Part) || Part <- Parts].
+
+normalize_data_item(Part) ->
+    Trimmed = string:trim(Part),
+    case unquote_data_item(Trimmed) of
+        {ok, Value} -> Value;
+        error -> Trimmed
+    end.
+
+unquote_data_item([$" | Rest]) ->
+    case lists:reverse(Rest) of
+        [$" | MiddleRev] ->
+            {ok, lists:reverse(MiddleRev)};
+        _ ->
+            error
+    end;
+unquote_data_item(_Other) ->
+    error.
+
+parse_read_vars([], Acc) ->
+    case Acc of
+        [] -> error;
+        _ -> {ok, lists:reverse(Acc)}
+    end;
+parse_read_vars([Part | Rest], Acc) ->
+    case parse_assignment_target(string:trim(Part)) of
+        {ok, Target} -> parse_read_vars(Rest, [Target | Acc]);
+        {error, Reason} -> {error, Reason};
+        error -> error
+    end.
 
 cond_expr(LeftTok, Op, RightTok) ->
     string:trim(text_value(LeftTok)) ++ Op ++ string:trim(text_value(RightTok)).
