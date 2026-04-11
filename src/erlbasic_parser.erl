@@ -1,16 +1,274 @@
 -module(erlbasic_parser).
 
--export([parse_statement/1, should_split_top_level_sequence/1, split_statements/1, validate_program_line/1]).
+-export([
+    parse_statement/1,
+    set_parser_mode/1,
+    clear_parser_mode/0,
+    parse_statement_legacy/1,
+    parse_statement_yecc/1,
+    parse_print_stmt_yecc/1,
+    parse_write_stmt_yecc/1,
+    parse_qmark_stmt_yecc/1,
+    parse_let_stmt_yecc/1,
+    parse_rem_stmt_yecc/1,
+    parse_implicit_let_stmt_yecc/1,
+    parse_line_input_stmt_yecc/1,
+    parse_input_stmt_yecc/1,
+    parse_get_stmt_yecc/1,
+    parse_getkey_stmt_yecc/1,
+    parse_getchar_stmt_yecc/1,
+    parse_goto_stmt_yecc/1,
+    parse_gosub_stmt_yecc/1,
+    parse_if_stmt_yecc/1,
+    parse_for_stmt_yecc/1,
+    parse_next_stmt_yecc/1,
+    parse_on_stmt_yecc/1,
+    parse_resume_stmt_yecc/1,
+    parse_dim_stmt_yecc/1,
+    parse_def_stmt_yecc/1,
+    parse_data_stmt_yecc/1,
+    parse_read_stmt_yecc/1,
+    parse_restore_stmt_yecc/1,
+    parse_return_stmt_yecc/1,
+    parse_end_stmt_yecc/1,
+    parse_stop_stmt_yecc/1,
+    parse_cls_stmt_yecc/1,
+    parse_hgr_stmt_yecc/1,
+    parse_hgr2_stmt_yecc/1,
+    parse_text_stmt_yecc/1,
+    parse_tron_stmt_yecc/1,
+    parse_troff_stmt_yecc/1,
+    parse_flush_stmt_yecc/1,
+    parse_buffer_stmt_yecc/1,
+    parse_sleep_stmt_yecc/1,
+    parse_sound_stmt_yecc/1,
+    parse_play_stmt_yecc/1,
+    parse_chain_stmt_yecc/1,
+    parse_open_stmt_yecc/1,
+    parse_close_stmt_yecc/1,
+    parse_field_stmt_yecc/1,
+    parse_put_stmt_yecc/1,
+    parse_color_stmt_yecc/1,
+    parse_locate_stmt_yecc/1,
+    parse_home_stmt_yecc/1,
+    parse_pset_stmt_yecc/1,
+    parse_linegfx_stmt_yecc/1,
+    parse_lineto_stmt_yecc/1,
+    parse_rect_stmt_yecc/1,
+    parse_circle_stmt_yecc/1,
+    parse_pget_stmt_yecc/1,
+    parse_sprite_stmt_yecc/1,
+    should_split_top_level_sequence/1,
+    split_statements/1,
+    validate_program_line/1
+]).
 
 -define(VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)").
 -define(VAR_BASE_PATTERN, "([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)").
 -define(LOOP_VAR_PATTERN, "([A-Za-z][A-Za-z0-9_]*[%&#]?)").
 
 parse_statement(Command) ->
+    case parser_mode() of
+        yecc -> parse_statement_yecc(Command);
+        _ -> parse_statement_legacy(Command)
+    end.
+
+set_parser_mode(Mode) when Mode =:= legacy; Mode =:= yecc ->
+    put(erlbasic_parser_mode, Mode),
+    ok.
+
+clear_parser_mode() ->
+    erase(erlbasic_parser_mode),
+    ok.
+
+parse_statement_legacy(Command) ->
     Trimmed = string:trim(Command),
     case re:run(Trimmed, "(?i)^REM(\\s|$)", [{capture, none}]) of
         match  -> {remark};
         nomatch -> parse_print_statement(Trimmed)
+    end.
+
+parse_print_stmt_yecc(Rest) ->
+    parse_print_statement(string:trim("PRINT" ++ Rest)).
+
+parse_write_stmt_yecc(Rest) ->
+    parse_print_statement(string:trim("WRITE" ++ Rest)).
+
+parse_qmark_stmt_yecc(Rest) ->
+    parse_print_or_qmark_statement(string:trim("?" ++ Rest)).
+
+parse_let_stmt_yecc(Rest) ->
+    parse_let_statement(string:trim("LET" ++ Rest)).
+
+parse_rem_stmt_yecc(_Rest) ->
+    {remark}.
+
+parse_implicit_let_stmt_yecc(Rest) ->
+    parse_implicit_let_statement(string:trim(Rest)).
+
+parse_line_input_stmt_yecc(Rest) ->
+    parse_input_statement(string:trim("LINE INPUT" ++ Rest)).
+
+parse_input_stmt_yecc(Rest) ->
+    parse_input_statement(string:trim("INPUT" ++ Rest)).
+
+parse_get_stmt_yecc(Rest) ->
+    parse_get_statement(string:trim("GET" ++ Rest)).
+
+parse_getkey_stmt_yecc(Rest) ->
+    parse_get_statement(string:trim("GETKEY" ++ Rest)).
+
+parse_getchar_stmt_yecc(Rest) ->
+    parse_getchar_statement(string:trim("GETCHAR" ++ Rest)).
+
+parse_goto_stmt_yecc(Rest) ->
+    parse_simple_jump_statement(string:trim("GOTO" ++ Rest)).
+
+parse_gosub_stmt_yecc(Rest) ->
+    parse_simple_jump_statement(string:trim("GOSUB" ++ Rest)).
+
+parse_if_stmt_yecc(Rest) ->
+    parse_if_statement(string:trim("IF" ++ Rest)).
+
+parse_for_stmt_yecc(Rest) ->
+    parse_loop_statement(string:trim("FOR" ++ Rest)).
+
+parse_next_stmt_yecc(Rest) ->
+    parse_next_statement(string:trim("NEXT" ++ Rest)).
+
+parse_on_stmt_yecc(Rest) ->
+    parse_jump_statement(string:trim("ON" ++ Rest)).
+
+parse_resume_stmt_yecc(Rest) ->
+    parse_resume_statement(string:trim("RESUME" ++ Rest)).
+
+parse_dim_stmt_yecc(Rest) ->
+    parse_dim_statement(string:trim("DIM" ++ Rest)).
+
+parse_def_stmt_yecc(Rest) ->
+    parse_def_fn_statement(string:trim("DEF" ++ Rest)).
+
+parse_data_stmt_yecc(Rest) ->
+    parse_data_statement(string:trim("DATA" ++ Rest)).
+
+parse_read_stmt_yecc(Rest) ->
+    parse_read_statement(string:trim("READ" ++ Rest)).
+
+parse_restore_stmt_yecc(Rest) ->
+    parse_restore_statement(string:trim("RESTORE" ++ Rest)).
+
+parse_return_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("RETURN" ++ Rest)).
+
+parse_end_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("END" ++ Rest)).
+
+parse_stop_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("STOP" ++ Rest)).
+
+parse_cls_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("CLS" ++ Rest)).
+
+parse_hgr_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("HGR" ++ Rest)).
+
+parse_hgr2_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("HGR2" ++ Rest)).
+
+parse_text_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("TEXT" ++ Rest)).
+
+parse_tron_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("TRON" ++ Rest)).
+
+parse_troff_stmt_yecc(Rest) ->
+    parse_keyword_statement(string:trim("TROFF" ++ Rest)).
+
+parse_flush_stmt_yecc(Rest) ->
+    parse_flush_buffer_statement(string:trim("FLUSH" ++ Rest)).
+
+parse_buffer_stmt_yecc(Rest) ->
+    parse_flush_buffer_statement(string:trim("BUFFER" ++ Rest)).
+
+parse_sleep_stmt_yecc(Rest) ->
+    parse_sleep_statement(string:trim("SLEEP" ++ Rest)).
+
+parse_sound_stmt_yecc(Rest) ->
+    parse_sound_statement(string:trim("SOUND" ++ Rest)).
+
+parse_play_stmt_yecc(Rest) ->
+    parse_play_statement(string:trim("PLAY" ++ Rest)).
+
+parse_chain_stmt_yecc(Rest) ->
+    parse_chain_statement(string:trim("CHAIN" ++ Rest)).
+
+parse_open_stmt_yecc(Rest) ->
+    parse_file_misc_statement(string:trim("OPEN" ++ Rest)).
+
+parse_close_stmt_yecc(Rest) ->
+    parse_file_misc_statement(string:trim("CLOSE" ++ Rest)).
+
+parse_field_stmt_yecc(Rest) ->
+    parse_file_misc_statement(string:trim("FIELD" ++ Rest)).
+
+parse_put_stmt_yecc(Rest) ->
+    parse_file_misc_statement(string:trim("PUT" ++ Rest)).
+
+parse_color_stmt_yecc(Rest) ->
+    parse_color_statement(string:trim("COLOR" ++ Rest)).
+
+parse_locate_stmt_yecc(Rest) ->
+    parse_locate_statement(string:trim("LOCATE" ++ Rest)).
+
+parse_home_stmt_yecc(Rest) ->
+    parse_home_statement(string:trim("HOME" ++ Rest)).
+
+parse_pset_stmt_yecc(Rest) ->
+    parse_pset_statement(string:trim("PSET" ++ Rest)).
+
+parse_linegfx_stmt_yecc(Rest) ->
+    parse_pset_statement(string:trim("LINE" ++ Rest)).
+
+parse_lineto_stmt_yecc(Rest) ->
+    parse_pset_statement(string:trim("LINETO" ++ Rest)).
+
+parse_rect_stmt_yecc(Rest) ->
+    parse_pset_statement(string:trim("RECT" ++ Rest)).
+
+parse_circle_stmt_yecc(Rest) ->
+    parse_pset_statement(string:trim("CIRCLE" ++ Rest)).
+
+parse_pget_stmt_yecc(Rest) ->
+    parse_pget_statement(string:trim("PGET" ++ Rest)).
+
+parse_sprite_stmt_yecc(Rest) ->
+    parse_sprite_statement(string:trim("SPRITE" ++ Rest)).
+
+parser_mode() ->
+    case get(erlbasic_parser_mode) of
+        legacy ->
+            legacy;
+        yecc ->
+            yecc;
+        _ ->
+            case application:get_env(erlbasic, parser_mode) of
+                {ok, yecc} -> yecc;
+                _ -> legacy
+            end
+    end.
+
+%% Phase-1 yecc bridge: run statement text through yecc, then delegate
+%% to legacy parser behavior via grammar actions for exact compatibility.
+parse_statement_yecc(Command) ->
+    Trimmed = string:trim(Command),
+    case erlbasic_parser_yecc_lexer:tokenize_statement(Trimmed) of
+        {ok, Tokens} ->
+            case erlbasic_parser_yecc:parse(Tokens) of
+                {ok, Parsed} -> Parsed;
+                _ -> unknown
+            end;
+        error ->
+            unknown
     end.
 
 validate_program_line(Command) ->
