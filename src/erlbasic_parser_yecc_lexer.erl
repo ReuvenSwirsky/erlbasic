@@ -5,6 +5,16 @@
 tokenize_statement(Text0) when is_list(Text0) ->
     Text = string:trim(Text0),
     case classify_statement(Text) of
+        {token, kw_if, Rest} ->
+            tokenize_if_statement(Rest);
+        {token, kw_for, Rest} ->
+            tokenize_for_statement(Rest);
+        {token, kw_next, Rest} ->
+            tokenize_next_statement(Rest);
+        {token, kw_on, Rest} ->
+            tokenize_on_statement(Rest);
+        {token, kw_resume, Rest} ->
+            tokenize_resume_statement(Rest);
         {token, Token, Rest} ->
             {ok, [{Token, 1}, {text, 1, Rest}]};
         qmark ->
@@ -17,6 +27,130 @@ tokenize_statement(Text0) when is_list(Text0) ->
     end;
 tokenize_statement(_Other) ->
     error.
+
+tokenize_if_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case re:run(Trimmed, "^(.+?)\\s+THEN\\s+(.+)$", [{capture, [1, 2], list}]) of
+        {match, [CondExpr, ThenElseText]} ->
+            Cond = string:trim(CondExpr),
+            ThenElse = string:trim(ThenElseText),
+            case {Cond, ThenElse} of
+                {"", _} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                {_, ""} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                _ ->
+                    case re:run(ThenElse, "^(.+?)\\s+ELSE\\s+(.+)$", [{capture, [1, 2], list}]) of
+                        {match, [ThenText, ElseText]} ->
+                            ThenStmt = string:trim(ThenText),
+                            ElseStmt = string:trim(ElseText),
+                            case {ThenStmt, ElseStmt} of
+                                {"", _} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                                {_, ""} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                                _ ->
+                                    {ok, [
+                                        {kw_if, 1},
+                                        {text, 1, Cond},
+                                        {kw_then, 1},
+                                        {text, 1, ThenStmt},
+                                        {kw_else, 1},
+                                        {text, 1, ElseStmt}
+                                    ]}
+                            end;
+                        nomatch ->
+                            {ok, [
+                                {kw_if, 1},
+                                {text, 1, Cond},
+                                {kw_then, 1},
+                                {text, 1, ThenElse}
+                            ]}
+                    end
+            end;
+        nomatch ->
+            {ok, [{kw_if, 1}, {text, 1, Rest}]}
+    end.
+
+tokenize_for_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    Pattern = "^([A-Za-z][A-Za-z0-9_]*[%&#]?)\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$",
+    case re:run(Trimmed, Pattern, [{capture, all_but_first, list}]) of
+        {match, [Var, StartExpr, EndExpr]} ->
+            {ok, [
+                {kw_for, 1},
+                {ident, 1, Var},
+                {eq, 1},
+                {text, 1, string:trim(StartExpr)},
+                {kw_to, 1},
+                {text, 1, string:trim(EndExpr)}
+            ]};
+        {match, [Var, StartExpr, EndExpr, StepExpr]} ->
+            {ok, [
+                {kw_for, 1},
+                {ident, 1, Var},
+                {eq, 1},
+                {text, 1, string:trim(StartExpr)},
+                {kw_to, 1},
+                {text, 1, string:trim(EndExpr)},
+                {kw_step, 1},
+                {text, 1, string:trim(StepExpr)}
+            ]};
+        nomatch ->
+            {ok, [{kw_for, 1}, {text, 1, Rest}]}
+    end.
+
+tokenize_next_statement(Rest) ->
+    case string:trim(Rest) of
+        "" ->
+            {ok, [{kw_next, 1}]};
+        VarText ->
+            case re:run(VarText, "^([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)$", [{capture, [1], list}]) of
+                {match, [Var]} -> {ok, [{kw_next, 1}, {ident, 1, Var}]};
+                nomatch -> {ok, [{kw_next, 1}, {text, 1, Rest}]}
+            end
+    end.
+
+tokenize_on_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case re:run(Trimmed, "^ERROR\\s+GOTO\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [TargetExpr]} ->
+            {ok, [{kw_on, 1}, {kw_error, 1}, {kw_goto, 1}, {text, 1, string:trim(TargetExpr)}]};
+        nomatch ->
+            case re:run(Trimmed, "^SPRITE\\s+GOSUB\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetExpr]} ->
+                    {ok, [{kw_on, 1}, {kw_on_sprite, 1}, {kw_gosub, 1}, {text, 1, string:trim(TargetExpr)}]};
+                nomatch ->
+                    case re:run(Trimmed, "^PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                        {match, [NExpr, TargetExpr]} ->
+                            {ok, [{kw_on, 1}, {kw_on_play, 1}, {text, 1, string:trim(NExpr)}, {kw_gosub, 1}, {text, 1, string:trim(TargetExpr)}]};
+                        nomatch ->
+                            case re:run(Trimmed, "^TIMER\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [NExpr, TargetExpr]} ->
+                                    {ok, [{kw_on, 1}, {kw_on_timer, 1}, {text, 1, string:trim(NExpr)}, {kw_gosub, 1}, {text, 1, string:trim(TargetExpr)}]};
+                                nomatch ->
+                                    case re:run(Trimmed, "^(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                        {match, [Expr, Targets]} ->
+                                            {ok, [{kw_on, 1}, {text, 1, string:trim(Expr)}, {kw_gosub, 1}, {text, 1, string:trim(Targets)}]};
+                                        nomatch ->
+                                            case re:run(Trimmed, "^(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                                {match, [Expr, Targets]} ->
+                                                    {ok, [{kw_on, 1}, {text, 1, string:trim(Expr)}, {kw_goto, 1}, {text, 1, string:trim(Targets)}]};
+                                                nomatch ->
+                                                    {ok, [{kw_on, 1}, {text, 1, Rest}]}
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
+
+tokenize_resume_statement(Rest) ->
+    case string:trim(Rest) of
+        "" ->
+            {ok, [{kw_resume, 1}]};
+        TrimmedRest ->
+            case string:to_upper(TrimmedRest) of
+                "NEXT" -> {ok, [{kw_resume, 1}, {kw_next, 1}]};
+                _ -> {ok, [{kw_resume, 1}, {text, 1, TrimmedRest}]}
+            end
+    end.
 
 classify_statement(Text) ->
     case split_implicit_let(Text) of

@@ -1,5 +1,5 @@
 Nonterminals stmt.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_for kw_next kw_on kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark text.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark text.
 Rootsymbol stmt.
 
 stmt -> kw_print text : parse_print_stmt('$2').
@@ -14,11 +14,33 @@ stmt -> kw_getkey text : parse_getkey_stmt('$2').
 stmt -> kw_getchar text : parse_getchar_stmt('$2').
 stmt -> kw_goto text : parse_goto_stmt('$2').
 stmt -> kw_gosub text : parse_gosub_stmt('$2').
+stmt -> kw_if text kw_then text :
+    {if_then_else,
+     text_value('$2'),
+     normalize_if_branch_statement(text_value('$4')),
+     undefined}.
+stmt -> kw_if text kw_then text kw_else text :
+    {if_then_else,
+     text_value('$2'),
+     normalize_if_branch_statement(text_value('$4')),
+     normalize_if_branch_statement(text_value('$6'))}.
 stmt -> kw_if text : parse_if_stmt('$2').
+stmt -> kw_for ident eq text kw_to text : parse_for_tokens('$2', '$4', '$6', undefined).
+stmt -> kw_for ident eq text kw_to text kw_step text : parse_for_tokens('$2', '$4', '$6', '$8').
 stmt -> kw_for text : parse_for_stmt('$2').
+stmt -> kw_next : {next_loop, undefined}.
+stmt -> kw_next ident : parse_next_ident('$2').
 stmt -> kw_next text : parse_next_stmt('$2').
+stmt -> kw_on kw_error kw_goto text : {on_error_goto, text_value('$4')}.
+stmt -> kw_on kw_on_sprite kw_gosub text : {on_sprite_gosub, text_value('$4')}.
+stmt -> kw_on kw_on_play text kw_gosub text : {on_play_gosub, text_value('$3'), text_value('$5')}.
+stmt -> kw_on kw_on_timer text kw_gosub text : {on_timer_gosub, text_value('$3'), text_value('$5')}.
+stmt -> kw_on text kw_gosub text : {on_gosub, text_value('$2'), parse_on_targets(text_value('$4'))}.
+stmt -> kw_on text kw_goto text : {on_goto, text_value('$2'), parse_on_targets(text_value('$4'))}.
 stmt -> kw_on text : parse_on_stmt('$2').
-stmt -> kw_resume text : parse_resume_stmt('$2').
+stmt -> kw_resume : {resume}.
+stmt -> kw_resume kw_next : {resume_next}.
+stmt -> kw_resume text : {resume_line, text_value('$2')}.
 stmt -> kw_dim text : parse_dim_stmt('$2').
 stmt -> kw_def text : parse_def_stmt('$2').
 stmt -> kw_data text : parse_data_stmt('$2').
@@ -70,8 +92,8 @@ parse_qmark_stmt({text, _Line, Rest}) ->
 parse_let_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_let_stmt_yecc(Rest).
 
-parse_rem_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_rem_stmt_yecc(Rest).
+parse_rem_stmt(_TextToken) ->
+    {remark}.
 
 parse_implicit_let_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_implicit_let_stmt_yecc(Rest).
@@ -91,11 +113,11 @@ parse_getkey_stmt({text, _Line, Rest}) ->
 parse_getchar_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_getchar_stmt_yecc(Rest).
 
-parse_goto_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_goto_stmt_yecc(Rest).
+parse_goto_stmt(TextToken) ->
+    parse_required_expr_stmt(TextToken, goto).
 
-parse_gosub_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_gosub_stmt_yecc(Rest).
+parse_gosub_stmt(TextToken) ->
+    parse_required_expr_stmt(TextToken, gosub).
 
 parse_if_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_if_stmt_yecc(Rest).
@@ -108,9 +130,6 @@ parse_next_stmt({text, _Line, Rest}) ->
 
 parse_on_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_on_stmt_yecc(Rest).
-
-parse_resume_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_resume_stmt_yecc(Rest).
 
 parse_dim_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_dim_stmt_yecc(Rest).
@@ -127,50 +146,57 @@ parse_read_stmt({text, _Line, Rest}) ->
 parse_restore_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_restore_stmt_yecc(Rest).
 
-parse_return_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_return_stmt_yecc(Rest).
+parse_return_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {'return'}).
 
-parse_end_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_end_stmt_yecc(Rest).
+parse_end_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {'end'}).
 
-parse_stop_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_stop_stmt_yecc(Rest).
+parse_stop_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {stop_stmt}).
 
-parse_cls_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_cls_stmt_yecc(Rest).
+parse_cls_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {cls}).
 
-parse_hgr_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_hgr_stmt_yecc(Rest).
+parse_hgr_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {hgr}).
 
-parse_hgr2_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_hgr2_stmt_yecc(Rest).
+parse_hgr2_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {hgr2}).
 
-parse_text_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_text_stmt_yecc(Rest).
+parse_text_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {text}).
 
-parse_tron_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_tron_stmt_yecc(Rest).
+parse_tron_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {tron}).
 
-parse_troff_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_troff_stmt_yecc(Rest).
+parse_troff_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {troff}).
 
-parse_flush_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_flush_stmt_yecc(Rest).
+parse_flush_stmt(TextToken) ->
+    parse_noarg_stmt(TextToken, {flush_stmt}).
 
-parse_buffer_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_buffer_stmt_yecc(Rest).
+parse_buffer_stmt(TextToken) ->
+    case string:to_upper(trim_text(TextToken)) of
+        "ON" -> {buffer_mode, on};
+        "OFF" -> {buffer_mode, off};
+        _ -> unknown
+    end.
 
-parse_sleep_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_sleep_stmt_yecc(Rest).
+parse_sleep_stmt(TextToken) ->
+    case trim_text(TextToken) of
+        "" -> {sleep_keypress};
+        Expr -> {sleep, Expr}
+    end.
 
 parse_sound_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_sound_stmt_yecc(Rest).
 
-parse_play_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_play_stmt_yecc(Rest).
+parse_play_stmt(TextToken) ->
+    parse_required_expr_stmt(TextToken, play_stmt).
 
-parse_chain_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_chain_stmt_yecc(Rest).
+parse_chain_stmt(TextToken) ->
+    parse_required_expr_stmt(TextToken, chain).
 
 parse_open_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_open_stmt_yecc(Rest).
@@ -190,8 +216,11 @@ parse_color_stmt({text, _Line, Rest}) ->
 parse_locate_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_locate_stmt_yecc(Rest).
 
-parse_home_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_home_stmt_yecc(Rest).
+parse_home_stmt(TextToken) ->
+    case string:to_upper(trim_text(TextToken)) of
+        "PUBLISH" -> {home_publish};
+        _ -> unknown
+    end.
 
 parse_pset_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_pset_stmt_yecc(Rest).
@@ -217,3 +246,52 @@ parse_sprite_stmt({text, _Line, Rest}) ->
 parse_raw_stmt({raw_stmt, _Line, Command}) ->
     _ = Command,
     unknown.
+
+text_value({text, _Line, Rest}) ->
+    string:trim(Rest).
+
+normalize_if_branch_statement(Stmt) ->
+    Trimmed = string:trim(Stmt),
+    case re:run(Trimmed, "^(\\d+)$", [{capture, [1], list}]) of
+        {match, [LineNumber]} -> "GOTO " ++ LineNumber;
+        nomatch -> Trimmed
+    end.
+
+parse_for_tokens({ident, _Line, Var0}, StartTok, EndTok, undefined) ->
+    Var = string:to_upper(Var0),
+    case erlbasic_keywords:is_reserved_variable_name(Var) of
+        true -> {parse_error, reserved_word};
+        false -> {for_loop, Var, text_value(StartTok), text_value(EndTok), undefined}
+    end;
+parse_for_tokens({ident, _Line, Var0}, StartTok, EndTok, StepTok) ->
+    Var = string:to_upper(Var0),
+    case erlbasic_keywords:is_reserved_variable_name(Var) of
+        true -> {parse_error, reserved_word};
+        false -> {for_loop, Var, text_value(StartTok), text_value(EndTok), text_value(StepTok)}
+    end.
+
+parse_next_ident({ident, _Line, Var0}) ->
+    Var = string:to_upper(Var0),
+    case erlbasic_keywords:is_reserved_variable_name(Var) of
+        true -> {parse_error, reserved_word};
+        false -> {next_loop, Var}
+    end.
+
+parse_on_targets(TargetsText) ->
+    Parts = string:split(string:trim(TargetsText), ",", all),
+    [string:trim(P) || P <- Parts].
+
+trim_text({text, _Line, Rest}) ->
+    string:trim(Rest).
+
+parse_noarg_stmt(TextToken, Result) ->
+    case trim_text(TextToken) of
+        "" -> Result;
+        _ -> unknown
+    end.
+
+parse_required_expr_stmt(TextToken, Tag) ->
+    case trim_text(TextToken) of
+        "" -> unknown;
+        Expr -> {Tag, Expr}
+    end.
