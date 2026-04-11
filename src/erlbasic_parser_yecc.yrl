@@ -127,17 +127,76 @@ parse_goto_stmt(TextToken) ->
 parse_gosub_stmt(TextToken) ->
     parse_required_expr_stmt(TextToken, gosub).
 
-parse_if_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_if_stmt_yecc(Rest).
+parse_if_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
+        {match, [CondExpr, ThenStmt]} ->
+            {if_then_else, CondExpr, normalize_if_branch_statement(ThenStmt), undefined};
+        {match, [CondExpr, ThenStmt, ElseStmt]} ->
+            {if_then_else,
+             CondExpr,
+             normalize_if_branch_statement(ThenStmt),
+             normalize_if_branch_statement(ElseStmt)};
+        nomatch ->
+            unknown
+    end.
 
-parse_for_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_for_stmt_yecc(Rest).
+parse_for_stmt(TextToken) ->
+    Pattern = "^([A-Za-z][A-Za-z0-9_]*[%&#]?)\\s*=\\s*(.+)\\s+TO\\s+(.+?)(?:\\s+STEP\\s+(.+))?$",
+    case re:run(trim_text(TextToken), Pattern, [{capture, all_but_first, list}]) of
+        {match, [Var, StartExpr, EndExpr]} ->
+            parse_for_var(string:to_upper(Var), StartExpr, EndExpr, undefined);
+        {match, [Var, StartExpr, EndExpr, StepExpr]} ->
+            parse_for_var(string:to_upper(Var), StartExpr, EndExpr, StepExpr);
+        nomatch ->
+            unknown
+    end.
 
-parse_next_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_next_stmt_yecc(Rest).
+parse_next_stmt(TextToken) ->
+    case trim_text(TextToken) of
+        "" ->
+            {next_loop, undefined};
+        VarText ->
+            case re:run(VarText, "^([A-Za-z][A-Za-z0-9_]*[\\$%&#]?)$", [{capture, [1], list}]) of
+                {match, [Var]} ->
+                    parse_next_var(string:to_upper(Var));
+                nomatch ->
+                    unknown
+            end
+    end.
 
-parse_on_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_on_stmt_yecc(Rest).
+parse_on_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^ERROR\\s+GOTO\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [TargetExpr]} ->
+            {on_error_goto, string:trim(TargetExpr)};
+        nomatch ->
+            case re:run(Rest, "^SPRITE\\s+GOSUB\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [TargetExpr]} ->
+                    {on_sprite_gosub, string:trim(TargetExpr)};
+                nomatch ->
+                    case re:run(Rest, "^PLAY\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                        {match, [NExpr, TargetExpr]} ->
+                            {on_play_gosub, string:trim(NExpr), string:trim(TargetExpr)};
+                        nomatch ->
+                            case re:run(Rest, "^TIMER\\s*\\(\\s*(.+?)\\s*\\)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [NExpr, TargetExpr]} ->
+                                    {on_timer_gosub, string:trim(NExpr), string:trim(TargetExpr)};
+                                nomatch ->
+                                    case re:run(Rest, "^(.+?)\\s+GOSUB\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                        {match, [Expr, Targets]} ->
+                                            {on_gosub, Expr, parse_on_targets(Targets)};
+                                        nomatch ->
+                                            case re:run(Rest, "^(.+?)\\s+GOTO\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                                {match, [Expr, Targets]} ->
+                                                    {on_goto, Expr, parse_on_targets(Targets)};
+                                                nomatch ->
+                                                    unknown
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
 
 parse_dim_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_dim_stmt_yecc(Rest).
@@ -288,6 +347,21 @@ parse_next_ident({ident, _Line, Var0}) ->
 parse_on_targets(TargetsText) ->
     Parts = string:split(string:trim(TargetsText), ",", all),
     [string:trim(P) || P <- Parts].
+
+parse_for_var(Var, StartExpr, EndExpr, StepExpr) ->
+    case erlbasic_keywords:is_reserved_variable_name(Var) of
+        true -> {parse_error, reserved_word};
+        false -> {for_loop, Var, string:trim(StartExpr), string:trim(EndExpr), trim_optional(StepExpr)}
+    end.
+
+parse_next_var(Var) ->
+    case erlbasic_keywords:is_reserved_variable_name(Var) of
+        true -> {parse_error, reserved_word};
+        false -> {next_loop, Var}
+    end.
+
+trim_optional(undefined) -> undefined;
+trim_optional(Text) -> string:trim(Text).
 
 cond_expr(LeftTok, Op, RightTok) ->
     string:trim(text_value(LeftTok)) ++ Op ++ string:trim(text_value(RightTok)).
