@@ -97,14 +97,34 @@ parse_write_stmt({text, _Line, Rest}) ->
 parse_qmark_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_qmark_stmt_yecc(Rest).
 
-parse_let_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_let_stmt_yecc(Rest).
+parse_let_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [TargetText, Expr]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {'let', Target, string:trim(Expr)};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_rem_stmt(_TextToken) ->
     {remark}.
 
-parse_implicit_let_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_implicit_let_stmt_yecc(Rest).
+parse_implicit_let_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [TargetText, Expr]} ->
+            case parse_assignment_target(string:trim(TargetText)) of
+                {ok, Target} -> {'let', Target, string:trim(Expr)};
+                {error, Reason} -> {parse_error, Reason};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
 parse_line_input_stmt({text, _Line, Rest}) ->
     erlbasic_parser:parse_line_input_stmt_yecc(Rest).
