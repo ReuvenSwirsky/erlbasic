@@ -1899,6 +1899,9 @@ play_stmt_invalid_test() ->
 on_play_gosub_parses_test() ->
     ?assertEqual(ok, erlbasic_parser:validate_program_line("ON PLAY(5) GOSUB 100")).
 
+on_timer_gosub_parses_test() ->
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("ON TIMER(0.05) GOSUB 100")).
+
 play_is_reserved_variable_test() ->
     ?assertEqual({error, reserved_word},
         erlbasic_parser:validate_program_line("LET PLAY = 1")).
@@ -1936,6 +1939,15 @@ on_play_gosub_sets_state_test() ->
     erlang:erase(erlbasic_ppn),
     ?assertMatch({_, _}, S1#state.on_play_gosub).
 
+on_timer_gosub_sets_state_test() ->
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("ON TIMER(0.05) GOSUB 100", S0),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    ?assertMatch({_, _}, S1#state.on_timer_gosub).
+
 on_play_gosub_cleared_by_end_test() ->
     erlang:put(erlbasic_conn_type, tty),
     erlang:put(erlbasic_ppn, {1, 1}),
@@ -1948,6 +1960,35 @@ on_play_gosub_cleared_by_end_test() ->
     erlang:erase(erlbasic_ppn),
     ?assertEqual(undefined, S3#state.on_play_gosub),
     ?assertEqual(-1, S3#state.on_play_return_depth).
+
+on_timer_gosub_cleared_by_end_test() ->
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("ON TIMER(0.05) GOSUB 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("10 END", S1),
+    {S3, _} = erlbasic_interp:handle_input("RUN", S2),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    ?assertEqual(undefined, S3#state.on_timer_gosub),
+    ?assertEqual(-1, S3#state.on_timer_return_depth).
+
+on_timer_gosub_fires_during_run_test() ->
+    erlang:put(erlbasic_conn_type, tty),
+    erlang:put(erlbasic_ppn, {1, 1}),
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 T%=0", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 ON TIMER(0.02) GOSUB 100", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 SLEEP 0.05", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 IF T%>0 THEN PRINT \"FIRED\"", S3),
+    {S5, _} = erlbasic_interp:handle_input("50 END", S4),
+    {S6, _} = erlbasic_interp:handle_input("100 T%=T%+1", S5),
+    {S7, _} = erlbasic_interp:handle_input("110 RETURN", S6),
+    {_S8, Output} = erlbasic_interp:handle_input("RUN", S7),
+    erlang:erase(erlbasic_conn_type),
+    erlang:erase(erlbasic_ppn),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "FIRED", [{capture, none}])).
 
 restore_env(Name, false) ->
     true = os:unsetenv(Name),

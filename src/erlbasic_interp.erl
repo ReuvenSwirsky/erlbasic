@@ -579,6 +579,8 @@ execute_statement_single(Command, State) ->
             end;
         {on_play_gosub, NExpr, TargetExpr} ->
             {State#state{on_play_gosub = {NExpr, TargetExpr}}, []};
+        {on_timer_gosub, NExpr, TargetExpr} ->
+            {State#state{on_timer_gosub = {NExpr, TargetExpr}, on_timer_last_ms = undefined}, []};
         {on_sprite_gosub, TargetExpr} ->
             {State#state{on_sprite_gosub = TargetExpr}, []};
         {color, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);

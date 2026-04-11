@@ -25,5 +25,8 @@
     on_sprite_return_depth = -1, % -1 = not in sprite handler; >=0 = call stack depth at fire time
     play_background = false,    % true = MB (background) mode, false = MF (foreground)
     on_play_gosub = undefined,  % {NExpr, TargetExpr} | undefined — ON PLAY(n) GOSUB handler
-    on_play_return_depth = -1   % -1 = not in handler; >=0 = call stack depth at fire time
+    on_play_return_depth = -1,  % -1 = not in handler; >=0 = call stack depth at fire time
+    on_timer_gosub = undefined, % {NExpr, TargetExpr} | undefined — ON TIMER(n) GOSUB handler
+    on_timer_return_depth = -1, % -1 = not in timer handler; >=0 = call stack depth at fire time
+    on_timer_last_ms = undefined % monotonic milliseconds when timer last fired/armed
 }).

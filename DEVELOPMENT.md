@@ -4,6 +4,59 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 10, 2026 - ON TIMER(n) GOSUB Language Feature and Space Invaders Example
+
+### Enhancement
+Added `ON TIMER(n) GOSUB` — a periodic timer callback that fires a subroutine approximately every `n` seconds during program execution, independent of player input or any blocking statement. Also added `examples/space_sprites.bas`, a Space Invaders-style demo game using the new feature.
+
+### Implementation
+
+**`src/erlbasic_state.hrl`**
+- Added three new fields to `#state{}`:
+  - `on_timer_gosub = undefined` — stores `{NExpr, TargetExpr}` when armed
+  - `on_timer_return_depth = -1` — re-entrancy guard (depth of callstack when fired)
+  - `on_timer_last_ms = undefined` — monotonic timestamp of last fire (milliseconds)
+
+**`src/erlbasic_parser.erl`**
+- Added `ON TIMER(n) GOSUB` regex clause in `parse_jump_statement/1`, checked before the generic `ON...GOSUB` rule.
+- Added `{on_timer_gosub, NExpr, TargetExpr}` validate clause in `validate_statement/1`.
+
+**`src/erlbasic_interp.erl`**
+- Added immediate-mode handler for `{on_timer_gosub, NExpr, TargetExpr}` — arms the handler in the interpreter state.
+
+**`src/erlbasic_runtime.erl`**
+- Added `{on_timer_gosub, NExpr, TargetExpr}` execution clause in `execute_program_line_statement/7`.
+- Added `on_timer_trigger/3` — checks elapsed time via `erlang:monotonic_time(millisecond)` and fires a `gosub` when the interval is reached. Re-entrancy guarded via `on_timer_return_depth`.
+- Chained `on_timer_trigger` after `on_play_trigger` in `event_gosub_trigger/3`. Changed `on_play_trigger` return from bare `no_trigger` to `{no_trigger, State}` to support chaining.
+- Updated `update_event_return_depths/2` to handle `on_timer_return_depth`.
+- Cleared all three timer state fields on `END` and Ctrl-C break.
+
+**`examples/space_sprites.bas`**
+- Space Invaders-style game in HGR2 mode.
+- 3 rows × 6 columns of invaders (sprites 10–27) with 3 damage states.
+- Player launcher (sprite 1, 4× scale), player missile (sprite 2), enemy bullet (sprite 3).
+- `ON SPRITE GOSUB 3000` for collision detection.
+- `ON TIMER(0.08) GOSUB 2600` for autonomous fleet sweep, descent on wall bounce, and random enemy fire — all running independently of player input.
+- Non-blocking `GET K$` in main loop for player movement (A/D) and fire (SPACE).
+- HUD text in LOCATE rows 22–25 (score, lives, level).
+
+### Tests
+- `on_timer_gosub_parses_test` — parser returns correct `{on_timer_gosub, _, _}` tuple.
+- `on_timer_gosub_sets_state_test` — statement arms `on_timer_gosub` in state.
+- `on_timer_gosub_cleared_by_end_test` — `END` clears `on_timer_gosub` and resets depth.
+- `on_timer_gosub_fires_during_run_test` — runs program with 20 ms interval + 50 ms SLEEP; asserts callback fired.
+- `smoke_tests/on_timer_gosub.bas` + `.out` — smoke test: sets 50 ms timer, sleeps 200 ms, asserts `TIMER FIRED`.
+
+### Validation
+- `rebar3 compile`: PASS
+- `rebar3 eunit --module=erlbasic_eunit_tests`: All 144 tests passed
+- `escript smoke_runner.escript .` (from `smoke_tests/`): All 66 tests passed
+
+### Rationale
+Game loops and animations need independent time-driven events that do not stall waiting for input. `ON TIMER(n) GOSUB` follows the same event-handler pattern as `ON SPRITE GOSUB` and `ON PLAY(n) GOSUB`: the handler is checked after each executed statement and fires into a standard GOSUB/RETURN frame. Using `erlang:monotonic_time/1` avoids wall-clock wraparound issues and produces accurate intervals regardless of system load. The re-entrancy guard prevents runaway recursive fires if the handler takes longer than the interval.
+
+---
+
 ## April 9, 2026 - Hex Integer Literals and Larger Sprite Examples
 
 ### Enhancement

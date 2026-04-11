@@ -8,7 +8,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Browser WebSocket sessions use permessage-deflate compression with `server_no_context_takeover` for stable interactive `INPUT`/`GETKEY` traffic
 - Stored program lines using numeric BASIC line numbers
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
-- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
+- Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON TIMER(...) GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
 - Graphics mode (WebSocket only): `HGR`, `HGR2`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `BUFFER`, `FLUSH`, `PGET`, `GETCHAR`, `SOUND`, `SPRITE` (`LOAD`, `SHOW`, `HIDE`, `SCALE`, `CLEAR`, position)
 - Full expression engine: numeric operators, exponentiation, decimal and `0x...` hexadecimal integer literals, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
@@ -127,6 +127,7 @@ RUN
 - `SPRITE LOAD` reads bitmap bytes from 1D BYTE arrays (`&` suffix); `255` is treated as transparent.
 - Integer expressions also accept `0x...` / `0X...` hexadecimal literals, which are useful for packed sprite row masks and other bit-oriented code.
 - `ON SPRITE GOSUB` is collision-edge triggered and exposes colliding sprite IDs via `SPRCOL1%` and `SPRCOL2%`.
+- `ON TIMER(n) GOSUB` fires a subroutine approximately every `n` seconds during `RUN`, independently of player input; re-entrancy guarded.
 - `SAVE`/`LOAD`/`SCRATCH`/`DIR` manage programs in the user's sandboxed directory.
 - `DIR` output is grouped by source (`Your files` and `Shared examples`) to distinguish personal files from bundled examples.
 - `IF ... THEN <line>` and `IF ... THEN <line> ELSE <line>` are accepted as shorthand for implied `GOTO` targets.

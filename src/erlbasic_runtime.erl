@@ -83,7 +83,8 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
                 sprites = #{},
                 sprite_active_collisions = [],
                 on_sprite_return_depth = -1,
-                on_play_return_depth = -1
+                on_play_return_depth = -1,
+                on_timer_return_depth = -1
             },
             {ResetState,
              GfxReset ++ sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
@@ -201,7 +202,10 @@ run_program_lines_impl(Program, Pc, State, LoopStack, CallStack, Acc, _Count) ->
                 on_sprite_return_depth = -1,
                 play_background   = false,
                 on_play_gosub     = undefined,
-                on_play_return_depth = -1
+                on_play_return_depth = -1,
+                on_timer_gosub    = undefined,
+                on_timer_return_depth = -1,
+                on_timer_last_ms  = undefined
             },
             case should_flush_output() of
                 true ->
@@ -988,6 +992,8 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             end;
         {on_play_gosub, NExpr, TargetExpr} ->
             {continue, State#state{on_play_gosub = {NExpr, TargetExpr}}, LoopStack, CallStack, []};
+        {on_timer_gosub, NExpr, TargetExpr} ->
+            {continue, State#state{on_timer_gosub = {NExpr, TargetExpr}, on_timer_last_ms = undefined}, LoopStack, CallStack, []};
         {on_sprite_gosub, TargetExpr} ->
             {continue, State#state{on_sprite_gosub = TargetExpr}, LoopStack, CallStack, []};
         {stop_stmt} ->
@@ -1729,8 +1735,13 @@ event_gosub_trigger(State, LoopStack, CallStack) ->
             {gosub, TargetPc, FiredState};
         {no_trigger, State1} ->
             case on_play_trigger(State1, LoopStack, CallStack) of
-                {gosub, TargetPc, FiredState} -> {gosub, TargetPc, FiredState};
-                no_trigger -> {no_trigger, State1}
+                {gosub, TargetPc, FiredState} ->
+                    {gosub, TargetPc, FiredState};
+                {no_trigger, State2} ->
+                    case on_timer_trigger(State2, LoopStack, CallStack) of
+                        {gosub, TargetPc, FiredState} -> {gosub, TargetPc, FiredState};
+                        {no_trigger, State3} -> {no_trigger, State3}
+                    end
             end
     end.
 
@@ -1819,12 +1830,19 @@ update_event_return_depths(State, RestCallStack) ->
             D2 when D2 >= 0 -> D2;
             _ -> PlayDepth
         end,
-    State#state{on_sprite_return_depth = NewSpriteDepth, on_play_return_depth = NewPlayDepth}.
+    TimerDepth = State#state.on_timer_return_depth,
+    NewTimerDepth =
+        case TimerDepth of
+            D3 when D3 >= 0, RestDepth =< D3 -> -1;
+            D3 when D3 >= 0 -> D3;
+            _ -> TimerDepth
+        end,
+    State#state{on_sprite_return_depth = NewSpriteDepth, on_play_return_depth = NewPlayDepth, on_timer_return_depth = NewTimerDepth}.
 
-on_play_trigger(#state{on_play_gosub = undefined}, _LoopStack, _CallStack) ->
-    no_trigger;
-on_play_trigger(#state{on_play_return_depth = D}, _LoopStack, _CallStack) when D >= 0 ->
-    no_trigger;  %% Re-entrancy guard: already executing the handler
+on_play_trigger(State = #state{on_play_gosub = undefined}, _LoopStack, _CallStack) ->
+    {no_trigger, State};
+on_play_trigger(State = #state{on_play_return_depth = D}, _LoopStack, _CallStack) when D >= 0 ->
+    {no_trigger, State};  %% Re-entrancy guard: already executing the handler
 on_play_trigger(State = #state{on_play_gosub = {NExpr, TargetExpr}}, _LoopStack, CallStack) ->
     Remaining = notes_remaining(),
     case erlbasic_eval:eval_expr_result(NExpr, State#state.vars, State#state.funcs) of
@@ -1837,13 +1855,51 @@ on_play_trigger(State = #state{on_play_gosub = {NExpr, TargetExpr}}, _LoopStack,
                         FiredState = State#state{on_play_return_depth = Depth},
                         {gosub, TargetPc, FiredState};
                     _ ->
-                        no_trigger
+                        {no_trigger, State}
                 end;
             true ->
-                no_trigger
+                {no_trigger, State}
             end;
         _ ->
-            no_trigger
+            {no_trigger, State}
+    end.
+
+on_timer_trigger(State = #state{on_timer_gosub = undefined}, _LoopStack, _CallStack) ->
+    {no_trigger, State};
+on_timer_trigger(State = #state{on_timer_return_depth = D}, _LoopStack, _CallStack) when D >= 0 ->
+    {no_trigger, State};
+on_timer_trigger(State = #state{on_timer_gosub = {NExpr, TargetExpr}}, _LoopStack, CallStack) ->
+    case erlbasic_eval:eval_expr_result(NExpr, State#state.vars, State#state.funcs) of
+        {ok, NValue, _} when is_number(NValue) ->
+            IntervalMs = trunc(NValue * 1000),
+            if IntervalMs =< 0 ->
+                {no_trigger, State};
+            true ->
+                NowMs = erlang:monotonic_time(millisecond),
+                LastMs = case State#state.on_timer_last_ms of
+                    undefined -> NowMs;
+                    V -> V
+                end,
+                ArmedState = case State#state.on_timer_last_ms of
+                    undefined -> State#state{on_timer_last_ms = LastMs};
+                    _ -> State
+                end,
+                case NowMs - LastMs >= IntervalMs of
+                    false ->
+                        {no_trigger, ArmedState};
+                    true ->
+                        case resolve_target_pc(TargetExpr, ArmedState#state.prog, ArmedState#state.vars, ArmedState#state.funcs) of
+                            {ok, TargetPc} ->
+                                Depth = length(CallStack),
+                                FiredState = ArmedState#state{on_timer_return_depth = Depth, on_timer_last_ms = NowMs},
+                                {gosub, TargetPc, FiredState};
+                            _ ->
+                                {no_trigger, ArmedState#state{on_timer_last_ms = NowMs}}
+                        end
+                end
+            end;
+        _ ->
+            {no_trigger, State}
     end.
 
 %% Helper to evaluate multiple expressions and extract first error

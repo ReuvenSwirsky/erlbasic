@@ -719,6 +719,8 @@ LET T = TIMER
 PRINT TIMER - T; "seconds elapsed"
 ```
 
+See also: `ON TIMER(...) GOSUB` in Basic_Syntax.md for timer-driven event callbacks.
+
 ---
 
 ## Operators

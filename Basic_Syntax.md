@@ -162,7 +162,7 @@ Syntax:
 Statements below are listed in alphabetical order by command name. Unless noted otherwise, they work both in immediate mode and in stored program lines.
 
 Scope notes:
-- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`) are intended for stored program execution.
+- Line-flow statements (`GOTO`, `GOSUB`, `RETURN`, `ON ... GOTO`, `ON ... GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON TIMER(...) GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`) are intended for stored program execution.
 - `INPUT`, `GET`, `GETKEY`, `SLEEP`, `PGET`, and `GETCHAR` may pause execution waiting for input or browser replies.
 
 ### BUFFER
@@ -516,6 +516,25 @@ Notes:
 Example:
 ```text
 ON SPRITE GOSUB 900
+```
+
+### ON TIMER ... GOSUB
+
+Registers a periodic timer callback that fires approximately every `<seconds-expr>` seconds.
+
+Syntax:
+- `ON TIMER(<seconds-expr>) GOSUB <line-expr>`
+
+Notes:
+- The handler is checked and fired after each executed statement during `RUN`.
+- `<seconds-expr>` is evaluated when the handler first fires and must be a positive number.
+- Re-entry is guarded: the handler will not trigger again while its prior invocation is still active.
+- The timer is cleared (along with all other event handlers) when `END` is executed or the program is broken with Ctrl-C.
+- Setting a new `ON TIMER(...)` resets the interval and arms the timer from that point.
+
+Example:
+```text
+ON TIMER(0.5) GOSUB 200   ' call subroutine at line 200 twice per second
 ```
 
 ### OPEN
