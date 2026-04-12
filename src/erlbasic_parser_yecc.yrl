@@ -7,7 +7,6 @@ stmt -> kw_print print_items : parse_print_items_stmt('$2').
 stmt -> kw_print print_using : parse_print_using_stmt('$2').
 stmt -> kw_print print_channel : {file_print, print_channel_value('$2'), [], true}.
 stmt -> kw_print print_channel print_items : parse_file_print_items_stmt('$2', '$3').
-stmt -> kw_print text : parse_print_stmt('$2').
 stmt -> kw_write write_channel : {file_write, write_channel_value('$2'), []}.
 stmt -> kw_write write_channel write_items : parse_file_write_items_stmt('$2', '$3').
 stmt -> kw_write text : parse_write_stmt('$2').
@@ -50,9 +49,7 @@ stmt -> kw_resume : {resume}.
 stmt -> kw_resume kw_next : {resume_next}.
 stmt -> kw_resume line_number : {resume_line, line_value('$2')}.
 stmt -> kw_dim dim_declarations : parse_dim_decls_stmt('$2').
-stmt -> kw_dim text             : parse_dim_stmt('$2').
 stmt -> kw_def def_fn_spec      : parse_def_fn_spec_stmt('$2').
-stmt -> kw_def text             : parse_def_stmt('$2').
 stmt -> kw_data text : parse_data_stmt('$2').
 stmt -> kw_read text : parse_read_stmt('$2').
 stmt -> kw_restore text : parse_restore_stmt('$2').
@@ -79,7 +76,6 @@ stmt -> kw_open open_path open_mode file_channel record_length :
 stmt -> kw_open text : parse_open_stmt('$2').
 stmt -> kw_close : {file_close, all}.
 stmt -> kw_close close_channels : parse_close_channels_stmt('$2').
-stmt -> kw_close text : parse_close_stmt('$2').
 stmt -> kw_field file_channel field_specs : parse_field_tokens('$2', '$3').
 stmt -> kw_field text : parse_field_stmt('$2').
 stmt -> kw_put file_channel file_record : {file_put_record, file_channel_value('$2'), file_record_value('$3')}.
@@ -107,35 +103,6 @@ cond -> text op_le text : cond_expr('$1', "<=", '$3').
 cond -> text op_ge text : cond_expr('$1', ">=", '$3').
 
 Erlang code.
-
-parse_print_stmt(TextToken) ->
-    Rest = trim_text(TextToken),
-    case re:run(Rest, "^USING\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [UsingText]} ->
-            case parse_print_using_items(UsingText) of
-                {ok, FormatExpr, Items, EndWithNewline} -> {print_using, FormatExpr, Items, EndWithNewline};
-                error -> unknown
-            end;
-        nomatch ->
-            case re:run(Rest, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
-                {match, [ChannelExpr]} ->
-                    {file_print, string:trim(ChannelExpr), [], true};
-                {match, [ChannelExpr, ItemsText]} ->
-                    case parse_print_items(ItemsText) of
-                        {ok, Items, EndWithNewline} -> {file_print, string:trim(ChannelExpr), Items, EndWithNewline};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    case Rest of
-                        "" -> {print, [], true};
-                        ItemsText ->
-                            case parse_print_items(ItemsText) of
-                                {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
-                                error -> unknown
-                            end
-                    end
-            end
-    end.
 
 parse_write_stmt(TextToken) ->
     Rest = trim_text(TextToken),
@@ -394,33 +361,6 @@ parse_def_fn_spec_stmt(Token) ->
             unknown
     end.
 
-parse_dim_stmt(TextToken) ->
-    Rest = string:trim(trim_text(TextToken)),
-    case re:run(Rest, "(?i)^(.+)$", [{capture, [1], list}]) of
-        {match, [DeclText]} ->
-            case parse_dim_decls(split_commas_top_level(DeclText), []) of
-                {ok, Decls} -> {dim, Decls};
-                {error, Reason} -> {parse_error, Reason};
-                error -> unknown
-            end;
-        nomatch ->
-            unknown
-    end.
-
-parse_def_stmt(TextToken) ->
-    Rest = string:trim(trim_text(TextToken)),
-    case re:run(Rest, "(?i)^FN([A-Za-z][A-Za-z0-9_]*)(?:\\s*\\(\\s*([A-Za-z][A-Za-z0-9_]*[%&#]?)\\s*\\))?\\s*=\\s*(.+)$", [{capture, all_but_first, list}]) of
-        {match, [FnSuffix, Expr]} ->
-            {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, string:trim(Expr)};
-        {match, [FnSuffix, ArgVar, Expr]} ->
-            case erlbasic_keywords:is_reserved_variable_name(string:to_upper(ArgVar)) of
-                true -> {parse_error, reserved_word};
-                false -> {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), string:trim(Expr)}
-            end;
-        nomatch ->
-            unknown
-    end.
-
 parse_data_stmt(TextToken) ->
     Rest = string:trim(trim_text(TextToken)),
     case Rest of
@@ -476,18 +416,6 @@ parse_open_stmt(TextToken) ->
             {file_open, string:trim(PathExpr), string:to_upper(Mode), string:trim(ChannelExpr), string:trim(RecLenExpr)};
         nomatch ->
             unknown
-    end.
-
-parse_close_stmt(TextToken) ->
-    Rest = string:trim(trim_text(TextToken)),
-    case Rest of
-        "" ->
-            {file_close, all};
-        ChannelsText ->
-            case parse_file_channels(split_commas_top_level(ChannelsText), []) of
-                {ok, Channels} -> {file_close, Channels};
-                error -> unknown
-            end
     end.
 
 parse_field_stmt(TextToken) ->
