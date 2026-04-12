@@ -1,5 +1,5 @@
 Nonterminals stmt cond.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number assignment_target assignment_expr print_channel print_items print_using write_channel write_items buffer_mode sleep_duration coordinate pset_color text.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number assignment_target assignment_expr print_channel print_items print_using write_channel write_items open_path open_mode file_channel record_length close_channels field_specs file_record buffer_mode sleep_duration coordinate pset_color text.
 Rootsymbol stmt.
 
 stmt -> kw_print : {print, [], true}.
@@ -70,9 +70,17 @@ stmt -> kw_sleep sleep_duration : {sleep, duration_value('$2')}.
 stmt -> kw_sound text : parse_sound_stmt('$2').
 stmt -> kw_play text : parse_play_stmt('$2').
 stmt -> kw_chain text : parse_chain_stmt('$2').
+stmt -> kw_open open_path open_mode file_channel :
+    {file_open, open_path_value('$2'), open_mode_value('$3'), file_channel_value('$4'), undefined}.
+stmt -> kw_open open_path open_mode file_channel record_length :
+    {file_open, open_path_value('$2'), open_mode_value('$3'), file_channel_value('$4'), record_length_value('$5')}.
 stmt -> kw_open text : parse_open_stmt('$2').
+stmt -> kw_close : {file_close, all}.
+stmt -> kw_close close_channels : parse_close_channels_stmt('$2').
 stmt -> kw_close text : parse_close_stmt('$2').
+stmt -> kw_field file_channel field_specs : parse_field_tokens('$2', '$3').
 stmt -> kw_field text : parse_field_stmt('$2').
+stmt -> kw_put file_channel file_record : {file_put_record, file_channel_value('$2'), file_record_value('$3')}.
 stmt -> kw_put text : parse_put_stmt('$2').
 stmt -> kw_color text : parse_color_stmt('$2').
 stmt -> kw_locate coordinate coordinate : {locate, coord_value('$2'), coord_value('$3')}.
@@ -85,6 +93,7 @@ stmt -> kw_circle text : parse_circle_stmt('$2').
 stmt -> kw_pget text : parse_pget_stmt('$2').
 stmt -> kw_sprite text : parse_sprite_stmt('$2').
 stmt -> qmark text : parse_qmark_stmt('$2').
+stmt -> kw_get file_channel file_record : {file_get_record, file_channel_value('$2'), file_record_value('$3')}.
 stmt -> raw_stmt : parse_raw_stmt('$1').
 
 cond -> text : text_value('$1').
@@ -167,6 +176,18 @@ parse_file_print_items_stmt(PrintChannelTok, PrintItemsTok) ->
 parse_file_write_items_stmt(WriteChannelTok, WriteItemsTok) ->
     case parse_write_items(write_items_value(WriteItemsTok)) of
         {ok, Exprs} -> {file_write, write_channel_value(WriteChannelTok), Exprs};
+        error -> unknown
+    end.
+
+parse_close_channels_stmt(CloseChannelsTok) ->
+    case parse_file_channels(split_commas_top_level(close_channels_value(CloseChannelsTok)), []) of
+        {ok, Channels} -> {file_close, Channels};
+        error -> unknown
+    end.
+
+parse_field_tokens(FileChannelTok, FieldSpecsTok) ->
+    case parse_field_specs(split_commas_top_level(field_specs_value(FieldSpecsTok)), []) of
+        {ok, Specs} -> {file_field, file_channel_value(FileChannelTok), Specs};
         error -> unknown
     end.
 
@@ -595,6 +616,27 @@ write_channel_value({write_channel, _Line, ChannelExpr}) ->
 
 write_items_value({write_items, _Line, ItemsText}) ->
     string:trim(ItemsText).
+
+open_path_value({open_path, _Line, PathExpr}) ->
+    string:trim(PathExpr).
+
+open_mode_value({open_mode, _Line, Mode}) ->
+    string:to_upper(string:trim(Mode)).
+
+file_channel_value({file_channel, _Line, ChannelExpr}) ->
+    string:trim(ChannelExpr).
+
+record_length_value({record_length, _Line, RecLenExpr}) ->
+    string:trim(RecLenExpr).
+
+close_channels_value({close_channels, _Line, ChannelsText}) ->
+    string:trim(ChannelsText).
+
+field_specs_value({field_specs, _Line, SpecsText}) ->
+    string:trim(SpecsText).
+
+file_record_value({file_record, _Line, RecordExpr}) ->
+    string:trim(RecordExpr).
 
 mode_value({buffer_mode, _Line, Mode}) ->
     list_to_atom(string:to_lower(Mode)).

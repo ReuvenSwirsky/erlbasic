@@ -27,6 +27,16 @@ tokenize_statement(Text0) when is_list(Text0) ->
             tokenize_locate_statement(Rest);
         {token, kw_pset, Rest} ->
             tokenize_pset_statement(Rest);
+        {token, kw_open, Rest} ->
+            tokenize_open_statement(Rest);
+        {token, kw_close, Rest} ->
+            tokenize_close_statement(Rest);
+        {token, kw_field, Rest} ->
+            tokenize_field_statement(Rest);
+        {token, kw_put, Rest} ->
+            tokenize_put_statement(Rest);
+        {token, kw_get, Rest} ->
+            tokenize_get_statement(Rest);
         {token, kw_next, Rest} ->
             tokenize_next_statement(Rest);
         {token, kw_on, Rest} ->
@@ -300,6 +310,74 @@ tokenize_pset_statement(Rest) ->
             {ok, [{kw_pset, 1}, {coordinate, 1, string:trim(X)}, {coordinate, 1, string:trim(Y)}, {pset_color, 1, string:trim(Color)}]};
         nomatch ->
             {error, "PSET requires (x, y), color"}
+    end.
+
+tokenize_open_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    Pattern = "^(?i)(.+?)\\s+FOR\\s+(INPUT|OUTPUT|APPEND|RANDOM)\\s+AS\\s*#\\s*(.+?)(?:\\s+LEN\\s*=\\s*(.+))?$",
+    case re:run(Trimmed, Pattern, [{capture, all_but_first, list}]) of
+        {match, [PathExpr, Mode, ChannelExpr]} ->
+            {ok, [
+                {kw_open, 1},
+                {open_path, 1, string:trim(PathExpr)},
+                {open_mode, 1, string:to_upper(Mode)},
+                {file_channel, 1, string:trim(ChannelExpr)}
+            ]};
+        {match, [PathExpr, Mode, ChannelExpr, RecLenExpr]} ->
+            {ok, [
+                {kw_open, 1},
+                {open_path, 1, string:trim(PathExpr)},
+                {open_mode, 1, string:to_upper(Mode)},
+                {file_channel, 1, string:trim(ChannelExpr)},
+                {record_length, 1, string:trim(RecLenExpr)}
+            ]};
+        nomatch ->
+            {ok, [{kw_open, 1}, {text, 1, Rest}]}
+    end.
+
+tokenize_close_statement(Rest) ->
+    case string:trim(Rest) of
+        "" -> {ok, [{kw_close, 1}]};
+        ChannelsText -> {ok, [{kw_close, 1}, {close_channels, 1, ChannelsText}]}
+    end.
+
+tokenize_field_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case re:run(Trimmed, "^(?i)#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, SpecsText]} ->
+            {ok, [
+                {kw_field, 1},
+                {file_channel, 1, string:trim(ChannelExpr)},
+                {field_specs, 1, string:trim(SpecsText)}
+            ]};
+        nomatch ->
+            {ok, [{kw_field, 1}, {text, 1, Rest}]}
+    end.
+
+tokenize_put_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case re:run(Trimmed, "^(?i)#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {ok, [
+                {kw_put, 1},
+                {file_channel, 1, string:trim(ChannelExpr)},
+                {file_record, 1, string:trim(RecordExpr)}
+            ]};
+        nomatch ->
+            {ok, [{kw_put, 1}, {text, 1, Rest}]}
+    end.
+
+tokenize_get_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case re:run(Trimmed, "^(?i)#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [ChannelExpr, RecordExpr]} ->
+            {ok, [
+                {kw_get, 1},
+                {file_channel, 1, string:trim(ChannelExpr)},
+                {file_record, 1, string:trim(RecordExpr)}
+            ]};
+        nomatch ->
+            {ok, [{kw_get, 1}, {text, 1, Rest}]}
     end.
 
 classify_statement(Text) ->

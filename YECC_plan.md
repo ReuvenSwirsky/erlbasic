@@ -187,38 +187,38 @@ PRINT and WRITE statements with separator logic (comma/semicolon), multiple item
 File operations with channel numbers, mode keywords, record sizes.
 
 - [ ] **OPEN Statement**
-  - [ ] Create tokenize_open_statement/1 in lexer
-  - [ ] Parse: FOR mode, file name, channel, RECORD size
-  - [ ] Update grammar
-  - [ ] Remove parse_open_stmt/1 legacy
-  - [ ] Build and test
+  - [x] Create tokenize_open_statement/1 in lexer
+  - [x] Parse: FOR mode, file name, channel, RECORD size
+  - [x] Update grammar
+  - [ ] Remove parse_open_stmt/1 legacy (fallback retained for compatibility)
+  - [x] Build and test
   - [ ] Git commit: "phase3: tokenize OPEN statement"
 
 - [ ] **CLOSE Statement**
-  - [ ] Create tokenize_close_statement/1 in lexer
-  - [ ] Parse: channel numbers (may be comma-separated)
-  - [ ] Update grammar
-  - [ ] Build and test
+  - [x] Create tokenize_close_statement/1 in lexer
+  - [x] Parse: channel numbers (may be comma-separated)
+  - [x] Update grammar
+  - [x] Build and test
   - [ ] Git commit: "phase3: tokenize CLOSE statement"
 
 - [ ] **FIELD Statement**
-  - [ ] Create tokenize_field_statement/1 in lexer
-  - [ ] Parse: channel, field_size, var_name sequences
-  - [ ] Update grammar
-  - [ ] Build and test
+  - [x] Create tokenize_field_statement/1 in lexer
+  - [x] Parse: channel, field_size, var_name sequences
+  - [x] Update grammar
+  - [x] Build and test
   - [ ] Git commit: "phase3: tokenize FIELD statement"
 
 - [ ] **PUT/GET Statements**
-  - [ ] Create tokenize_put_get_statement/1 in lexer (unified)
-  - [ ] Parse: channel, record_number (optional)
-  - [ ] Update grammar
-  - [ ] Build and test
+  - [x] Create tokenize_put_get_statement/1 in lexer (implemented as tokenize_put_statement/1 + tokenize_get_statement/1)
+  - [x] Parse: channel, record_number (optional)
+  - [x] Update grammar
+  - [x] Build and test
   - [ ] Git commit: "phase3: tokenize PUT/GET statements"
 
 ### Phase 3 Validation
 
-- [ ] Run full test suite after FILE I/O statements complete
-- [ ] All tests pass
+- [x] Run full test suite after FILE I/O statements complete
+- [x] All tests pass
 - [ ] Git checkpoint: "phase3: file-io tokenization complete"
 
 ---
@@ -407,7 +407,7 @@ Use checkboxes above to track completion. As of last checkpoint:
   - ✅ Group 1B (BUFFER, SLEEP): COMPLETE
   - ✅ Group 1C (LET, LOCATE, PSET): COMPLETE
 - ✅ Phase 2 (PRINT/WRITE): COMPLETE (core tokenization done; compatibility fallbacks retained by design)
-- ⏳ Phase 3 (FILE I/O): QUEUED
+- 🔄 Phase 3 (FILE I/O): PARTIAL (OPEN/CLOSE/FIELD/PUT/GET tokenized; legacy fallback cleanup and final checkpoint pending)
 - ⏳ Phase 4 (DIM/DEF): QUEUED
 - ⏳ Phase 5 (LOOP): QUEUED
 - ⏳ Phase 6 (CONDITIONALS): QUEUED
