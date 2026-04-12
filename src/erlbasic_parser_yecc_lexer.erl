@@ -15,6 +15,16 @@ tokenize_statement(Text0) when is_list(Text0) ->
             tokenize_on_statement(Rest);
         {token, kw_resume, Rest} ->
             tokenize_resume_statement(Rest);
+        {token, Token, Rest} when Token =:= kw_return; Token =:= kw_end; Token =:= kw_stop;
+                                  Token =:= kw_cls; Token =:= kw_hgr; Token =:= kw_hgr2;
+                                  Token =:= kw_textstmt; Token =:= kw_tron; Token =:= kw_troff;
+                                  Token =:= kw_flush ->
+            case string:trim(Rest) of
+                "" ->
+                    {ok, [{Token, 1}]};
+                _ ->
+                    {ok, [{Token, 1}, {text, 1, Rest}]}
+            end;
         {token, Token, Rest} ->
             {ok, [{Token, 1}, {text, 1, Rest}]};
         qmark ->

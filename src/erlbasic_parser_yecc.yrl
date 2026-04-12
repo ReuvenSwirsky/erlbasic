@@ -46,16 +46,16 @@ stmt -> kw_def text : parse_def_stmt('$2').
 stmt -> kw_data text : parse_data_stmt('$2').
 stmt -> kw_read text : parse_read_stmt('$2').
 stmt -> kw_restore text : parse_restore_stmt('$2').
-stmt -> kw_return text : parse_noarg_stmt('$2', {'return'}).
-stmt -> kw_end text : parse_noarg_stmt('$2', {'end'}).
-stmt -> kw_stop text : parse_noarg_stmt('$2', {stop_stmt}).
-stmt -> kw_cls text : parse_noarg_stmt('$2', {cls}).
-stmt -> kw_hgr text : parse_noarg_stmt('$2', {hgr}).
-stmt -> kw_hgr2 text : parse_noarg_stmt('$2', {hgr2}).
-stmt -> kw_textstmt text : parse_noarg_stmt('$2', {text}).
-stmt -> kw_tron text : parse_noarg_stmt('$2', {tron}).
-stmt -> kw_troff text : parse_noarg_stmt('$2', {troff}).
-stmt -> kw_flush text : parse_flush_stmt('$2').
+stmt -> kw_return : {'return'}.
+stmt -> kw_end : {'end'}.
+stmt -> kw_stop : {stop_stmt}.
+stmt -> kw_cls : {cls}.
+stmt -> kw_hgr : {hgr}.
+stmt -> kw_hgr2 : {hgr2}.
+stmt -> kw_textstmt : {text}.
+stmt -> kw_tron : {tron}.
+stmt -> kw_troff : {troff}.
+stmt -> kw_flush : {flush_stmt}.
 stmt -> kw_buffer text : parse_buffer_stmt('$2').
 stmt -> kw_sleep text : parse_sleep_stmt('$2').
 stmt -> kw_sound text : parse_sound_stmt('$2').
@@ -367,9 +367,6 @@ parse_restore_stmt(TextToken) ->
         LineExpr ->
             {restore, string:trim(LineExpr)}
     end.
-
-parse_flush_stmt(TextToken) ->
-    parse_noarg_stmt(TextToken, {flush_stmt}).
 
 parse_buffer_stmt(TextToken) ->
     case string:to_upper(trim_text(TextToken)) of
@@ -848,12 +845,6 @@ cond_expr(LeftTok, Op, RightTok) ->
 
 trim_text({text, _Line, Rest}) ->
     string:trim(Rest).
-
-parse_noarg_stmt(TextToken, Result) ->
-    case trim_text(TextToken) of
-        "" -> Result;
-        _ -> unknown
-    end.
 
 extract_line_stmt(TextToken, StmtType) ->
     TrimmedRest = trim_text(TextToken),
