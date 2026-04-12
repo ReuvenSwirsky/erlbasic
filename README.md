@@ -96,12 +96,6 @@ If a file named `HOME.BAS` (or `home.bas`) exists in the user's program director
 
 See [HOMEPAGE_GUIDE.md](HOMEPAGE_GUIDE.md) for authoring instructions and examples.
 
-**Caching policy** — rendered output is cached keyed on the file's SHA-256 hash:
-- Programs using `INPUT`, `GET`, `GETKEY`, `RND`, or `RANDOMIZE` are **never cached** (volatile).
-- Programs using `TIME$` or `TIMER` are cached for **30 seconds**.
-- Programs using `DATE$` are cached for **1 hour**.
-- All other programs are cached **until the file changes** (hash-keyed, infinite TTL).
-- Legacy cache entries stored in an old format are silently discarded and rebuilt on next request.
 
 ## Example session
 
