@@ -86,8 +86,14 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
                 on_play_return_depth = -1,
                 on_timer_return_depth = -1
             },
+            %% TCP/telnet clients rely on the server to echo ^C visually;
+            %% WebSocket clients already display it client-side in the browser.
+            CtrlCEcho = case erlang:get(erlbasic_conn_type) of
+                websocket -> [];
+                _         -> ["^C\r\n"]
+            end,
             {ResetState,
-             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
+             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ ["\r\n"] ++ CtrlCEcho ++ ["BREAK\r\n"]};
         _ ->
             case erlang:get(memory_limit_exceeded) of
                 true ->
@@ -277,12 +283,15 @@ execute_program_line_statements([], _Program, State, _Pc, LoopStack, CallStack, 
 execute_program_line_statements([Stmt | Rest], Program, State, Pc, LoopStack, CallStack, OutputAcc) ->
     case execute_program_line_statement(Stmt, Program, State, Pc, LoopStack, CallStack) of
         {continue, NextState, NextLoopStack, NextCallStack, Output} ->
+            %% If a FOR frame was just pushed for this Pc and there are remaining
+            %% statements, inject them as BodyStmts so NEXT can loop back in-line.
+            UpdatedLoopStack = maybe_inject_for_body(NextLoopStack, LoopStack, Pc, Rest),
             case NextState#state.pending_input of
                 undefined ->
-                    execute_program_line_statements(Rest, Program, NextState, Pc, NextLoopStack, NextCallStack, OutputAcc ++ Output);
+                    execute_program_line_statements(Rest, Program, NextState, Pc, UpdatedLoopStack, NextCallStack, OutputAcc ++ Output);
                 _ ->
                     PendingState = update_pending_input_rest(NextState, Rest),
-                    {continue, PendingState, NextLoopStack, NextCallStack, OutputAcc ++ Output}
+                    {continue, PendingState, UpdatedLoopStack, NextCallStack, OutputAcc ++ Output}
             end;
         {jump, TargetPc, NextState, NextLoopStack, NextCallStack, Output} ->
             {jump, TargetPc, NextState, NextLoopStack, NextCallStack, OutputAcc ++ Output};
@@ -1018,11 +1027,24 @@ finalize_for_loop(Var, StartValue, EndValue, StepValue, Vars2, State, Pc, LoopSt
     EndInt = erlbasic_eval:normalize_int(EndValue),
     Vars3 = maps:put(Var, StartInt, Vars2),
     NextState = State#state{vars = Vars3},
-    Frame = {Var, EndInt, NormalizedStep, Pc},
+    Frame = {Var, EndInt, NormalizedStep, Pc, []},
     {continue, NextState, [Frame | LoopStack], CallStack, []}.
 
 execute_program_inline_sequence(StatementText, Program, State, Pc, LoopStack, CallStack) ->
     execute_program_line_statements(erlbasic_parser:split_statements(StatementText), Program, State, Pc, LoopStack, CallStack, []).
+
+%% After a FOR statement fires, if there are remaining statements on the same program
+%% line, inject them as BodyStmts in the top-of-stack frame so that NEXT can loop
+%% back within the same line instead of jumping to the (non-existent) next line.
+maybe_inject_for_body(NewLoopStack, OldLoopStack, Pc, Rest) ->
+    case {Rest, NewLoopStack} of
+        {[], _} ->
+            NewLoopStack;
+        {_, [{Var, EndInt, Step, Pc, []} | OldLoopStack]} ->
+            [{Var, EndInt, Step, Pc, Rest} | OldLoopStack];
+        _ ->
+            NewLoopStack
+    end.
 
 execute_goto(LineExpr, Program, State, Pc, LoopStack, CallStack) ->
     LineNumber = get_line_number(Program, Pc),
@@ -1297,18 +1319,18 @@ eval_dim_values([Expr | Rest], Vars, Funcs, Acc) ->
 handle_next_statement(_MaybeVar, Program, _State, Pc, [], _CallStack) ->
     LineNumber = get_line_number(Program, Pc),
     {stop, [erlbasic_eval:format_runtime_error(next_without_for, LineNumber)]};
-handle_next_statement(MaybeVar, Program, State, Pc, [{Var, EndInt, Step, ForPc} | Rest], CallStack) ->
+handle_next_statement(MaybeVar, Program, State, Pc, [{Var, EndInt, Step, ForPc, BodyStmts} | Rest], CallStack) ->
     LineNumber = get_line_number(Program, Pc),
     case MaybeVar of
         undefined ->
-            continue_next(Var, EndInt, Step, ForPc, State, Pc, Rest, CallStack);
+            continue_next(Var, EndInt, Step, ForPc, BodyStmts, State, Pc, Program, Rest, CallStack);
         Var ->
-            continue_next(Var, EndInt, Step, ForPc, State, Pc, Rest, CallStack);
+            continue_next(Var, EndInt, Step, ForPc, BodyStmts, State, Pc, Program, Rest, CallStack);
         _ ->
             {stop, [erlbasic_eval:format_runtime_error(next_without_for, LineNumber)]}
     end.
 
-continue_next(Var, EndInt, Step, ForPc, State, _Pc, Rest, CallStack) ->
+continue_next(Var, EndInt, Step, ForPc, BodyStmts, State, _Pc, Program, Rest, CallStack) ->
     Current = maps:get(Var, State#state.vars, 0),
     NextValue = Current + Step,
     Vars1 = maps:put(Var, NextValue, State#state.vars),
@@ -1318,9 +1340,17 @@ continue_next(Var, EndInt, Step, ForPc, State, _Pc, Rest, CallStack) ->
             false -> NextValue >= EndInt
         end,
     NextState = State#state{vars = Vars1},
+    NewLoopStack = [{Var, EndInt, Step, ForPc, BodyStmts} | Rest],
     case Continue of
         true ->
-            {jump, ForPc + 1, NextState, [{Var, EndInt, Step, ForPc} | Rest], CallStack, []};
+            case BodyStmts of
+                [] ->
+                    %% Normal case: loop body is on following program lines
+                    {jump, ForPc + 1, NextState, NewLoopStack, CallStack, []};
+                _ ->
+                    %% FOR/NEXT on the same program line: re-execute the body statements
+                    execute_program_line_statements(BodyStmts, Program, NextState, ForPc, NewLoopStack, CallStack, [])
+            end;
         false ->
             {continue, NextState, Rest, CallStack, []}
     end.
