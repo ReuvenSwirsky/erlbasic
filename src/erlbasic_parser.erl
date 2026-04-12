@@ -48,15 +48,6 @@
     parse_close_stmt_yecc/1,
     parse_field_stmt_yecc/1,
     parse_put_stmt_yecc/1,
-    parse_color_stmt_yecc/1,
-    parse_locate_stmt_yecc/1,
-    parse_home_stmt_yecc/1,
-    parse_pset_stmt_yecc/1,
-    parse_linegfx_stmt_yecc/1,
-    parse_lineto_stmt_yecc/1,
-    parse_rect_stmt_yecc/1,
-    parse_circle_stmt_yecc/1,
-    parse_pget_stmt_yecc/1,
     parse_sprite_stmt_yecc/1,
     should_split_top_level_sequence/1,
     split_statements/1,
@@ -473,81 +464,6 @@ parse_put_stmt_yecc(Rest) ->
     case re:run(string:trim(Rest), "^#\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
         {match, [ChannelExpr, RecordExpr]} ->
             {file_put_record, string:trim(ChannelExpr), string:trim(RecordExpr)};
-        nomatch ->
-            unknown
-    end.
-
-parse_color_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^(.+?)(?:\\s*,\\s*(.+))?$", [{capture, all_but_first, list}]) of
-        {match, [FgExpr]} ->
-            {color, FgExpr, undefined};
-        {match, [FgExpr, BgExpr]} ->
-            {color, FgExpr, BgExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_locate_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [RowExpr, ColExpr]} ->
-            {locate, RowExpr, ColExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_home_stmt_yecc(Rest) ->
-    case string:to_upper(string:trim(Rest)) of
-        "PUBLISH" -> {home_publish};
-        _ -> unknown
-    end.
-
-parse_pset_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, ColorExpr]} ->
-            {pset, XExpr, YExpr, ColorExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_linegfx_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
-        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
-            {line, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_lineto_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, ColorExpr]} ->
-            {lineto, XExpr, YExpr, ColorExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_rect_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*-\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4, 5], list}]) of
-        {match, [X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr]} ->
-            {rect, X1Expr, Y1Expr, X2Expr, Y2Expr, ColorExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_circle_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
-        {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} ->
-            {circle, XExpr, YExpr, RadiusExpr, ColorExpr};
-        nomatch ->
-            unknown
-    end.
-
-parse_pget_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^\\((.+),(.+)\\),(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, TargetText]} ->
-            case parse_assignment_target(string:trim(TargetText)) of
-                {ok, Target} -> {pget, string:trim(XExpr), string:trim(YExpr), Target};
-                _ -> unknown
-            end;
         nomatch ->
             unknown
     end.
