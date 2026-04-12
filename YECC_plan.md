@@ -90,15 +90,14 @@ Statements that take a single line number or simple expression; one discrete val
 
 ### Group 1C: Simple Assignment-like Statements
 
-- [ ] **LET Statement**
-  - [ ] Create tokenize_let_statement/1 in lexer
-  - [ ] Parse: var_name = expression
-  - [ ] Update grammar to structured tokens
-  - [ ] Remove parse_let_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: assignment smoke tests pass
+- [x] **LET Statement**
+  - [x] Create tokenize_let_statement/1 in lexer
+  - [x] Parse: var_name = expression
+  - [x] Update grammar to structured tokens
+  - [x] Keep fallback parse_let_stmt/1 path for malformed input compatibility
+  - [x] Build validation
+  - [x] Test: assignment smoke tests pass
   - [ ] Git commit: "phase1: tokenize LET statement"
-  - [ ] Note: deferred for now to avoid breaking assignment target validation paths
 
 - [x] **LOCATE Statement**
   - [x] Create tokenize_locate_statement/1 in lexer
@@ -122,10 +121,10 @@ Statements that take a single line number or simple expression; one discrete val
 
 - [x] Run full test suite after all Group 1A statements
 - [x] Run full test suite after all Group 1B statements
-- [ ] Run full test suite after all Group 1C statements
+- [x] Run full test suite after all Group 1C statements
 
 ### Check these after each group
-- [x] All 33+ tests pass (verified after Group 1B and partial Group 1C)
+- [x] All 33+ tests pass (verified after Group 1C completion)
 - [x] Verify zero compiler warnings (BUILD SUCCEEDED with no warnings)
 - [ ] Git checkpoint: "phase1-expansion: complete medium-shape tokenization"
 
@@ -404,7 +403,7 @@ Use checkboxes above to track completion. As of last checkpoint:
 - 🔄 Phase 1-Expansion (medium-shape):
   - ✅ Group 1A (GOTO, GOSUB, RESUME): COMPLETE (Commits 2b79161, 3fbfe0b)
   - ✅ Group 1B (BUFFER, SLEEP): COMPLETE
-  - 🔄 Group 1C (LET, LOCATE, PSET): PARTIAL (LOCATE/PSET complete, LET deferred)
+  - ✅ Group 1C (LET, LOCATE, PSET): COMPLETE
 - ⏳ Phase 2 (PRINT/WRITE): QUEUED
 - ⏳ Phase 3 (FILE I/O): QUEUED
 - ⏳ Phase 4 (DIM/DEF): QUEUED

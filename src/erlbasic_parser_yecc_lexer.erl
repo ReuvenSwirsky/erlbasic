@@ -9,6 +9,8 @@ tokenize_statement(Text0) when is_list(Text0) ->
             tokenize_if_statement(Rest);
         {token, kw_for, Rest} ->
             tokenize_for_statement(Rest);
+        {token, kw_let, Rest} ->
+            tokenize_let_statement(Rest);
         {token, kw_goto, Rest} ->
             tokenize_goto_statement(Rest);
         {token, kw_gosub, Rest} ->
@@ -223,6 +225,19 @@ tokenize_sleep_statement(Rest) ->
     case string:trim(Rest) of
         "" -> {ok, [{kw_sleep, 1}]};
         Duration -> {ok, [{kw_sleep, 1}, {sleep_duration, 1, Duration}]}
+    end.
+
+tokenize_let_statement(Rest) ->
+    case re:run(string:trim(Rest), "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [TargetText, ExprText]} ->
+            {ok, [
+                {kw_let, 1},
+                {assignment_target, 1, string:trim(TargetText)},
+                {eq, 1},
+                {assignment_expr, 1, string:trim(ExprText)}
+            ]};
+        nomatch ->
+            {ok, [{kw_let, 1}, {text, 1, Rest}]}
     end.
 
 tokenize_locate_statement(Rest) ->
