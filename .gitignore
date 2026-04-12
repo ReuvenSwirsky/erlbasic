@@ -30,3 +30,6 @@ test_output.txt
 
 # Generated from leex source
 src/erlbasic_eval_lexer_leex.erl
+
+# Generated from yecc source
+src/erlbasic_parser_yecc.erl
