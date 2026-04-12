@@ -40,7 +40,7 @@ stmt -> kw_on text kw_goto text : {on_goto, text_value('$2'), parse_on_targets(t
 stmt -> kw_on text : parse_on_stmt('$2').
 stmt -> kw_resume : {resume}.
 stmt -> kw_resume kw_next : {resume_next}.
-stmt -> kw_resume text : {resume_line, text_value('$2')}.
+stmt -> kw_resume line_number : {resume_line, line_value('$2')}.
 stmt -> kw_dim text : parse_dim_stmt('$2').
 stmt -> kw_def text : parse_def_stmt('$2').
 stmt -> kw_data text : parse_data_stmt('$2').

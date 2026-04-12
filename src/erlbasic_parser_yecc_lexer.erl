@@ -184,7 +184,7 @@ tokenize_resume_statement(Rest) ->
         TrimmedRest ->
             case string:to_upper(TrimmedRest) of
                 "NEXT" -> {ok, [{kw_resume, 1}, {kw_next, 1}]};
-                _ -> {ok, [{kw_resume, 1}, {text, 1, TrimmedRest}]}
+                _ -> {ok, [{kw_resume, 1}, {line_number, 1, TrimmedRest}]}
             end
     end.
 
