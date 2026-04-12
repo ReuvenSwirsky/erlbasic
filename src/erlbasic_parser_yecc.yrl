@@ -1,5 +1,5 @@
 Nonterminals stmt cond.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge text.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number text.
 Rootsymbol stmt.
 
 stmt -> kw_print text : parse_print_stmt('$2').
@@ -12,8 +12,8 @@ stmt -> kw_input text : parse_input_stmt('$2').
 stmt -> kw_get text : parse_get_stmt('$2').
 stmt -> kw_getkey text : parse_getkey_stmt('$2').
 stmt -> kw_getchar text : parse_getchar_stmt('$2').
-stmt -> kw_goto text : extract_line_stmt('$2', goto).
-stmt -> kw_gosub text : extract_line_stmt('$2', gosub).
+stmt -> kw_goto line_number : {goto, line_value('$2')}.
+stmt -> kw_gosub line_number : {gosub, line_value('$2')}.
 stmt -> kw_if cond kw_then text :
     {if_then_else,
     '$2',
@@ -561,6 +561,9 @@ parse_raw_stmt({raw_stmt, _Line, Command}) ->
 text_value({text, _Line, Rest}) ->
     string:trim(Rest).
 
+line_value({line_number, _Line, Rest}) ->
+    string:trim(Rest).
+
 normalize_if_branch_statement(Stmt) ->
     Trimmed = string:trim(Stmt),
     case re:run(Trimmed, "^(\\d+)$", [{capture, [1], list}]) of
@@ -845,13 +848,6 @@ cond_expr(LeftTok, Op, RightTok) ->
 
 trim_text({text, _Line, Rest}) ->
     string:trim(Rest).
-
-extract_line_stmt(TextToken, StmtType) ->
-    TrimmedRest = trim_text(TextToken),
-    case TrimmedRest of
-        "" -> unknown;
-        LineExpr -> {StmtType, LineExpr}
-    end.
 
 parse_required_expr_stmt(TextToken, Tag) ->
     case trim_text(TextToken) of

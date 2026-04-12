@@ -9,6 +9,10 @@ tokenize_statement(Text0) when is_list(Text0) ->
             tokenize_if_statement(Rest);
         {token, kw_for, Rest} ->
             tokenize_for_statement(Rest);
+        {token, kw_goto, Rest} ->
+            tokenize_goto_statement(Rest);
+        {token, kw_gosub, Rest} ->
+            tokenize_gosub_statement(Rest);
         {token, kw_next, Rest} ->
             tokenize_next_statement(Rest);
         {token, kw_on, Rest} ->
@@ -182,6 +186,22 @@ tokenize_resume_statement(Rest) ->
                 "NEXT" -> {ok, [{kw_resume, 1}, {kw_next, 1}]};
                 _ -> {ok, [{kw_resume, 1}, {text, 1, TrimmedRest}]}
             end
+    end.
+
+tokenize_goto_statement(Rest) ->
+    case string:trim(Rest) of
+        "" ->
+            {error, "GOTO requires a line number"};
+        LineExpr ->
+            {ok, [{kw_goto, 1}, {line_number, 1, LineExpr}]}
+    end.
+
+tokenize_gosub_statement(Rest) ->
+    case string:trim(Rest) of
+        "" ->
+            {error, "GOSUB requires a line number"};
+        LineExpr ->
+            {ok, [{kw_gosub, 1}, {line_number, 1, LineExpr}]}
     end.
 
 classify_statement(Text) ->
