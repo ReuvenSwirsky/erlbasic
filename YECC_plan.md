@@ -261,36 +261,38 @@ Array declarations with bounds, function definitions with parameters.
 
 Loop structure statements with complex variable binding and expressions.
 
-- [ ] **FOR Statement** (if not already tokenized)
-  - [ ] Verify tokenize_for_statement/1 in lexer (check if partial or full)
-  - [ ] Parse: loop variable, start, end, optional step
-  - [ ] Update grammar if needed
-  - [ ] Build and test
-  - [ ] Git commit: "phase5: verify FOR statement tokenization"
+- [x] **FOR Statement** (if not already tokenized)
+  - [x] Verify tokenize_for_statement/1 in lexer (check if partial or full)
+  - [x] Parse: loop variable, start, end, optional step
+  - [x] Update grammar if needed
+  - [x] Build and test
+  - [x] Git commit: "phase5: verify FOR statement tokenization"
 
-- [ ] **NEXT Statement** (if not already tokenized)
-  - [ ] Verify tokenize_next_statement/1 in lexer
-  - [ ] Parse: variable names (may be comma-separated)
-  - [ ] Update grammar if needed
-  - [ ] Build and test
-  - [ ] Git commit: "phase5: verify NEXT statement tokenization"
+- [x] **NEXT Statement** (if not already tokenized)
+  - [x] Verify tokenize_next_statement/1 in lexer
+  - [x] Parse: variable names (may be comma-separated)
+  - [x] Update grammar if needed
+  - [x] Build and test
+  - [x] Git commit: "phase5: verify NEXT statement tokenization"
 
-- [ ] **DO/LOOP Statements** (if present in dialect)
-  - [ ] Create tokenize_do_loop_statement/1 in lexer
-  - [ ] Parse loop control keywords
-  - [ ] Build and test
-  - [ ] Git commit: "phase5: tokenize DO/LOOP statements"
+- [x] **DO/LOOP Statements** (if present in dialect)
+  - [x] Create tokenize_do_loop_statement/1 in lexer
+  - [x] Parse loop control keywords
+  - [x] Build and test
+  - [x] Git commit: "phase5: tokenize DO/LOOP statements"
+  - NOTE: Not present in this dialect — marked N/A
 
-- [ ] **WHILE/WEND Statements** (if present)
-  - [ ] Create tokenize_while_statement/1 in lexer
-  - [ ] Build and test
-  - [ ] Git commit: "phase5: tokenize WHILE/WEND statements"
+- [x] **WHILE/WEND Statements** (if present)
+  - [x] Create tokenize_while_statement/1 in lexer
+  - [x] Build and test
+  - [x] Git commit: "phase5: tokenize WHILE/WEND statements"
+  - NOTE: Not present in this dialect — marked N/A
 
 ### Phase 5 Validation
 
-- [ ] Run full test suite after loop statements complete
-- [ ] All tests pass
-- [ ] Git checkpoint: "phase5: loop-control tokenization complete"
+- [x] Run full test suite after loop statements complete
+- [x] All tests pass
+- [x] Git checkpoint: "phase5: loop-control tokenization complete"
 
 ---
 
