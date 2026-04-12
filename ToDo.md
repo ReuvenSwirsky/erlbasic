@@ -20,3 +20,4 @@
 - [x] Redo lexer to use LEEX
 - [ ] Implement REDIM statement
 - [ ] Additional options to HOME
+- [ ] Can I specify a number in scientific format? Will it parse it?
