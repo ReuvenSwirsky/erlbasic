@@ -45,7 +45,6 @@
     parse_close_stmt_yecc/1,
     parse_field_stmt_yecc/1,
     parse_put_stmt_yecc/1,
-    parse_sprite_stmt_yecc/1,
     should_split_top_level_sequence/1,
     split_statements/1,
     validate_program_line/1
@@ -417,45 +416,6 @@ parse_put_stmt_yecc(Rest) ->
             unknown
     end.
 
-parse_sprite_stmt_yecc(Rest) ->
-    TrimmedRest = string:trim(Rest),
-    case re:run(TrimmedRest, "(?i)^CLEAR$", [{capture, none}]) of
-        match ->
-            {sprite_clear};
-        nomatch ->
-            case re:run(TrimmedRest, "(?i)^HIDE\\s+(.+)$", [{capture, [1], list}]) of
-                {match, [IdExpr]} ->
-                    {sprite_hide, string:trim(IdExpr)};
-                nomatch ->
-                    case re:run(TrimmedRest, "(?i)^SHOW\\s+(.+)$", [{capture, [1], list}]) of
-                        {match, [IdExpr]} ->
-                            {sprite_show, string:trim(IdExpr)};
-                        nomatch ->
-                            case re:run(TrimmedRest, "(?i)^SCALE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-                                {match, [IdExpr, ScaleExpr]} ->
-                                    {sprite_scale, string:trim(IdExpr), string:trim(ScaleExpr)};
-                                nomatch ->
-                                    case re:run(TrimmedRest, "(?i)^LOAD\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
-                                        {match, [IdExpr, WidthExpr, HeightExpr, SourceText]} ->
-                                            case parse_sprite_load_source(SourceText) of
-                                                {ok, SourceTarget} ->
-                                                    {sprite_load, string:trim(IdExpr), string:trim(WidthExpr), string:trim(HeightExpr), SourceTarget};
-                                                _ ->
-                                                    unknown
-                                            end;
-                                        nomatch ->
-                                            case re:run(TrimmedRest, "(?i)^(.+?)\\s*,\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)$", [{capture, [1, 2, 3], list}]) of
-                                                {match, [IdExpr, XExpr, YExpr]} ->
-                                                    {sprite_move, string:trim(IdExpr), string:trim(XExpr), string:trim(YExpr)};
-                                                nomatch ->
-                                                    unknown
-                                            end
-                                    end
-                            end
-                    end
-            end
-    end.
-
 parse_noarg_keyword_stmt(Rest, Result) ->
     case string:trim(Rest) of
         "" -> Result;
@@ -714,14 +674,6 @@ parse_field_specs([Part | Rest], Acc) ->
                     end
             end;
         nomatch ->
-            error
-    end.
-
-parse_sprite_load_source(Text) ->
-    case parse_assignment_target(string:trim(Text)) of
-        {ok, Target = {array_target, _Var, [_]}} ->
-            {ok, Target};
-        _ ->
             error
     end.
 

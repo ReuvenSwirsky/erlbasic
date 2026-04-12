@@ -518,8 +518,44 @@ parse_pget_stmt(TextToken) ->
             unknown
     end.
 
-parse_sprite_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_sprite_stmt_yecc(Rest).
+parse_sprite_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^CLEAR$", [{capture, none}]) of
+        match ->
+            {sprite_clear};
+        nomatch ->
+            case re:run(Rest, "^HIDE\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [IdExpr]} ->
+                    {sprite_hide, string:trim(IdExpr)};
+                nomatch ->
+                    case re:run(Rest, "^SHOW\\s+(.+)$", [{capture, [1], list}]) of
+                        {match, [IdExpr]} ->
+                            {sprite_show, string:trim(IdExpr)};
+                        nomatch ->
+                            case re:run(Rest, "^SCALE\\s+(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [IdExpr, ScaleExpr]} ->
+                                    {sprite_scale, string:trim(IdExpr), string:trim(ScaleExpr)};
+                                nomatch ->
+                                    case re:run(Rest, "^LOAD\\s+(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+                                        {match, [IdExpr, WidthExpr, HeightExpr, SourceText]} ->
+                                            case parse_sprite_load_source(SourceText) of
+                                                {ok, SourceTarget} ->
+                                                    {sprite_load, string:trim(IdExpr), string:trim(WidthExpr), string:trim(HeightExpr), SourceTarget};
+                                                _ ->
+                                                    unknown
+                                            end;
+                                        nomatch ->
+                                            case re:run(Rest, "^(.+?)\\s*,\\s*\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)$", [{capture, [1, 2, 3], list}]) of
+                                                {match, [IdExpr, XExpr, YExpr]} ->
+                                                    {sprite_move, string:trim(IdExpr), string:trim(XExpr), string:trim(YExpr)};
+                                                nomatch ->
+                                                    unknown
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
 
 parse_raw_stmt({raw_stmt, _Line, Command}) ->
     _ = Command,
@@ -767,6 +803,14 @@ parse_field_specs([Part | Rest], Acc) ->
                 false -> parse_field_specs(Rest, [{string:trim(LenExpr), VarUp} | Acc])
             end;
         nomatch ->
+            error
+    end.
+
+parse_sprite_load_source(Text) ->
+    case parse_assignment_target(string:trim(Text)) of
+        {ok, Target = {array_target, _Var, [_]}} ->
+            {ok, Target};
+        _ ->
             error
     end.
 
