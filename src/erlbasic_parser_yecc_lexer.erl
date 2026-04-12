@@ -62,6 +62,10 @@ tokenize_print_statement(Rest) ->
         "" ->
             {ok, [{kw_print, 1}]};
         _ ->
+            case re:run(Trimmed, "^(?i:USING)\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [UsingText]} ->
+                    {ok, [{kw_print, 1}, {print_using, 1, string:trim(UsingText)}]};
+                nomatch ->
             case re:run(Trimmed, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
                 {match, [ChannelExpr]} ->
                     {ok, [{kw_print, 1}, {print_channel, 1, string:trim(ChannelExpr)}]};
@@ -73,10 +77,8 @@ tokenize_print_statement(Rest) ->
                             {ok, [{kw_print, 1}, {print_channel, 1, string:trim(ChannelExpr)}, {print_items, 1, ItemsText}]}
                     end;
                 nomatch ->
-                    case re:run(Trimmed, "^(?i:USING)\\s+", [{capture, none}]) of
-                        match -> {ok, [{kw_print, 1}, {text, 1, Rest}]};
-                        nomatch -> {ok, [{kw_print, 1}, {print_items, 1, Trimmed}]}
-                    end
+                    {ok, [{kw_print, 1}, {print_items, 1, Trimmed}]}
+            end
             end
     end.
 

@@ -146,7 +146,7 @@ PRINT and WRITE statements with separator logic (comma/semicolon), multiple item
   - [x] Create tokenize_print_statement/1 in lexer
   - [x] Handle bare PRINT (newline equivalent)
   - [x] Update grammar
-  - [ ] Remove old parse_print_stmt/1 logic (Phase 1 part) (kept fallback for USING compatibility)
+  - [ ] Remove old parse_print_stmt/1 logic (Phase 1 part) (fallback still retained for compatibility)
   - [x] Build and test
   - [ ] Git commit: "phase2: tokenize PRINT bare case"
 
@@ -154,7 +154,7 @@ PRINT and WRITE statements with separator logic (comma/semicolon), multiple item
   - [x] Enhance tokenize_print_statement/1 to parse comma/semicolon separators
   - [x] Tokenize print item sequence
   - [x] Update grammar for print_items nonterminal
-  - [ ] Handle USING clause (currently routed through fallback `kw_print text` path)
+  - [x] Handle USING clause (tokenized via `print_using`)
   - [x] Build and test
   - [ ] Git commit: "phase2: tokenize PRINT with items and separators"
 
@@ -174,8 +174,10 @@ PRINT and WRITE statements with separator logic (comma/semicolon), multiple item
 
 ### Phase 2 Validation
 
-- [x] Run full test suite after PRINT family complete
-- [x] All tests pass, no warnings
+- [ ] Run full test suite after PRINT family complete
+- [ ] All tests pass, no warnings
+- [x] Run full test suite after current Phase 2 slice
+- [x] Current slice tests pass, no warnings
 - [ ] Git checkpoint: "phase2: print/write tokenization complete"
 
 ---
@@ -404,7 +406,7 @@ Use checkboxes above to track completion. As of last checkpoint:
   - ✅ Group 1A (GOTO, GOSUB, RESUME): COMPLETE (Commits 2b79161, 3fbfe0b)
   - ✅ Group 1B (BUFFER, SLEEP): COMPLETE
   - ✅ Group 1C (LET, LOCATE, PSET): COMPLETE
-- 🔄 Phase 2 (PRINT/WRITE): PARTIAL (PRINT and file-channel WRITE tokenized; USING/file-less WRITE follow-up pending)
+- 🔄 Phase 2 (PRINT/WRITE): PARTIAL (PRINT incl. USING and file-channel WRITE tokenized; file-less WRITE and final cleanup/checkpoint pending)
 - ⏳ Phase 3 (FILE I/O): QUEUED
 - ⏳ Phase 4 (DIM/DEF): QUEUED
 - ⏳ Phase 5 (LOOP): QUEUED
