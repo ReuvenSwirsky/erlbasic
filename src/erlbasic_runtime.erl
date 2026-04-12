@@ -86,8 +86,14 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
                 on_play_return_depth = -1,
                 on_timer_return_depth = -1
             },
+            %% TCP/telnet clients rely on the server to echo ^C visually;
+            %% WebSocket clients already display it client-side in the browser.
+            CtrlCEcho = case erlang:get(erlbasic_conn_type) of
+                websocket -> [];
+                _         -> ["^C\r\n"]
+            end,
             {ResetState,
-             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ ["\r\n^C\r\nBREAK\r\n"]};
+             GfxReset ++ sound_stop_output() ++ music_stop_output() ++ sprite_clear_output() ++ ["\r\n"] ++ CtrlCEcho ++ ["BREAK\r\n"]};
         _ ->
             case erlang:get(memory_limit_exceeded) of
                 true ->
