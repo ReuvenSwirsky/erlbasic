@@ -126,7 +126,7 @@ Statements that take a single line number or simple expression; one discrete val
 ### Check these after each group
 - [x] All 33+ tests pass (verified after Group 1C completion)
 - [x] Verify zero compiler warnings (BUILD SUCCEEDED with no warnings)
-- [ ] Git checkpoint: "phase1-expansion: complete medium-shape tokenization"
+- [x] Git checkpoint: "phase1-expansion: complete medium-shape tokenization"
 
 **Group 1A Status**: ✅ COMPLETE
 - Commits: 2b79161 (GOTO/GOSUB), 3fbfe0b (RESUME)
@@ -142,40 +142,40 @@ PRINT and WRITE statements with separator logic (comma/semicolon), multiple item
 
 ### Print Statement Variants
 
-- [ ] **PRINT Statement (no args)**
-  - [ ] Create tokenize_print_statement/1 in lexer
-  - [ ] Handle bare PRINT (newline equivalent)
-  - [ ] Update grammar
-  - [ ] Remove old parse_print_stmt/1 logic (Phase 1 part)
-  - [ ] Build and test
+- [x] **PRINT Statement (no args)**
+  - [x] Create tokenize_print_statement/1 in lexer
+  - [x] Handle bare PRINT (newline equivalent)
+  - [x] Update grammar
+  - [ ] Remove old parse_print_stmt/1 logic (Phase 1 part) (kept fallback for USING compatibility)
+  - [x] Build and test
   - [ ] Git commit: "phase2: tokenize PRINT bare case"
 
-- [ ] **PRINT with items and separators**
-  - [ ] Enhance tokenize_print_statement/1 to parse comma/semicolon separators
-  - [ ] Tokenize print item sequence
-  - [ ] Update grammar for print_items nonterminal
-  - [ ] Handle USING clause
-  - [ ] Build and test
+- [x] **PRINT with items and separators**
+  - [x] Enhance tokenize_print_statement/1 to parse comma/semicolon separators
+  - [x] Tokenize print item sequence
+  - [x] Update grammar for print_items nonterminal
+  - [ ] Handle USING clause (currently routed through fallback `kw_print text` path)
+  - [x] Build and test
   - [ ] Git commit: "phase2: tokenize PRINT with items and separators"
 
 - [ ] **WRITE Statement (file-less variant)**
-  - [ ] Create tokenize_write_statement/1 in lexer
+  - [x] Create tokenize_write_statement/1 in lexer
   - [ ] Similar to PRINT but may have different formatting
-  - [ ] Update grammar
-  - [ ] Build and test
+  - [x] Update grammar (channel forms tokenized)
+  - [x] Build and test
   - [ ] Git commit: "phase2: tokenize WRITE statement"
 
-- [ ] **PRINT# to file**
-  - [ ] Extend tokenize_print_statement/1 to handle PRINT#channel
-  - [ ] Parse channel number and items
-  - [ ] Update grammar for file variant
-  - [ ] Build and test
+- [x] **PRINT# to file**
+  - [x] Extend tokenize_print_statement/1 to handle PRINT#channel
+  - [x] Parse channel number and items
+  - [x] Update grammar for file variant
+  - [x] Build and test
   - [ ] Git commit: "phase2: tokenize PRINT# to file"
 
 ### Phase 2 Validation
 
-- [ ] Run full test suite after PRINT family complete
-- [ ] All tests pass, no warnings
+- [x] Run full test suite after PRINT family complete
+- [x] All tests pass, no warnings
 - [ ] Git checkpoint: "phase2: print/write tokenization complete"
 
 ---
@@ -400,11 +400,11 @@ For each phase, follow this validation sequence:
 Use checkboxes above to track completion. As of last checkpoint:
 
 - ✅ Phase 1 (no-arg statements): COMPLETE
-- 🔄 Phase 1-Expansion (medium-shape):
+- ✅ Phase 1-Expansion (medium-shape): COMPLETE
   - ✅ Group 1A (GOTO, GOSUB, RESUME): COMPLETE (Commits 2b79161, 3fbfe0b)
   - ✅ Group 1B (BUFFER, SLEEP): COMPLETE
   - ✅ Group 1C (LET, LOCATE, PSET): COMPLETE
-- ⏳ Phase 2 (PRINT/WRITE): QUEUED
+- 🔄 Phase 2 (PRINT/WRITE): PARTIAL (PRINT and file-channel WRITE tokenized; USING/file-less WRITE follow-up pending)
 - ⏳ Phase 3 (FILE I/O): QUEUED
 - ⏳ Phase 4 (DIM/DEF): QUEUED
 - ⏳ Phase 5 (LOOP): QUEUED

@@ -5,6 +5,10 @@
 tokenize_statement(Text0) when is_list(Text0) ->
     Text = string:trim(Text0),
     case classify_statement(Text) of
+        {token, kw_print, Rest} ->
+            tokenize_print_statement(Rest);
+        {token, kw_write, Rest} ->
+            tokenize_write_statement(Rest);
         {token, kw_if, Rest} ->
             tokenize_if_statement(Rest);
         {token, kw_for, Rest} ->
@@ -51,6 +55,46 @@ tokenize_statement(Text0) when is_list(Text0) ->
     end;
 tokenize_statement(_Other) ->
     error.
+
+tokenize_print_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case Trimmed of
+        "" ->
+            {ok, [{kw_print, 1}]};
+        _ ->
+            case re:run(Trimmed, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+                {match, [ChannelExpr]} ->
+                    {ok, [{kw_print, 1}, {print_channel, 1, string:trim(ChannelExpr)}]};
+                {match, [ChannelExpr, ItemsText]} ->
+                    case string:trim(ItemsText) of
+                        "" ->
+                            {ok, [{kw_print, 1}, {print_channel, 1, string:trim(ChannelExpr)}]};
+                        _ ->
+                            {ok, [{kw_print, 1}, {print_channel, 1, string:trim(ChannelExpr)}, {print_items, 1, ItemsText}]}
+                    end;
+                nomatch ->
+                    case re:run(Trimmed, "^(?i:USING)\\s+", [{capture, none}]) of
+                        match -> {ok, [{kw_print, 1}, {text, 1, Rest}]};
+                        nomatch -> {ok, [{kw_print, 1}, {print_items, 1, Trimmed}]}
+                    end
+            end
+    end.
+
+tokenize_write_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case re:run(Trimmed, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+        {match, [ChannelExpr]} ->
+            {ok, [{kw_write, 1}, {write_channel, 1, string:trim(ChannelExpr)}]};
+        {match, [ChannelExpr, ItemsText]} ->
+            case string:trim(ItemsText) of
+                "" ->
+                    {ok, [{kw_write, 1}, {write_channel, 1, string:trim(ChannelExpr)}]};
+                _ ->
+                    {ok, [{kw_write, 1}, {write_channel, 1, string:trim(ChannelExpr)}, {write_items, 1, ItemsText}]}
+            end;
+        nomatch ->
+            {ok, [{kw_write, 1}, {text, 1, Rest}]}
+    end.
 
 tokenize_if_statement(Rest) ->
     Trimmed = string:trim(Rest),

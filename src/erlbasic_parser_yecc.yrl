@@ -1,8 +1,14 @@
 Nonterminals stmt cond.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number assignment_target assignment_expr buffer_mode sleep_duration coordinate pset_color text.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number assignment_target assignment_expr print_channel print_items write_channel write_items buffer_mode sleep_duration coordinate pset_color text.
 Rootsymbol stmt.
 
+stmt -> kw_print : {print, [], true}.
+stmt -> kw_print print_items : parse_print_items_stmt('$2').
+stmt -> kw_print print_channel : {file_print, print_channel_value('$2'), [], true}.
+stmt -> kw_print print_channel print_items : parse_file_print_items_stmt('$2', '$3').
 stmt -> kw_print text : parse_print_stmt('$2').
+stmt -> kw_write write_channel : {file_write, write_channel_value('$2'), []}.
+stmt -> kw_write write_channel write_items : parse_file_write_items_stmt('$2', '$3').
 stmt -> kw_write text : parse_write_stmt('$2').
 stmt -> kw_let assignment_target eq assignment_expr : parse_let_tokens('$2', '$4').
 stmt -> kw_let text : parse_let_stmt('$2').
@@ -136,6 +142,24 @@ parse_write_stmt(TextToken) ->
 parse_qmark_stmt(TextToken) ->
     case parse_print_items(trim_text(TextToken)) of
         {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+        error -> unknown
+    end.
+
+parse_print_items_stmt(PrintItemsTok) ->
+    case parse_print_items(print_items_value(PrintItemsTok)) of
+        {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+        error -> unknown
+    end.
+
+parse_file_print_items_stmt(PrintChannelTok, PrintItemsTok) ->
+    case parse_print_items(print_items_value(PrintItemsTok)) of
+        {ok, Items, EndWithNewline} -> {file_print, print_channel_value(PrintChannelTok), Items, EndWithNewline};
+        error -> unknown
+    end.
+
+parse_file_write_items_stmt(WriteChannelTok, WriteItemsTok) ->
+    case parse_write_items(write_items_value(WriteItemsTok)) of
+        {ok, Exprs} -> {file_write, write_channel_value(WriteChannelTok), Exprs};
         error -> unknown
     end.
 
@@ -549,6 +573,18 @@ assignment_target_value({assignment_target, _Line, Target}) ->
 
 assignment_expr_value({assignment_expr, _Line, Expr}) ->
     string:trim(Expr).
+
+print_channel_value({print_channel, _Line, ChannelExpr}) ->
+    string:trim(ChannelExpr).
+
+print_items_value({print_items, _Line, ItemsText}) ->
+    string:trim(ItemsText).
+
+write_channel_value({write_channel, _Line, ChannelExpr}) ->
+    string:trim(ChannelExpr).
+
+write_items_value({write_items, _Line, ItemsText}) ->
+    string:trim(ItemsText).
 
 mode_value({buffer_mode, _Line, Mode}) ->
     list_to_atom(string:to_lower(Mode)).
