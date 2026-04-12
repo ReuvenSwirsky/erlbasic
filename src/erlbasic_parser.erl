@@ -6,9 +6,6 @@
     clear_parser_mode/0,
     parse_statement_legacy/1,
     parse_statement_yecc/1,
-    parse_print_stmt_yecc/1,
-    parse_write_stmt_yecc/1,
-    parse_qmark_stmt_yecc/1,
     parse_let_stmt_yecc/1,
     parse_rem_stmt_yecc/1,
     parse_implicit_let_stmt_yecc/1,
@@ -74,54 +71,6 @@ clear_parser_mode() ->
 
 parse_statement_legacy(Command) ->
     parse_statement_yecc(Command).
-
-parse_print_stmt_yecc(Rest) ->
-    TrimmedRest = string:trim(Rest),
-    case re:run(TrimmedRest, "(?i)^USING\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [UsingText]} ->
-            case parse_print_using_items(UsingText) of
-                {ok, FormatExpr, Items, EndWithNewline} -> {print_using, FormatExpr, Items, EndWithNewline};
-                error -> unknown
-            end;
-        nomatch ->
-            case re:run(TrimmedRest, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
-                {match, [ChannelExpr]} ->
-                    {file_print, string:trim(ChannelExpr), [], true};
-                {match, [ChannelExpr, ItemsText]} ->
-                    case parse_print_items(ItemsText) of
-                        {ok, Items, EndWithNewline} -> {file_print, string:trim(ChannelExpr), Items, EndWithNewline};
-                        error -> unknown
-                    end;
-                nomatch ->
-                    case TrimmedRest of
-                        "" -> {print, [], true};
-                        ItemsText ->
-                            case parse_print_items(ItemsText) of
-                                {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
-                                error -> unknown
-                            end
-                    end
-            end
-    end.
-
-parse_write_stmt_yecc(Rest) ->
-    case re:run(string:trim(Rest), "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
-        {match, [ChannelExpr]} ->
-            {file_write, string:trim(ChannelExpr), []};
-        {match, [ChannelExpr, ItemsText]} ->
-            case parse_write_items(ItemsText) of
-                {ok, Exprs} -> {file_write, string:trim(ChannelExpr), Exprs};
-                error -> unknown
-            end;
-        nomatch ->
-            unknown
-    end.
-
-parse_qmark_stmt_yecc(Rest) ->
-    case parse_print_items(string:trim(Rest)) of
-        {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
-        error -> unknown
-    end.
 
 parse_let_stmt_yecc(Rest) ->
     case re:run(string:trim(Rest), "^(.+?)\\s*=\\s*(.+)$", [{capture, [1, 2], list}]) of
@@ -565,66 +514,6 @@ validate_program_line(Command) ->
             error;
         true ->
             validate_statement_sequence(Trimmed)
-    end.
-
-parse_write_items(Text) ->
-    Parts = split_commas_top_level(Text),
-    parse_write_items(Parts, []).
-
-parse_write_items([], Acc) ->
-    {ok, lists:reverse(Acc)};
-parse_write_items([Part | Rest], Acc) ->
-    Expr = string:trim(Part),
-    case Expr of
-        "" -> error;
-        _ -> parse_write_items(Rest, [Expr | Acc])
-    end.
-
-parse_print_using_items(Text) ->
-    case parse_print_items(Text) of
-        {ok, [], _EndWithNewline} ->
-            error;
-        {ok, [{FormatExpr, _FmtSep} | Rest], EndWithNewline} ->
-            {ok, FormatExpr, Rest, EndWithNewline};
-        error ->
-            error
-    end.
-
-parse_print_items(Text) ->
-    parse_print_items(Text, [], [], false, 0).
-
-parse_print_items([], CurrentRev, PartsRev, _InString, _Depth) ->
-    FinalExpr = string:trim(lists:reverse(CurrentRev)),
-    case {FinalExpr, PartsRev} of
-        {"", []} ->
-            {ok, [], true};
-        {"", [{_Expr, semicolon} | _]} ->
-            {ok, lists:reverse(PartsRev), false};
-        {"", _} ->
-            error;
-        {_Expr, _} ->
-            {ok, lists:reverse([{FinalExpr, none} | PartsRev]), true}
-    end;
-parse_print_items([$" | Rest], CurrentRev, PartsRev, InString, Depth) ->
-    parse_print_items(Rest, [$" | CurrentRev], PartsRev, not InString, Depth);
-parse_print_items([$( | Rest], CurrentRev, PartsRev, false, Depth) ->
-    parse_print_items(Rest, [$( | CurrentRev], PartsRev, false, Depth + 1);
-parse_print_items([$) | Rest], CurrentRev, PartsRev, false, Depth) when Depth > 0 ->
-    parse_print_items(Rest, [$) | CurrentRev], PartsRev, false, Depth - 1);
-parse_print_items([$, | Rest], CurrentRev, PartsRev, false, 0) ->
-    push_print_part(Rest, CurrentRev, PartsRev, comma);
-parse_print_items([$; | Rest], CurrentRev, PartsRev, false, 0) ->
-    push_print_part(Rest, CurrentRev, PartsRev, semicolon);
-parse_print_items([Ch | Rest], CurrentRev, PartsRev, InString, Depth) ->
-    parse_print_items(Rest, [Ch | CurrentRev], PartsRev, InString, Depth).
-
-push_print_part(Rest, CurrentRev, PartsRev, Sep) ->
-    Expr = string:trim(lists:reverse(CurrentRev)),
-    case Expr of
-        "" ->
-            error;
-        _ ->
-            parse_print_items(Rest, [], [{Expr, Sep} | PartsRev], false, 0)
     end.
 
 parse_input_target_list([], []) ->

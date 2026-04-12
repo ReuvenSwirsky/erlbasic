@@ -88,14 +88,54 @@ cond -> text op_ge text : cond_expr('$1', ">=", '$3').
 
 Erlang code.
 
-parse_print_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_print_stmt_yecc(Rest).
+parse_print_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^USING\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [UsingText]} ->
+            case parse_print_using_items(UsingText) of
+                {ok, FormatExpr, Items, EndWithNewline} -> {print_using, FormatExpr, Items, EndWithNewline};
+                error -> unknown
+            end;
+        nomatch ->
+            case re:run(Rest, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+                {match, [ChannelExpr]} ->
+                    {file_print, string:trim(ChannelExpr), [], true};
+                {match, [ChannelExpr, ItemsText]} ->
+                    case parse_print_items(ItemsText) of
+                        {ok, Items, EndWithNewline} -> {file_print, string:trim(ChannelExpr), Items, EndWithNewline};
+                        error -> unknown
+                    end;
+                nomatch ->
+                    case Rest of
+                        "" -> {print, [], true};
+                        ItemsText ->
+                            case parse_print_items(ItemsText) of
+                                {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+                                error -> unknown
+                            end
+                    end
+            end
+    end.
 
-parse_write_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_write_stmt_yecc(Rest).
+parse_write_stmt(TextToken) ->
+    Rest = trim_text(TextToken),
+    case re:run(Rest, "^#\\s*(.+?)(?:\\s*,\\s*(.*))?$", [{capture, all_but_first, list}]) of
+        {match, [ChannelExpr]} ->
+            {file_write, string:trim(ChannelExpr), []};
+        {match, [ChannelExpr, ItemsText]} ->
+            case parse_write_items(ItemsText) of
+                {ok, Exprs} -> {file_write, string:trim(ChannelExpr), Exprs};
+                error -> unknown
+            end;
+        nomatch ->
+            unknown
+    end.
 
-parse_qmark_stmt({text, _Line, Rest}) ->
-    erlbasic_parser:parse_qmark_stmt_yecc(Rest).
+parse_qmark_stmt(TextToken) ->
+    case parse_print_items(trim_text(TextToken)) of
+        {ok, Items, EndWithNewline} -> {print, Items, EndWithNewline};
+        error -> unknown
+    end.
 
 parse_let_stmt(TextToken) ->
     Rest = trim_text(TextToken),
@@ -543,6 +583,66 @@ parse_input_target_list([Part | Rest], Acc) ->
         {ok, Target} -> parse_input_target_list(Rest, [Target | Acc]);
         {error, Reason} -> {error, Reason};
         error -> error
+    end.
+
+parse_write_items(Text) ->
+    Parts = split_commas_top_level(Text),
+    parse_write_items(Parts, []).
+
+parse_write_items([], Acc) ->
+    {ok, lists:reverse(Acc)};
+parse_write_items([Part | Rest], Acc) ->
+    Expr = string:trim(Part),
+    case Expr of
+        "" -> error;
+        _ -> parse_write_items(Rest, [Expr | Acc])
+    end.
+
+parse_print_using_items(Text) ->
+    case parse_print_items(Text) of
+        {ok, [], _EndWithNewline} ->
+            error;
+        {ok, [{FormatExpr, _FmtSep} | Rest], EndWithNewline} ->
+            {ok, FormatExpr, Rest, EndWithNewline};
+        error ->
+            error
+    end.
+
+parse_print_items(Text) ->
+    parse_print_items(Text, [], [], false, 0).
+
+parse_print_items([], CurrentRev, PartsRev, _InString, _Depth) ->
+    FinalExpr = string:trim(lists:reverse(CurrentRev)),
+    case {FinalExpr, PartsRev} of
+        {"", []} ->
+            {ok, [], true};
+        {"", [{_Expr, semicolon} | _]} ->
+            {ok, lists:reverse(PartsRev), false};
+        {"", _} ->
+            error;
+        {_Expr, _} ->
+            {ok, lists:reverse([{FinalExpr, none} | PartsRev]), true}
+    end;
+parse_print_items([$" | Rest], CurrentRev, PartsRev, InString, Depth) ->
+    parse_print_items(Rest, [$" | CurrentRev], PartsRev, not InString, Depth);
+parse_print_items([$( | Rest], CurrentRev, PartsRev, false, Depth) ->
+    parse_print_items(Rest, [$( | CurrentRev], PartsRev, false, Depth + 1);
+parse_print_items([$) | Rest], CurrentRev, PartsRev, false, Depth) when Depth > 0 ->
+    parse_print_items(Rest, [$) | CurrentRev], PartsRev, false, Depth - 1);
+parse_print_items([$, | Rest], CurrentRev, PartsRev, false, 0) ->
+    push_print_part(Rest, CurrentRev, PartsRev, comma);
+parse_print_items([$; | Rest], CurrentRev, PartsRev, false, 0) ->
+    push_print_part(Rest, CurrentRev, PartsRev, semicolon);
+parse_print_items([Ch | Rest], CurrentRev, PartsRev, InString, Depth) ->
+    parse_print_items(Rest, [Ch | CurrentRev], PartsRev, InString, Depth).
+
+push_print_part(Rest, CurrentRev, PartsRev, Sep) ->
+    Expr = string:trim(lists:reverse(CurrentRev)),
+    case Expr of
+        "" ->
+            error;
+        _ ->
+            parse_print_items(Rest, [], [{Expr, Sep} | PartsRev], false, 0)
     end.
 
 parse_assignment_target(Text) ->
