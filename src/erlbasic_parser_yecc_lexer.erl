@@ -43,6 +43,10 @@ tokenize_statement(Text0) when is_list(Text0) ->
             tokenize_on_statement(Rest);
         {token, kw_resume, Rest} ->
             tokenize_resume_statement(Rest);
+        {token, kw_dim, Rest} ->
+            tokenize_dim_statement(Rest);
+        {token, kw_def, Rest} ->
+            tokenize_def_fn_statement(Rest);
         {token, Token, Rest} when Token =:= kw_return; Token =:= kw_end; Token =:= kw_stop;
                                   Token =:= kw_cls; Token =:= kw_hgr; Token =:= kw_hgr2;
                                   Token =:= kw_textstmt; Token =:= kw_tron; Token =:= kw_troff;
@@ -378,6 +382,24 @@ tokenize_get_statement(Rest) ->
             ]};
         nomatch ->
             {ok, [{kw_get, 1}, {text, 1, Rest}]}
+    end.
+
+tokenize_dim_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case Trimmed of
+        "" ->
+            {ok, [{kw_dim, 1}]};
+        _ ->
+            {ok, [{kw_dim, 1}, {dim_declarations, 1, Trimmed}]}
+    end.
+
+tokenize_def_fn_statement(Rest) ->
+    Trimmed = string:trim(Rest),
+    case Trimmed of
+        "" ->
+            {ok, [{kw_def, 1}]};
+        _ ->
+            {ok, [{kw_def, 1}, {def_fn_spec, 1, Trimmed}]}
     end.
 
 classify_statement(Text) ->

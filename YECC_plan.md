@@ -227,21 +227,21 @@ File operations with channel numbers, mode keywords, record sizes.
 
 Array declarations with bounds, function definitions with parameters.
 
-- [ ] **DIM Statement**
-  - [ ] Create tokenize_dim_statement/1 in lexer
-  - [ ] Parse: variable names and array bounds (brackets with commas)
-  - [ ] Handle multi-dimensional arrays
-  - [ ] Update grammar to structured dim_declarations nonterminal
-  - [ ] Remove parse_dim_stmt/1 legacy logic
-  - [ ] Build and test
-  - [ ] Git commit: "phase4: tokenize DIM statement"
+- [x] **DIM Statement**
+  - [x] Create tokenize_dim_statement/1 in lexer
+  - [x] Parse: variable names and array bounds (brackets with commas)
+  - [x] Handle multi-dimensional arrays
+  - [x] Update grammar to structured dim_declarations nonterminal
+  - [x] Remove parse_dim_stmt/1 legacy logic
+  - [x] Build and test
+  - [x] Git commit: "phase4: tokenize DIM statement"
 
-- [ ] **DEF FN Statement**
-  - [ ] Create tokenize_def_fn_statement/1 in lexer
-  - [ ] Parse: function name, parameter list, expression body
-  - [ ] Update grammar
-  - [ ] Build and test
-  - [ ] Git commit: "phase4: tokenize DEF FN statement"
+- [x] **DEF FN Statement**
+  - [x] Create tokenize_def_fn_statement/1 in lexer
+  - [x] Parse: function name, parameter list, expression body
+  - [x] Update grammar
+  - [x] Build and test
+  - [x] Git commit: "phase4: tokenize DEF FN statement"
 
 - [ ] **REDIM Statement** (if applicable)
   - [ ] Create tokenize_redim_statement/1 in lexer
@@ -251,9 +251,9 @@ Array declarations with bounds, function definitions with parameters.
 
 ### Phase 4 Validation
 
-- [ ] Run full test suite after DIM/DEF statements complete
-- [ ] All tests pass
-- [ ] Git checkpoint: "phase4: array/declaration tokenization complete"
+- [x] Run full test suite after DIM/DEF statements complete
+- [x] All tests pass
+- [x] Git checkpoint: "phase4: array/declaration tokenization complete"
 
 ---
 

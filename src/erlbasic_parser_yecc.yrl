@@ -1,5 +1,5 @@
 Nonterminals stmt cond.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number assignment_target assignment_expr print_channel print_items print_using write_channel write_items open_path open_mode file_channel record_length close_channels field_specs file_record buffer_mode sleep_duration coordinate pset_color text.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number assignment_target assignment_expr print_channel print_items print_using write_channel write_items open_path open_mode file_channel record_length close_channels field_specs file_record buffer_mode sleep_duration coordinate pset_color dim_declarations def_fn_spec text.
 Rootsymbol stmt.
 
 stmt -> kw_print : {print, [], true}.
@@ -49,8 +49,10 @@ stmt -> kw_on text : parse_on_stmt('$2').
 stmt -> kw_resume : {resume}.
 stmt -> kw_resume kw_next : {resume_next}.
 stmt -> kw_resume line_number : {resume_line, line_value('$2')}.
-stmt -> kw_dim text : parse_dim_stmt('$2').
-stmt -> kw_def text : parse_def_stmt('$2').
+stmt -> kw_dim dim_declarations : parse_dim_decls_stmt('$2').
+stmt -> kw_dim text             : parse_dim_stmt('$2').
+stmt -> kw_def def_fn_spec      : parse_def_fn_spec_stmt('$2').
+stmt -> kw_def text             : parse_def_stmt('$2').
 stmt -> kw_data text : parse_data_stmt('$2').
 stmt -> kw_read text : parse_read_stmt('$2').
 stmt -> kw_restore text : parse_restore_stmt('$2').
@@ -370,6 +372,28 @@ parse_on_stmt(TextToken) ->
             end
     end.
 
+parse_dim_decls_stmt(Token) ->
+    Text = dim_declarations_value(Token),
+    case parse_dim_decls(split_commas_top_level(Text), []) of
+        {ok, Decls} -> {dim, Decls};
+        {error, Reason} -> {parse_error, Reason};
+        error -> unknown
+    end.
+
+parse_def_fn_spec_stmt(Token) ->
+    Rest = def_fn_spec_value(Token),
+    case re:run(Rest, "(?i)^FN([A-Za-z][A-Za-z0-9_]*)(?:\\s*\\(\\s*([A-Za-z][A-Za-z0-9_]*[%&#]?)\\s*\\))?\\s*=\\s*(.+)$", [{capture, all_but_first, list}]) of
+        {match, [FnSuffix, "", Expr]} ->
+            {def_fn, "FN" ++ string:to_upper(FnSuffix), undefined, string:trim(Expr)};
+        {match, [FnSuffix, ArgVar, Expr]} ->
+            case erlbasic_keywords:is_reserved_variable_name(string:to_upper(ArgVar)) of
+                true -> {parse_error, reserved_word};
+                false -> {def_fn, "FN" ++ string:to_upper(FnSuffix), string:to_upper(ArgVar), string:trim(Expr)}
+            end;
+        nomatch ->
+            unknown
+    end.
+
 parse_dim_stmt(TextToken) ->
     Rest = string:trim(trim_text(TextToken)),
     case re:run(Rest, "(?i)^(.+)$", [{capture, [1], list}]) of
@@ -637,6 +661,12 @@ field_specs_value({field_specs, _Line, SpecsText}) ->
 
 file_record_value({file_record, _Line, RecordExpr}) ->
     string:trim(RecordExpr).
+
+dim_declarations_value({dim_declarations, _Line, Text}) ->
+    string:trim(Text).
+
+def_fn_spec_value({def_fn_spec, _Line, Text}) ->
+    string:trim(Text).
 
 mode_value({buffer_mode, _Line, Mode}) ->
     list_to_atom(string:to_lower(Mode)).
