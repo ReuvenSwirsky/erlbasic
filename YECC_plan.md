@@ -41,32 +41,32 @@ Statements that take a single line number or simple expression; one discrete val
 
 ### Group 1A: Line Reference Statements (GOTO, GOSUB, RESUME)
 
-- [ ] **GOTO Statement**
-  - [ ] Create tokenize_goto_statement/1 in lexer
-  - [ ] Extract line number from text after GOTO
-  - [ ] Update grammar: replace `kw_goto text` with `kw_goto line_number`
-  - [ ] Remove parse_goto_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: goto smoke tests pass
-  - [ ] Git commit: "phase1: tokenize GOTO statement"
+- [x] **GOTO Statement**
+  - [x] Create tokenize_goto_statement/1 in lexer
+  - [x] Extract line number from text after GOTO
+  - [x] Update grammar: replace `kw_goto text` with `kw_goto line_number`
+  - [x] Remove parse_goto_stmt/1 from grammar
+  - [x] Build validation
+  - [x] Test: goto smoke tests pass
+  - [x] Git commit: "phase1: tokenize GOTO statement"
 
-- [ ] **GOSUB Statement**
-  - [ ] Create tokenize_gosub_statement/1 in lexer
-  - [ ] Extract line number from text after GOSUB
-  - [ ] Update grammar: replace `kw_gosub text` with `kw_gosub line_number`
-  - [ ] Remove parse_gosub_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: gosub smoke tests pass
-  - [ ] Git commit: "phase1: tokenize GOSUB statement"
+- [x] **GOSUB Statement**
+  - [x] Create tokenize_gosub_statement/1 in lexer
+  - [x] Extract line number from text after GOSUB
+  - [x] Update grammar: replace `kw_gosub text` with `kw_gosub line_number`
+  - [x] Remove parse_gosub_stmt/1 from grammar
+  - [x] Build validation
+  - [x] Test: gosub smoke tests pass
+  - [x] Git commit: "phase1: tokenize GOSUB statement"
 
-- [ ] **RESUME Statement**
-  - [ ] Create tokenize_resume_statement/1 in lexer (already partially done - check if present)
-  - [ ] Handle three forms: bare RESUME, RESUME NEXT, RESUME line_number
-  - [ ] Update grammar to use structured tokens
-  - [ ] Remove parse_resume_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: resume smoke tests pass
-  - [ ] Git commit: "phase1: tokenize RESUME statement"
+- [x] **RESUME Statement**
+  - [x] Create tokenize_resume_statement/1 in lexer (already partially done - check if present)
+  - [x] Handle three forms: bare RESUME, RESUME NEXT, RESUME line_number
+  - [x] Update grammar to use structured tokens
+  - [x] Remove parse_resume_stmt/1 from grammar (no such function existed)
+  - [x] Build validation
+  - [x] Test: resume smoke tests pass
+  - [x] Git commit: "phase1: tokenize RESUME statement"
 
 ### Group 1B: Buffer/Sleep (ON/OFF or Optional numeric)
 
@@ -119,12 +119,18 @@ Statements that take a single line number or simple expression; one discrete val
 
 ### Phase 1 Expansion Validation
 
-- [ ] Run full test suite after all Group 1A statements
+- [x] Run full test suite after all Group 1A statements
 - [ ] Run full test suite after all Group 1B statements
 - [ ] Run full test suite after all Group 1C statements
-- [ ] All 33+ tests should still pass
-- [ ] Verify zero compiler warnings
+- [x] All 33+ tests pass (verified after Group 1A: GOTO, GOSUB, RESUME)
+- [x] Verify zero compiler warnings (BUILD SUCCEEDED with no warnings)
 - [ ] Git checkpoint: "phase1-expansion: complete medium-shape tokenization"
+
+**Group 1A Status**: ✅ COMPLETE
+- Commits: 2b79161 (GOTO/GOSUB), 3fbfe0b (RESUME)
+- All three line-reference statements now tokenized with structured `line_number` tokens
+- Grammar updated to use direct token productions instead of text parsing
+- No regressions: All 33+ tests pass, build clean
 
 ---
 
@@ -392,7 +398,10 @@ For each phase, follow this validation sequence:
 Use checkboxes above to track completion. As of last checkpoint:
 
 - ✅ Phase 1 (no-arg statements): COMPLETE
-- ⏳ Phase 1-Expansion (medium-shape): READY TO START
+- 🔄 Phase 1-Expansion (medium-shape):
+  - ✅ Group 1A (GOTO, GOSUB, RESUME): COMPLETE (Commits 2b79161, 3fbfe0b)
+  - ⏳ Group 1B (BUFFER, SLEEP): READY TO START
+  - ⏳ Group 1C (LET, LOCATE, PSET): QUEUED
 - ⏳ Phase 2 (PRINT/WRITE): QUEUED
 - ⏳ Phase 3 (FILE I/O): QUEUED
 - ⏳ Phase 4 (DIM/DEF): QUEUED
