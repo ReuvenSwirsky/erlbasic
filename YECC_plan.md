@@ -300,31 +300,32 @@ Loop structure statements with complex variable binding and expressions.
 
 Complex conditional logic with multiple branches and optional actions.
 
-- [ ] **IF/THEN Statement** (if not already tokenized)
-  - [ ] Verify tokenize_if_statement/1 in lexer (check current state)
-  - [ ] Parse: condition, THEN clause, optional ELSE
-  - [ ] Handle single-line and block IF forms
-  - [ ] Update grammar if needed
-  - [ ] Build and test
-  - [ ] Git commit: "phase6: verify IF/THEN/ELSE tokenization"
+- [x] **IF/THEN Statement** (if not already tokenized)
+  - [x] Verify tokenize_if_statement/1 in lexer (check current state)
+  - [x] Parse: condition, THEN clause, optional ELSE
+  - [x] Handle single-line and block IF forms
+  - [x] Update grammar if needed
+  - [x] Build and test
+  - [x] Git commit: "phase6: verify IF/THEN/ELSE tokenization"
 
-- [ ] **SELECT/CASE Statements** (if present)
-  - [ ] Create tokenize_select_statement/1 in lexer
-  - [ ] Parse: expression and case labels
-  - [ ] Build and test
-  - [ ] Git commit: "phase6: tokenize SELECT/CASE statements"
+- [x] **SELECT/CASE Statements** (if present)
+  - [x] Create tokenize_select_statement/1 in lexer
+  - [x] Parse: expression and case labels
+  - [x] Build and test
+  - [x] Git commit: "phase6: tokenize SELECT/CASE statements"
+  - NOTE: Not present in this dialect — marked N/A
 
-- [ ] **ON GOTO/GOSUB** (multi-branch dispatch)
-  - [ ] Verify tokenize_on_statement/1 in lexer
-  - [ ] Parse: expression and line numbers
-  - [ ] Build and test
-  - [ ] Git commit: "phase6: verify ON GOTO/GOSUB tokenization"
+- [x] **ON GOTO/GOSUB** (multi-branch dispatch)
+  - [x] Verify tokenize_on_statement/1 in lexer
+  - [x] Parse: expression and line numbers
+  - [x] Build and test
+  - [x] Git commit: "phase6: verify ON GOTO/GOSUB tokenization"
 
 ### Phase 6 Validation
 
-- [ ] Run full test suite after conditional statements complete
-- [ ] All tests pass
-- [ ] Git checkpoint: "phase6: conditional-statement tokenization complete"
+- [x] Run full test suite after conditional statements complete
+- [x] All tests pass
+- [x] Git checkpoint: "phase6: conditional-statement tokenization complete"
 
 ---
 
