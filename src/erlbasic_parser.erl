@@ -2,9 +2,6 @@
 
 -export([
     parse_statement/1,
-    set_parser_mode/1,
-    clear_parser_mode/0,
-    parse_statement_legacy/1,
     parse_statement_yecc/1,
     should_split_top_level_sequence/1,
     split_statements/1,
@@ -13,35 +10,7 @@
 
 
 parse_statement(Command) ->
-    case parser_mode() of
-        yecc -> parse_statement_yecc(Command);
-        _ -> parse_statement_legacy(Command)
-    end.
-
-set_parser_mode(Mode) when Mode =:= legacy; Mode =:= yecc ->
-    put(erlbasic_parser_mode, Mode),
-    ok.
-
-clear_parser_mode() ->
-    erase(erlbasic_parser_mode),
-    ok.
-
-parse_statement_legacy(Command) ->
     parse_statement_yecc(Command).
-
-parser_mode() ->
-    case get(erlbasic_parser_mode) of
-        legacy ->
-            legacy;
-        yecc ->
-            yecc;
-        _ ->
-            case application:get_env(erlbasic, parser_mode) of
-                {ok, legacy} -> legacy;
-                {ok, yecc} -> yecc;
-                _ -> yecc
-            end
-    end.
 
 %% Fold statement text to uppercase, preserving the content of string literals.
 %% This normalises keywords typed in any case (e.g. "if", "then", "else",
@@ -60,8 +29,7 @@ normalize_statement_case([C | Rest], false, Acc) when C >= $a, C =< $z ->
 normalize_statement_case([C | Rest], InStr, Acc) ->
     normalize_statement_case(Rest, InStr, [C | Acc]).
 
-%% Phase-1 yecc bridge: run statement text through yecc, then delegate
-%% to legacy parser behavior via grammar actions for exact compatibility.
+%% Parse statement text through the yecc lexer+grammar.
 parse_statement_yecc(Command) ->
     Trimmed = string:trim(normalize_statement_case(Command)),
     case erlbasic_parser_yecc_lexer:tokenize_statement(Trimmed) of

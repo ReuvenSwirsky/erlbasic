@@ -4,6 +4,50 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 11, 2026 - YECC Migration Finalization (Validation + Facade Cleanup)
+
+### Enhancement
+Completed final YECC migration cleanup by removing dead grammar fallback helpers, simplifying the parser facade to a single active path, and validating the full test/build pipeline.
+
+### Implementation
+
+**`src/erlbasic_parser_yecc.yrl`**
+- Removed unreachable fallback productions:
+  - `stmt -> kw_print text`
+  - `stmt -> kw_close text`
+  - `stmt -> kw_dim text`
+  - `stmt -> kw_def text`
+- Removed corresponding dead action helpers:
+  - `parse_print_stmt/1`
+  - `parse_close_stmt/1`
+  - `parse_dim_stmt/1`
+  - `parse_def_stmt/1`
+
+**`src/erlbasic_parser.erl`**
+- Removed obsolete parser mode shim now that YECC is the only parser path:
+  - `set_parser_mode/1`
+  - `clear_parser_mode/0`
+  - `parse_statement_legacy/1`
+  - `parser_mode/0`
+- Simplified `parse_statement/1` to directly call `parse_statement_yecc/1`.
+
+**`eunit_tests/erlbasic_eunit_tests.erl`**
+- Replaced mode-switch test with direct entrypoint parity coverage:
+  - `parse_statement_entrypoint_parity_test/0`
+
+### Validation
+- `./build.ps1`: PASS, zero warnings
+- `./run_tests.ps1`: PASS (EUnit + smoke tests)
+
+### Rationale
+Keeping mode selection after YECC parity was complete added maintenance overhead and created the impression of two supported parser implementations. Removing the dead facade path makes behavior explicit, reduces surface area, and prevents future confusion.
+
+### Lessons Learned
+- Once migration parity is proven, remove compatibility shims promptly to avoid dead-API drift.
+- Grammar fallback rules should be kept only when lexer output can actually produce those token shapes.
+
+---
+
 ## April 10, 2026 - ON TIMER(n) GOSUB Language Feature and Space Invaders Example
 
 ### Enhancement

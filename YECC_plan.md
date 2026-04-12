@@ -341,9 +341,9 @@ Remove all remaining hand-rolled regex helpers and dead code.
 
 - [x] **Audit remaining helper functions in facade (erlbasic_parser.erl)**
   - [x] Check validate_statement_sequence/1 and derivatives — all actively used
-  - [x] parse_statement_legacy/1 retained (used in EUnit parity tests)
-  - [x] No redundant helpers found
-  - [x] Git commit: N/A — nothing to change
+  - [x] Removed redundant parser mode shim (`set_parser_mode/1`, `clear_parser_mode/0`, `parse_statement_legacy/1`, `parser_mode/0`)
+  - [x] Simplified entrypoint (`parse_statement/1` now directly delegates to `parse_statement_yecc/1`)
+  - [x] Git commit: "phase7: parser cleanup and validation complete"
 
 - [x] **Lexer refactoring**
   - [x] All split_leading_*/tokenize_* functions are still referenced — no dead clauses
@@ -355,17 +355,17 @@ Remove all remaining hand-rolled regex helpers and dead code.
   - [x] Run full test suite (all tests pass)
   - [x] Git commit: "phase7: parser cleanup and validation complete" (see phase7 commit)
 
-- [ ] **Documentation update**
-  - [ ] Update parser architecture docs if present (e.g., DEVELOPMENT.md)
-  - [ ] Document new grammar structure and token types
-  - [ ] Record lessons learned
-  - [ ] Git commit: "docs: update parser architecture documentation"
+- [x] **Documentation update**
+  - [x] Update parser architecture docs if present (e.g., DEVELOPMENT.md)
+  - [x] Document new grammar structure and token types
+  - [x] Record lessons learned
+  - [x] Git commit: "docs: update parser architecture documentation"
 
 ### Phase 7 Validation
 
-- [ ] Zero compiler warnings
-- [ ] All 33+ tests pass
-- [ ] Git checkpoint: "phase7: YECC migration complete"
+- [x] Zero compiler warnings
+- [x] All 33+ tests pass
+- [x] Git checkpoint: "phase7: YECC migration complete"
 
 ---
 
