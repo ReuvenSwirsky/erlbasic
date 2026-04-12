@@ -13,6 +13,14 @@ tokenize_statement(Text0) when is_list(Text0) ->
             tokenize_goto_statement(Rest);
         {token, kw_gosub, Rest} ->
             tokenize_gosub_statement(Rest);
+        {token, kw_buffer, Rest} ->
+            tokenize_buffer_statement(Rest);
+        {token, kw_sleep, Rest} ->
+            tokenize_sleep_statement(Rest);
+        {token, kw_locate, Rest} ->
+            tokenize_locate_statement(Rest);
+        {token, kw_pset, Rest} ->
+            tokenize_pset_statement(Rest);
         {token, kw_next, Rest} ->
             tokenize_next_statement(Rest);
         {token, kw_on, Rest} ->
@@ -202,6 +210,35 @@ tokenize_gosub_statement(Rest) ->
             {error, "GOSUB requires a line number"};
         LineExpr ->
             {ok, [{kw_gosub, 1}, {line_number, 1, LineExpr}]}
+    end.
+
+tokenize_buffer_statement(Rest) ->
+    case string:to_upper(string:trim(Rest)) of
+        "ON" -> {ok, [{kw_buffer, 1}, {buffer_mode, 1, "ON"}]};
+        "OFF" -> {ok, [{kw_buffer, 1}, {buffer_mode, 1, "OFF"}]};
+        _ -> {error, "BUFFER requires ON or OFF"}
+    end.
+
+tokenize_sleep_statement(Rest) ->
+    case string:trim(Rest) of
+        "" -> {ok, [{kw_sleep, 1}]};
+        Duration -> {ok, [{kw_sleep, 1}, {sleep_duration, 1, Duration}]}
+    end.
+
+tokenize_locate_statement(Rest) ->
+    case re:run(string:trim(Rest), "^(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
+        {match, [Row, Col]} ->
+            {ok, [{kw_locate, 1}, {coordinate, 1, string:trim(Row)}, {coordinate, 1, string:trim(Col)}]};
+        nomatch ->
+            {error, "LOCATE requires row, column"}
+    end.
+
+tokenize_pset_statement(Rest) ->
+    case re:run(string:trim(Rest), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [X, Y, Color]} ->
+            {ok, [{kw_pset, 1}, {coordinate, 1, string:trim(X)}, {coordinate, 1, string:trim(Y)}, {pset_color, 1, string:trim(Color)}]};
+        nomatch ->
+            {error, "PSET requires (x, y), color"}
     end.
 
 classify_statement(Text) ->

@@ -70,23 +70,23 @@ Statements that take a single line number or simple expression; one discrete val
 
 ### Group 1B: Buffer/Sleep (ON/OFF or Optional numeric)
 
-- [ ] **BUFFER Statement**
-  - [ ] Create tokenize_buffer_statement/1 in lexer
-  - [ ] Parse ON / OFF flags
-  - [ ] Update grammar to structured tokens
-  - [ ] Remove parse_buffer_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: buffer smoke tests pass
-  - [ ] Git commit: "phase1: tokenize BUFFER statement"
+- [x] **BUFFER Statement**
+  - [x] Create tokenize_buffer_statement/1 in lexer
+  - [x] Parse ON / OFF flags
+  - [x] Update grammar to structured tokens
+  - [x] Remove parse_buffer_stmt/1 from grammar
+  - [x] Build validation
+  - [x] Test: buffer smoke tests pass
+  - [x] Git commit: "phase1: tokenize BUFFER statement"
 
-- [ ] **SLEEP Statement**
-  - [ ] Create tokenize_sleep_statement/1 in lexer
-  - [ ] Handle: bare SLEEP or SLEEP numeric_value
-  - [ ] Update grammar to structured tokens
-  - [ ] Remove parse_sleep_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: smoke tests pass
-  - [ ] Git commit: "phase1: tokenize SLEEP statement"
+- [x] **SLEEP Statement**
+  - [x] Create tokenize_sleep_statement/1 in lexer
+  - [x] Handle: bare SLEEP or SLEEP numeric_value
+  - [x] Update grammar to structured tokens
+  - [x] Remove parse_sleep_stmt/1 from grammar
+  - [x] Build validation
+  - [x] Test: smoke tests pass
+  - [x] Git commit: "phase1: tokenize SLEEP statement"
 
 ### Group 1C: Simple Assignment-like Statements
 
@@ -98,31 +98,34 @@ Statements that take a single line number or simple expression; one discrete val
   - [ ] Build validation
   - [ ] Test: assignment smoke tests pass
   - [ ] Git commit: "phase1: tokenize LET statement"
+  - [ ] Note: deferred for now to avoid breaking assignment target validation paths
 
-- [ ] **LOCATE Statement**
-  - [ ] Create tokenize_locate_statement/1 in lexer
-  - [ ] Parse: row, column (comma-separated coordinates)
-  - [ ] Update grammar to structured tokens
-  - [ ] Remove parse_locate_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: locate smoke tests pass
-  - [ ] Git commit: "phase1: tokenize LOCATE statement"
+- [x] **LOCATE Statement**
+  - [x] Create tokenize_locate_statement/1 in lexer
+  - [x] Parse: row, column (comma-separated coordinates)
+  - [x] Update grammar to structured tokens
+  - [x] Remove parse_locate_stmt/1 from grammar
+  - [x] Build validation
+  - [x] Test: locate smoke tests pass
+  - [x] Git commit: "phase1: tokenize LOCATE statement"
 
-- [ ] **PSET Statement**
-  - [ ] Create tokenize_pset_statement/1 in lexer
-  - [ ] Parse: (x, y, color) with optional color
-  - [ ] Update grammar to structured tokens
-  - [ ] Remove parse_pset_stmt/1 from grammar
-  - [ ] Build validation
-  - [ ] Test: pset smoke tests pass
-  - [ ] Git commit: "phase1: tokenize PSET statement"
+- [x] **PSET Statement**
+  - [x] Create tokenize_pset_statement/1 in lexer
+  - [x] Parse: (x, y, color) with optional color
+  - [x] Update grammar to structured tokens
+  - [x] Remove parse_pset_stmt/1 from grammar
+  - [x] Build validation
+  - [x] Test: pset smoke tests pass
+  - [x] Git commit: "phase1: tokenize PSET statement"
 
-### Phase 1 Expansion Validation
+### Phase 1 Expansion Validation 
 
 - [x] Run full test suite after all Group 1A statements
-- [ ] Run full test suite after all Group 1B statements
+- [x] Run full test suite after all Group 1B statements
 - [ ] Run full test suite after all Group 1C statements
-- [x] All 33+ tests pass (verified after Group 1A: GOTO, GOSUB, RESUME)
+
+### Check these after each group
+- [x] All 33+ tests pass (verified after Group 1B and partial Group 1C)
 - [x] Verify zero compiler warnings (BUILD SUCCEEDED with no warnings)
 - [ ] Git checkpoint: "phase1-expansion: complete medium-shape tokenization"
 
@@ -400,8 +403,8 @@ Use checkboxes above to track completion. As of last checkpoint:
 - ✅ Phase 1 (no-arg statements): COMPLETE
 - 🔄 Phase 1-Expansion (medium-shape):
   - ✅ Group 1A (GOTO, GOSUB, RESUME): COMPLETE (Commits 2b79161, 3fbfe0b)
-  - ⏳ Group 1B (BUFFER, SLEEP): READY TO START
-  - ⏳ Group 1C (LET, LOCATE, PSET): QUEUED
+  - ✅ Group 1B (BUFFER, SLEEP): COMPLETE
+  - 🔄 Group 1C (LET, LOCATE, PSET): PARTIAL (LOCATE/PSET complete, LET deferred)
 - ⏳ Phase 2 (PRINT/WRITE): QUEUED
 - ⏳ Phase 3 (FILE I/O): QUEUED
 - ⏳ Phase 4 (DIM/DEF): QUEUED

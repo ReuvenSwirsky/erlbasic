@@ -1,5 +1,5 @@
 Nonterminals stmt cond.
-Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number text.
+Terminals raw_stmt kw_print kw_write kw_let kw_rem kw_implicit_let kw_line_input kw_input kw_get kw_getkey kw_getchar kw_goto kw_gosub kw_if kw_then kw_else kw_for kw_to kw_step kw_next ident eq kw_on kw_error kw_on_sprite kw_on_play kw_on_timer kw_resume kw_dim kw_def kw_data kw_read kw_restore kw_return kw_end kw_stop kw_cls kw_hgr kw_hgr2 kw_textstmt kw_tron kw_troff kw_flush kw_buffer kw_sleep kw_sound kw_play kw_chain kw_open kw_close kw_field kw_put kw_color kw_locate kw_home kw_pset kw_linegfx kw_lineto kw_rect kw_circle kw_pget kw_sprite qmark op_lt op_gt op_eq op_ne op_le op_ge line_number buffer_mode sleep_duration coordinate pset_color text.
 Rootsymbol stmt.
 
 stmt -> kw_print text : parse_print_stmt('$2').
@@ -56,8 +56,9 @@ stmt -> kw_textstmt : {text}.
 stmt -> kw_tron : {tron}.
 stmt -> kw_troff : {troff}.
 stmt -> kw_flush : {flush_stmt}.
-stmt -> kw_buffer text : parse_buffer_stmt('$2').
-stmt -> kw_sleep text : parse_sleep_stmt('$2').
+stmt -> kw_buffer buffer_mode : {buffer_mode, mode_value('$2')}.
+stmt -> kw_sleep : {sleep_keypress}.
+stmt -> kw_sleep sleep_duration : {sleep, duration_value('$2')}.
 stmt -> kw_sound text : parse_sound_stmt('$2').
 stmt -> kw_play text : parse_play_stmt('$2').
 stmt -> kw_chain text : parse_chain_stmt('$2').
@@ -66,9 +67,9 @@ stmt -> kw_close text : parse_close_stmt('$2').
 stmt -> kw_field text : parse_field_stmt('$2').
 stmt -> kw_put text : parse_put_stmt('$2').
 stmt -> kw_color text : parse_color_stmt('$2').
-stmt -> kw_locate text : parse_locate_stmt('$2').
+stmt -> kw_locate coordinate coordinate : {locate, coord_value('$2'), coord_value('$3')}.
 stmt -> kw_home text : parse_home_stmt('$2').
-stmt -> kw_pset text : parse_pset_stmt('$2').
+stmt -> kw_pset coordinate coordinate pset_color : {pset, coord_value('$2'), coord_value('$3'), color_value('$4')}.
 stmt -> kw_linegfx text : parse_linegfx_stmt('$2').
 stmt -> kw_lineto text : parse_lineto_stmt('$2').
 stmt -> kw_rect text : parse_rect_stmt('$2').
@@ -368,19 +369,6 @@ parse_restore_stmt(TextToken) ->
             {restore, string:trim(LineExpr)}
     end.
 
-parse_buffer_stmt(TextToken) ->
-    case string:to_upper(trim_text(TextToken)) of
-        "ON" -> {buffer_mode, on};
-        "OFF" -> {buffer_mode, off};
-        _ -> unknown
-    end.
-
-parse_sleep_stmt(TextToken) ->
-    case trim_text(TextToken) of
-        "" -> {sleep_keypress};
-        Expr -> {sleep, Expr}
-    end.
-
 parse_sound_stmt(TextToken) ->
     case re:run(trim_text(TextToken), "^(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
         {match, [VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr]} ->
@@ -449,26 +437,10 @@ parse_color_stmt(TextToken) ->
             unknown
     end.
 
-parse_locate_stmt(TextToken) ->
-    case re:run(trim_text(TextToken), "^(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2], list}]) of
-        {match, [RowExpr, ColExpr]} ->
-            {locate, RowExpr, ColExpr};
-        nomatch ->
-            unknown
-    end.
-
 parse_home_stmt(TextToken) ->
     case string:to_upper(trim_text(TextToken)) of
         "PUBLISH" -> {home_publish};
         _ -> unknown
-    end.
-
-parse_pset_stmt(TextToken) ->
-    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+)$", [{capture, [1, 2, 3], list}]) of
-        {match, [XExpr, YExpr, ColorExpr]} ->
-            {pset, XExpr, YExpr, ColorExpr};
-        nomatch ->
-            unknown
     end.
 
 parse_linegfx_stmt(TextToken) ->
@@ -563,6 +535,18 @@ text_value({text, _Line, Rest}) ->
 
 line_value({line_number, _Line, Rest}) ->
     string:trim(Rest).
+
+mode_value({buffer_mode, _Line, Mode}) ->
+    list_to_atom(string:to_lower(Mode)).
+
+duration_value({sleep_duration, _Line, Duration}) ->
+    string:trim(Duration).
+
+coord_value({coordinate, _Line, Coord}) ->
+    string:trim(Coord).
+
+color_value({pset_color, _Line, Color}) ->
+    string:trim(Color).
 
 normalize_if_branch_statement(Stmt) ->
     Trimmed = string:trim(Stmt),
