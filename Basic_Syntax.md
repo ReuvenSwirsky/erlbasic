@@ -19,9 +19,13 @@ Rules:
 
 ## Literal Notes
 
+- Default numeric values in erlbasic are decimal-style numbers; this language model emphasizes decimal quantities rather than fixed-width machine integers.
+- Unsuffixed numeric variables are treated as default numeric values, and a decimal point form is always valid (`1.0`, `0.25`, `10.`).
 - Integer literals may be written in decimal or hexadecimal.
 - Hexadecimal literals use the form `0x...` or `0X...` and can be used anywhere an integer expression is accepted.
 - Hex literals are useful for packed bit masks, including sprite row definitions stored in `%` integer variables.
+- Floating-point literals may be written in decimal (`1.5`, `.25`, `10.`) or scientific notation (`1E3`, `1.5e-3`, `3D2`).
+- Scientific notation accepts `E`/`e` and `D`/`d` exponents.
 
 ## REPL Commands (Immediate Mode)
 
@@ -778,7 +782,8 @@ Syntax:
 
 ## Notes
 
-- Variable names are case-insensitive and may include optional suffixes `$`, `%`, or `&`.
+- Variable names are case-insensitive and may include optional suffixes `$`, `%`, `&`, or `#`.
+- Unsuffixed numeric variables follow the default decimal numeric model.
 - `#` suffix declares an explicit floating-point variable (double-precision runtime float).
 - Reserved words cannot be used as variable names.
 - Arrays support 1, 2, or 3 dimensions.

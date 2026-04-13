@@ -7,6 +7,37 @@ For BASIC statements (PRINT, IF, FOR, etc.) see [Basic_Syntax.md](Basic_Syntax.m
 
 ---
 
+## Numeric Conversion Quick Reference
+
+Numeric model note:
+- erlbasic treats unsuffixed numeric values as default decimal numbers.
+- `#` suffixed variables are explicit floating-point variables.
+
+| Function | Input | Output | Behavior |
+|---|---|---|---|
+| Default unsuffixed numeric (`A`) | Numeric literal/expression | Decimal numeric value | Default language numeric model |
+| `A#` variable | Numeric literal/expression | Float | Explicit floating-point variable |
+| `CDBL(x)` | Numeric | Float | Converts integer to float; float unchanged |
+| `CSNG(x)` | Numeric | Float | Same runtime result type as `CDBL` in erlbasic |
+| `CINT(x)` | Numeric | Integer | Rounds to nearest integer |
+| `INT(x)` | Numeric | Integer | Rounds toward negative infinity |
+| `FLOOR(x)` | Numeric | Integer | Rounds toward negative infinity |
+| `CEIL(x)` | Numeric | Integer | Rounds toward positive infinity |
+| `FIX(x)` | Numeric | Integer | Truncates toward zero |
+| `STR$(x)` | Numeric | String | Number to string; may emit scientific notation for extreme magnitudes |
+| `VAL(s$)` | String | Number | Parses numeric prefix; supports decimal and scientific notation (`E`/`D`) |
+
+Quick examples:
+
+```text
+PRINT CINT(2.5), FLOOR(2.5), CEIL(2.5), FIX(2.5)     '  3  2  3  2
+PRINT CINT(-2.5), FLOOR(-2.5), CEIL(-2.5), FIX(-2.5) ' -3 -3 -2 -2
+PRINT STR$(1.25E3)                                     ' 1250.0
+PRINT VAL("3D-2")                                      ' 0.03
+```
+
+---
+
 ## Math Functions
 
 ### ABS
@@ -103,6 +134,64 @@ PRINT CEIL(2.0)    '  2
 
 Notes:
 - Argument must be numeric; a string argument raises an Illegal function call error.
+- `CEIL` is distinct from `CINT`: `CEIL` always rounds toward +infinity, while `CINT` rounds to nearest integer.
+
+---
+
+### CDBL
+
+Converts a numeric value to floating-point (double-precision runtime float).
+
+Syntax:
+- `CDBL(<expr>)`
+
+Examples:
+```text
+PRINT CDBL(5)      '  5.0
+PRINT CDBL(2.25)   '  2.25
+```
+
+Notes:
+- Argument must be numeric; a non-numeric argument raises an Illegal function call error.
+
+---
+
+### CINT
+
+Converts a numeric value to integer by rounding to nearest integer.
+
+Syntax:
+- `CINT(<expr>)`
+
+Examples:
+```text
+PRINT CINT(2.1)    '  2
+PRINT CINT(2.9)    '  3
+PRINT CINT(-2.5)   '  -3
+```
+
+Notes:
+- `CINT` is not the same as `FLOOR`/`INT`/`FIX`.
+- Argument must be numeric; a non-numeric argument raises an Illegal function call error.
+
+---
+
+### CSNG
+
+Converts a numeric value to floating-point.
+
+Syntax:
+- `CSNG(<expr>)`
+
+Examples:
+```text
+PRINT CSNG(9)      '  9.0
+PRINT CSNG(3.5)    '  3.5
+```
+
+Notes:
+- In erlbasic runtime semantics, `CSNG` and `CDBL` both return the interpreter float type.
+- Argument must be numeric; a non-numeric argument raises an Illegal function call error.
 
 ---
 
@@ -178,6 +267,9 @@ Examples:
 PRINT FLOOR(3.9)   '  3
 PRINT FLOOR(-2.1)  '  -3
 ```
+
+Notes:
+- `FLOOR` is distinct from `CINT`: `FLOOR` always rounds toward -infinity, while `CINT` rounds to nearest integer.
 
 ---
 
@@ -356,10 +448,14 @@ Syntax:
 
 Returns 0 if the string contains no recognizable number.
 
+Scientific notation is supported (`E`/`e` and `D`/`d` exponents).
+
 Examples:
 ```text
 PRINT VAL("123")       '  123
 PRINT VAL("  -4.5xyz") '  -4.5
+PRINT VAL("1.25E3")    '  1250.0
+PRINT VAL("3D-2")      '  0.03
 PRINT VAL("ABC")       '  0
 ```
 
@@ -523,6 +619,7 @@ Syntax:
 
 Notes:
 - Passing a non-numeric argument raises a Type mismatch error.
+- Very large/small magnitudes may be formatted in scientific notation.
 
 Examples:
 ```text

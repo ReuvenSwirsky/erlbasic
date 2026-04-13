@@ -31,6 +31,22 @@ apply_math_function("FLOOR", [X]) ->
     apply_floor(X);
 apply_math_function("CEIL", [X]) ->
     apply_ceil(X);
+apply_math_function("CDBL", [X]) when is_integer(X) ->
+    {ok, float(X)};
+apply_math_function("CDBL", [X]) when is_float(X) ->
+    {ok, X};
+apply_math_function("CDBL", [_]) ->
+    {error, illegal_function_call};
+apply_math_function("CINT", [X]) when is_number(X) ->
+    {ok, round(X)};
+apply_math_function("CINT", [_]) ->
+    {error, illegal_function_call};
+apply_math_function("CSNG", [X]) when is_integer(X) ->
+    {ok, float(X)};
+apply_math_function("CSNG", [X]) when is_float(X) ->
+    {ok, X};
+apply_math_function("CSNG", [_]) ->
+    {error, illegal_function_call};
 apply_math_function("LN", [X]) ->
     safe_math(fun() -> math:log(X) end);
 apply_math_function("LOG", [X]) ->
@@ -393,18 +409,23 @@ apply_chr(Code) ->
     end.
 
 apply_str(Value) when is_integer(Value); is_float(Value) ->
-    {ok, format_number(Value)};
+    {ok, erlbasic_eval:format_number(Value)};
 apply_str(_Value) ->
     {error, illegal_function_call}.
 
 apply_val(Value) ->
     Text = string:trim(to_basic_string(Value)),
-    case re:run(Text, "^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))", [{capture, [1], list}]) of
+    case re:run(Text, "^([+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[EeDd][+-]?\\d+)?)", [{capture, [1], list}]) of
         {match, [NumText]} ->
-            case string:to_integer(NumText) of
-                {Int, ""} -> {ok, Int};
-                _ ->
-                    case string:to_float(NumText) of
+            Normalized = normalize_val_number_text(NumText),
+            case has_float_marker(Normalized) of
+                false ->
+                    case string:to_integer(Normalized) of
+                        {Int, ""} -> {ok, Int};
+                        _ -> {ok, 0}
+                    end;
+                true ->
+                    case string:to_float(Normalized) of
                         {Float, ""} -> {ok, Float};
                         _ -> {ok, 0}
                     end
@@ -412,6 +433,36 @@ apply_val(Value) ->
         nomatch ->
             {ok, 0}
     end.
+
+has_float_marker(Text) ->
+    lists:member($., Text) orelse lists:member($e, Text) orelse lists:member($E, Text).
+
+normalize_val_number_text(Text) ->
+    Canon = [case C of $D -> $e; $d -> $e; _ -> C end || C <- Text],
+    case split_exp(Canon) of
+        {Mantissa, ExpPart} ->
+            NormMantissa = case lists:member($., Mantissa) of
+                true ->
+                    case lists:last(Mantissa) of
+                        $. -> Mantissa ++ "0";
+                        _ -> Mantissa
+                    end;
+                false -> Mantissa ++ ".0"
+            end,
+            NormMantissa ++ [$e | ExpPart];
+        plain ->
+            Canon
+    end.
+
+split_exp(Text) ->
+    split_exp(Text, []).
+
+split_exp([], _Acc) ->
+    plain;
+split_exp([C | Rest], Acc) when C =:= $e; C =:= $E ->
+    {lists:reverse(Acc), Rest};
+split_exp([C | Rest], Acc) ->
+    split_exp(Rest, [C | Acc]).
 
 normalize_int_arg(Value) when is_integer(Value) ->
     {ok, Value};
@@ -423,35 +474,8 @@ normalize_int_arg(_) ->
 to_basic_string(Value) when is_list(Value) ->
     Value;
 to_basic_string(Value) when is_integer(Value) ->
-    integer_to_list(Value);
+    erlbasic_eval:format_print_value(Value);
 to_basic_string(Value) when is_float(Value) ->
-    format_number(Value);
+    erlbasic_eval:format_print_value(Value);
 to_basic_string(Value) ->
     lists:flatten(io_lib:format("~p", [Value])).
-
-format_number(Value) when is_integer(Value) ->
-    integer_to_list(Value);
-format_number(Value) when is_float(Value) ->
-    Raw = lists:flatten(io_lib:format("~.10f", [Value])),
-    ensure_float_text(trim_float_string(Raw)).
-
-trim_float_string(Text) ->
-    trim_float_string_rev(lists:reverse(Text)).
-
-ensure_float_text(Text) ->
-    case lists:member($., Text) of
-        true ->
-            case lists:last(Text) of
-                $. -> Text ++ "0";
-                _ -> Text
-            end;
-        false ->
-            Text ++ ".0"
-    end.
-
-trim_float_string_rev([$0 | Rest]) ->
-    trim_float_string_rev(Rest);
-trim_float_string_rev([$. | Rest]) ->
-    lists:reverse(Rest);
-trim_float_string_rev(Rest) ->
-    lists:reverse(Rest).

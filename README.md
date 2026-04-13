@@ -10,7 +10,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Immediate commands: `PRINT`, `LET`, `INPUT`, `LIST`, `RUN`, `CONT`, `NEW`, `DIR`, `SAVE`, `LOAD`, `SCRATCH`, `RENUM`, `QUIT`
 - Program statements: `LET`, `REM`, `PRINT`, `PRINT USING`, `INPUT`, `INPUT LINE`, `LOCATE`, `COLOR`, `DATA`, `READ`, `DIM`, `DEF FN`, `IF/THEN/ELSE`, `FOR/NEXT`, `GOTO`, `GOSUB/RETURN`, `ON...GOTO`, `ON...GOSUB`, `ON PLAY(...) GOSUB`, `ON SPRITE GOSUB`, `ON TIMER(...) GOSUB`, `ON ERROR GOTO`, `RESUME`, `STOP`, `GET`, `GETKEY`, `SLEEP`, `TRON`, `TROFF`, `END`
 - Graphics mode (WebSocket only): `HGR`, `HGR2`, `TEXT`, `PSET`, `LINE`, `LINETO`, `RECT`, `CIRCLE`, `BUFFER`, `FLUSH`, `PGET`, `GETCHAR`, `SOUND`, `SPRITE` (`LOAD`, `SHOW`, `HIDE`, `SCALE`, `CLEAR`, position)
-- Full expression engine: numeric operators, exponentiation, decimal and `0x...` hexadecimal integer literals, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `TIMER`, `FREE`, `MEM_USED()`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
+- Full expression engine: numeric operators, exponentiation, decimal/scientific (`E`/`D`) and `0x...` hexadecimal integer literals, math functions (`SIN`, `COS`, `TAN`, `ACOS`, `SQRT`, `INT`, `FLOOR`, `CEIL`, `CINT`, `CDBL`, `CSNG`, `TIMER`, `FREE`, `MEM_USED()`, `VAL`, `POS`, …), string functions (`LEFT$`, `RIGHT$`, `MID$`, `INSTR`, `LEN`, `ASC`, `CHR$`, `STR$`, `SPACE$`, `STRING$`, `DATE$`, `TIME$`, `TERM$`)
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
 - **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and renders the output as a styled HTML page at `/:username`; text output is captured as coloured terminal panels; `HGR`/`HGR2` graphics output is captured as inline SVG panels; `HOME PUBLISH` flushes the current screen as a panel and resets for the next one — multiple panels per page are supported
@@ -110,6 +110,8 @@ RUN
 ## Notes
 
 - Variable names are case-insensitive and cannot use reserved language keywords.
+- Default numeric values in erlbasic follow a decimal-style numeric model.
+- `#` suffix declares an explicit floating-point variable (double-precision runtime float).
 - `REM` starts a comment; `:` after `REM` is comment text, not a separator.
 - Undefined variables evaluate to `0`.
 - Sending an empty stored line (e.g. `20`) deletes that line from the program.

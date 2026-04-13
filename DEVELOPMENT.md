@@ -4,6 +4,35 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 12, 2026 - Numeric Conversion + Scientific Notation Docs Sync
+
+### Enhancement
+Aligned documentation with current numeric behavior in evaluator/builtins, including scientific-notation parsing and numeric conversion builtins.
+
+### Documentation Updates
+
+**`Basic_Functions.md`**
+- Added `CDBL`, `CINT`, and `CSNG` entries.
+- Clarified non-overlap of `CEIL`/`FLOOR` with `CINT` rounding semantics.
+- Updated `VAL` docs to include scientific notation (`E`/`D` exponents).
+- Updated `STR$` notes to mention scientific-notation output for extreme magnitudes.
+
+**`Basic_Syntax.md`**
+- Expanded literal notes to include floating-point scientific notation forms.
+
+**`README.md`**
+- Updated feature summary to include scientific notation and conversion functions.
+- Added explicit note that `#` suffix variables are floating-point.
+
+### Validation
+- `./build.ps1`: PASS
+- `./run_tests.ps1`: PASS
+
+### Rationale
+Users were already using `#` variables and numeric/string conversion flows (`STR$`, `VAL`) but docs lagged behavior. This sync removes ambiguity and makes conversion/rounding expectations explicit.
+
+---
+
 ## April 11, 2026 - YECC Migration Finalization (Validation + Facade Cleanup)
 
 ### Enhancement

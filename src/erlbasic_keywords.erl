@@ -21,7 +21,8 @@ builtin_function_keywords() ->
         "ABS", "ACOS", "ASIN", "ATAN", "ATN", "ATAN2", "COS", "DEG", "EXP", "FIX", "INT", "LN", "LOG",
         "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "POS", "EOF", "LOF", "SEEK",
         "LEFT$", "RIGHT$", "MID$", "LEN", "INSTR", "ASC", "CHR$", "STR$", "SPACE$", "STRING$", "DATE$", "TIME$", "TERM$",
-        "TIMER", "FREE", "MEM_USED", "PLAY"
+        "TIMER", "FREE", "MEM_USED", "PLAY",
+        "CDBL", "CINT", "CSNG"
     ].
 
 list_keywords() ->

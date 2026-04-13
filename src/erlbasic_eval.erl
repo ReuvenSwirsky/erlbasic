@@ -3,6 +3,7 @@
 -export([
     format_value/1,
     format_print_value/1,
+    format_number/1,
     eval_expr/2,
     eval_expr/3,
     eval_expr_result/2,
