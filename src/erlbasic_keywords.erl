@@ -23,7 +23,7 @@ builtin_function_keywords() ->
         "PI", "POW", "RAD", "RND", "SGN", "SIN", "SQR", "SQRT", "TAN", "FLOOR", "CEIL", "VAL", "POS", "EOF", "LOF", "SEEK",
         "LEFT$", "RIGHT$", "MID$", "LEN", "INSTR", "ASC", "CHR$", "STR$", "SPACE$", "STRING$", "DATE$", "TIME$", "TERM$",
         "TIMER", "FREE", "MEM_USED", "PLAY",
-        "CDBL", "CINT", "CSNG"
+        "CDBL", "CINT", "CSNG", "TYPEOF"
     ].
 
 list_keywords() ->

@@ -112,6 +112,8 @@ apply_math_function("CHR$", [Code]) ->
     apply_chr(Code);
 apply_math_function("STR$", [Value]) ->
     apply_str(Value);
+apply_math_function("TYPEOF", [Value]) ->
+    {ok, type_of_value(Value)};
 apply_math_function("SPACE$", [Count]) ->
     apply_space(Count);
 apply_math_function("POS", []) ->
@@ -479,3 +481,12 @@ to_basic_string(Value) when is_float(Value) ->
     erlbasic_eval:format_print_value(Value);
 to_basic_string(Value) ->
     lists:flatten(io_lib:format("~p", [Value])).
+
+type_of_value(Value) when is_integer(Value) ->
+    "INTEGER";
+type_of_value(Value) when is_float(Value) ->
+    "FLOAT";
+type_of_value(Value) when is_list(Value) ->
+    "STRING";
+type_of_value(_Value) ->
+    "UNKNOWN".

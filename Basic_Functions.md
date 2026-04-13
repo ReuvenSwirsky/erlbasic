@@ -24,6 +24,7 @@ Numeric model note:
 | `FLOOR(x)` | Numeric | Integer | Rounds toward negative infinity |
 | `CEIL(x)` | Numeric | Integer | Rounds toward positive infinity |
 | `FIX(x)` | Numeric | Integer | Truncates toward zero |
+| `TYPEOF(x)` | Any scalar expression | String | Returns `"INTEGER"`, `"FLOAT"`, or `"STRING"` |
 | `STR$(x)` | Numeric | String | Number to string; may emit scientific notation for extreme magnitudes |
 | `VAL(s$)` | String | Number | Parses numeric prefix; supports decimal and scientific notation (`E`/`D`) |
 
@@ -32,6 +33,7 @@ Quick examples:
 ```text
 PRINT CINT(2.5), FLOOR(2.5), CEIL(2.5), FIX(2.5)     '  3  2  3  2
 PRINT CINT(-2.5), FLOOR(-2.5), CEIL(-2.5), FIX(-2.5) ' -3 -3 -2 -2
+PRINT TYPEOF(A), TYPEOF(A#), TYPEOF(A$)               ' INTEGER FLOAT STRING
 PRINT STR$(1.25E3)                                     ' 1250.0
 PRINT VAL("3D-2")                                      ' 0.03
 ```
@@ -435,6 +437,28 @@ Syntax:
 Example:
 ```text
 PRINT TAN(0)       '  0.0
+```
+
+---
+
+### TYPEOF
+
+Returns a string describing the runtime scalar type of an expression.
+
+Syntax:
+- `TYPEOF(<expr>)`
+
+Return values:
+- `"INTEGER"`
+- `"FLOAT"`
+- `"STRING"`
+
+Examples:
+```text
+PRINT TYPEOF(123)      '  INTEGER
+PRINT TYPEOF(1.5E2)    '  FLOAT
+PRINT TYPEOF("HELLO")  '  STRING
+PRINT TYPEOF(A#)       '  FLOAT
 ```
 
 ---

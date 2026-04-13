@@ -795,6 +795,7 @@ Syntax:
 - Variable names are case-insensitive and may include optional suffixes `$`, `%`, `&`, or `#`.
 - Unsuffixed numeric variables follow the default decimal numeric model.
 - `#` suffix declares an explicit floating-point variable (double-precision runtime float).
+- Use `TYPEOF(<expr>)` to inspect runtime scalar type; it returns `"INTEGER"`, `"FLOAT"`, or `"STRING"`.
 - Reserved words cannot be used as variable names.
 - Arrays support 1, 2, or 3 dimensions.
 - `FOR` loop control variables are numeric variable forms.
