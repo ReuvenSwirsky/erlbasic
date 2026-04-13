@@ -199,6 +199,10 @@ format_runtime_error(out_of_data) ->
     "?OUT OF DATA ERROR\r\n";
 format_runtime_error(illegal_function_call) ->
     "?ILLEGAL FUNCTION CALL\r\n";
+format_runtime_error(undefined_function) ->
+    "?UNDEFINED FUNCTION ERROR\r\n";
+format_runtime_error(undimmed_array) ->
+    "?UNDIMMED ARRAY ERROR\r\n";
 format_runtime_error(subscript_out_of_range) ->
     "?SUBSCRIPT OUT OF RANGE\r\n";
 format_runtime_error(type_mismatch) ->
@@ -246,6 +250,8 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
         division_by_zero -> "DIVISION BY ZERO ERROR";
         out_of_data -> "OUT OF DATA ERROR";
         illegal_function_call -> "ILLEGAL FUNCTION CALL";
+        undefined_function -> "UNDEFINED FUNCTION ERROR";
+        undimmed_array -> "UNDIMMED ARRAY ERROR";
         subscript_out_of_range -> "SUBSCRIPT OUT OF RANGE";
         type_mismatch -> "TYPE MISMATCH ERROR";
         cant_continue -> "CAN'T CONTINUE ERROR";
@@ -275,6 +281,8 @@ format_runtime_error(Reason, _) ->
 error_code(division_by_zero) -> 11;
 error_code(out_of_data) -> 4;
 error_code(illegal_function_call) -> 5;
+error_code(undefined_function) -> 18;
+error_code(undimmed_array) -> 18;
 error_code(subscript_out_of_range) -> 9;
 error_code(type_mismatch) -> 13;
 error_code(cant_continue) -> 17;

@@ -2,7 +2,9 @@ Definitions.
 WS = [\000-\s]+
 HEX = 0[xX][0-9A-Fa-f]+
 BADHEX = 0[xX]
-FLOAT = ([0-9]+\.[0-9]*)|(\.[0-9]+)
+EXP = [eE][\+\-]?[0-9]+
+FLOAT = (([0-9]+\.[0-9]*)|(\.[0-9]+))({EXP})?
+SCIFLOAT = [0-9]+{EXP}
 INT = [0-9]+
 ID = [A-Za-z][A-Za-z0-9_]*[\$%&#]?
 STR = \"[^\"]*\"
@@ -20,7 +22,7 @@ Rules.
 \) : {token, rparen}.
 {HEX} : {token, {num, hex_to_integer(string:substr(TokenChars, 3))}}.
 {BADHEX} : {error, {invalid_hex_literal, TokenChars}}.
-{FLOAT} :
+({FLOAT}|{SCIFLOAT}) :
     case safe_float(TokenChars) of
         {ok, Value} -> {token, {num, Value}};
         error -> {error, {invalid_float, TokenChars}}
@@ -58,6 +60,20 @@ safe_float(TokenChars) ->
     end.
 
 normalize_float_text(TokenChars) ->
+    case split_exponent(TokenChars) of
+        none ->
+            normalize_plain_mantissa(TokenChars);
+        {Mantissa, Exponent} ->
+            NormalizedMantissa0 = normalize_plain_mantissa(Mantissa),
+            NormalizedMantissa =
+                case lists:member($., NormalizedMantissa0) of
+                    true -> NormalizedMantissa0;
+                    false -> NormalizedMantissa0 ++ ".0"
+                end,
+            NormalizedMantissa ++ Exponent
+    end.
+
+normalize_plain_mantissa(TokenChars) ->
     PrefixNormalized =
         case TokenChars of
             [$. | _] -> [$0 | TokenChars];
@@ -66,4 +82,12 @@ normalize_float_text(TokenChars) ->
     case lists:last(PrefixNormalized) of
         $. -> PrefixNormalized ++ "0";
         _ -> PrefixNormalized
+    end.
+
+split_exponent(TokenChars) ->
+    case lists:splitwith(fun(C) -> C =/= $e andalso C =/= $E end, TokenChars) of
+        {_Mantissa, []} ->
+            none;
+        {Mantissa, Exponent} ->
+            {Mantissa, Exponent}
     end.

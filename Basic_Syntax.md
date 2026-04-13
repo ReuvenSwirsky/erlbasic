@@ -257,6 +257,11 @@ DEF FNQ(X)=X*X+1
 DEF FNPI=3.14159
 ```
 
+Notes:
+- User function names must start with `FN` followed by at least one letter or digit (e.g. `FNX`, `FNPI`, `FNQ%`).
+- Calling a function that has not been defined with `DEF FN` raises `?UNDEFINED FUNCTION ERROR`.
+- Variable names starting with `FN` are reserved for user functions and cannot be used as array names.
+
 ### DIM
 
 Declares one or more arrays.
@@ -273,6 +278,11 @@ DIM A(10)
 DIM GRID(10,10)
 DIM CUBE(4,4,4),NAMES$(50)
 ```
+
+Notes:
+- Arrays support 1, 2, or 3 dimensions. Indices are 0-based; the dimension size is the maximum valid index.
+- Referencing an array that has not been declared with `DIM` raises `?UNDIMMED ARRAY ERROR`.
+- Array names starting with `FN` are not allowed (those names are reserved for user-defined functions).
 
 ### END
 

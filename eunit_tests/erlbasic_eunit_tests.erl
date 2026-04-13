@@ -132,6 +132,11 @@ expr_lexer_number_contract_test() ->
         {ok, [{num, 16}, plus, {num, 0.6}, plus, {num, 1.25}, plus, {num, 12}]},
         erlbasic_eval_lexer:tokenize_expr("0x10 + .6 + 1.25 + 12")).
 
+expr_lexer_scientific_number_contract_test() ->
+    ?assertEqual(
+        {ok, [{num, 2.0e30}, plus, {num, 2.0e30}, plus, {num, 2.0e30}, plus, {num, 0.02}, plus, {num, 5.0}]},
+        erlbasic_eval_lexer:tokenize_expr("2e30 + 2E+30 + 2e+30 + 2e-2 + .5e1")).
+
 expr_lexer_string_contract_test() ->
     ?assertEqual(
         {ok, [{str, "HELLO"}, plus, {str, " WORLD"}]},
@@ -150,6 +155,24 @@ expr_eval_precedence_regression_test() ->
     ?assertEqual({ok, 512, #{}}, erlbasic_eval:eval_expr_result("2^3^2", #{})),
     ?assertEqual({ok, 3, #{}}, erlbasic_eval:eval_expr_result("7\\2", #{})),
     ?assertEqual({ok, 3, #{}}, erlbasic_eval:eval_expr_result("7 MOD 4", #{})).
+
+expr_eval_scientific_regression_test() ->
+    ?assertEqual({ok, 2.0e30, #{}}, erlbasic_eval:eval_expr_result("2e+30", #{})),
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("LET A=2E+30")).
+
+undefined_fn_immediate_error_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("PRINT FNMISSING(1)", S0),
+    ?assertEqual(match, re:run(lists:flatten(Output), "UNDEFINED FUNCTION", [{capture, none}])).
+
+undefined_fn_program_error_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 PRINT FNMISSING(1)", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 END", S1),
+    {_S3, Output} = erlbasic_interp:handle_input("RUN", S2),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "UNDEFINED FUNCTION", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "IN 10", [{capture, none}])).
 
 file_io_parser_and_builtins_test() ->
     ?assertEqual(
@@ -187,6 +210,11 @@ immediate_print_test() ->
     StateA = erlbasic_interp:new_state(),
     {_StateB, DotOutput} = erlbasic_interp:handle_input("PRINT .6", StateA),    
     ?assertEqual("0.6\r\n", lists:flatten(DotOutput)),
+    StateSci0 = erlbasic_interp:new_state(),
+    {StateSci1, SciAssignOutput} = erlbasic_interp:handle_input("A=2E+30", StateSci0),
+    ?assertEqual([], SciAssignOutput),
+    {_StateSci2, SciPrintOutput} = erlbasic_interp:handle_input("PRINT A", StateSci1),
+    ?assertEqual(match, re:run(lists:flatten(SciPrintOutput), "(2(\\.0+)?[eE]\\+?30)|(2000000000000000000000000000000)", [{capture, none}])),
     PrevConnType = erlang:get(erlbasic_conn_type),
     erlang:put(erlbasic_conn_type, websocket),
     try
@@ -1558,6 +1586,38 @@ input_integer_to_float_conversion_test() ->
     {_S5, Output} = erlbasic_interp:handle_input("10", S4),
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "10.5", [{capture, none}])).
+
+%% GW-BASIC/QBASIC accept scientific notation in INPUT numeric fields
+%% using E/e with optional + or - sign in the exponent.
+input_scientific_notation_positive_exponent_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT A", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT A/1E30", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("2e+30", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "2(\\.0+)?", [{capture, none}])).
+
+input_scientific_notation_negative_exponent_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT N%", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT N%", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("5E-1", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "0", [{capture, none}])).
+
+input_scientific_notation_to_integer_target_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 INPUT N%", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT N%", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("RUN", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("2e2", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "200", [{capture, none}])).
 
 %% Test INPUT with byte variable
 input_byte_test() ->

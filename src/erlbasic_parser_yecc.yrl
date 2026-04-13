@@ -875,7 +875,7 @@ parse_dim_decl(Text) ->
     case re:run(Text, Pattern, [{capture, [1, 2], list}]) of
         {match, [Var, DimText]} ->
             VarUp = string:to_upper(Var),
-            case erlbasic_keywords:is_reserved_variable_name(VarUp) of
+            case erlbasic_keywords:is_reserved_variable_name(VarUp) orelse erlbasic_eval_expr:is_user_fn_name(VarUp) of
                 true -> {error, reserved_word};
                 false ->
                     case parse_index_exprs(DimText) of
