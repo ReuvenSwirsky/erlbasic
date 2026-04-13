@@ -2,8 +2,9 @@ Definitions.
 WS = [\000-\s]+
 HEX = 0[xX][0-9A-Fa-f]+
 BADHEX = 0[xX]
-SCINOTFLOAT = (([0-9]+\.?[0-9]*)|([0-9]*\.[0-9]+))[EeDd][+-]?[0-9]+
-FLOAT = ([0-9]+\.[0-9]*)|(\.[0-9]+)
+EXP = [eEdD][\+\-]?[0-9]+
+FLOAT = (([0-9]+\.[0-9]*)|(\.[0-9]+))({EXP})?
+SCIFLOAT = [0-9]+{EXP}
 INT = [0-9]+
 ID = [A-Za-z][A-Za-z0-9_]*[\$%&#]?
 STR = \"[^\"]*\"
@@ -21,12 +22,7 @@ Rules.
 \) : {token, rparen}.
 {HEX} : {token, {num, hex_to_integer(string:substr(TokenChars, 3))}}.
 {BADHEX} : {error, {invalid_hex_literal, TokenChars}}.
-{SCINOTFLOAT} :
-    case safe_float(TokenChars) of
-        {ok, Value} -> {token, {num, Value}};
-        error -> {error, {invalid_float, TokenChars}}
-    end.
-{FLOAT} :
+({FLOAT}|{SCIFLOAT}) :
     case safe_float(TokenChars) of
         {ok, Value} -> {token, {num, Value}};
         error -> {error, {invalid_float, TokenChars}}
@@ -64,34 +60,39 @@ safe_float(TokenChars) ->
     end.
 
 normalize_float_text(TokenChars) ->
-    Prefixed = case TokenChars of
-        [$. | _] -> [$0 | TokenChars];
-        _ -> TokenChars
-    end,
-    case split_at_exp(Prefixed) of
-        {Mantissa, ExpRest} ->
-            NormMantissa = case lists:member($., Mantissa) of
-                true  ->
-                    case lists:last(Mantissa) of
-                        $. -> Mantissa ++ "0";
-                        _  -> Mantissa
-                    end;
-                false -> Mantissa ++ ".0"
-            end,
-            NormMantissa ++ [$e | ExpRest];
-        plain ->
-            case lists:last(Prefixed) of
-                $. -> Prefixed ++ "0";
-                _ -> Prefixed
-            end
+    case split_exponent(TokenChars) of
+        none ->
+            normalize_plain_mantissa(TokenChars);
+        {Mantissa, Exponent} ->
+            NormalizedMantissa0 = normalize_plain_mantissa(Mantissa),
+            NormalizedMantissa =
+                case lists:member($., NormalizedMantissa0) of
+                    true -> NormalizedMantissa0;
+                    false -> NormalizedMantissa0 ++ ".0"
+                end,
+            NormalizedMantissa ++ canonicalize_exponent(Exponent)
     end.
 
-split_at_exp(Chars) ->
-    split_at_exp(Chars, []).
+normalize_plain_mantissa(TokenChars) ->
+    PrefixNormalized =
+        case TokenChars of
+            [$. | _] -> [$0 | TokenChars];
+            _ -> TokenChars
+        end,
+    case lists:last(PrefixNormalized) of
+        $. -> PrefixNormalized ++ "0";
+        _ -> PrefixNormalized
+    end.
 
-split_at_exp([], _Acc) ->
-    plain;
-split_at_exp([C | Rest], Acc) when C =:= $E; C =:= $e; C =:= $D; C =:= $d ->
-    {lists:reverse(Acc), Rest};
-split_at_exp([C | Rest], Acc) ->
-    split_at_exp(Rest, [C | Acc]).
+split_exponent(TokenChars) ->
+    case lists:splitwith(fun(C) -> C =/= $e andalso C =/= $E andalso C =/= $d andalso C =/= $D end, TokenChars) of
+        {_Mantissa, []} ->
+            none;
+        {Mantissa, Exponent} ->
+            {Mantissa, Exponent}
+    end.
+
+canonicalize_exponent([H | T]) when H =:= $d; H =:= $D ->
+    [$e | T];
+canonicalize_exponent(Exp) ->
+    Exp.

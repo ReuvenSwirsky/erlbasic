@@ -1,6 +1,6 @@
 -module(erlbasic_eval_expr).
 
--export([eval_arith_expr/2]).
+-export([eval_arith_expr/2, is_user_fn_name/1]).
 
 eval_arith_expr(Expr, Vars) ->
     case compile_expr_cached(Expr) of
@@ -347,6 +347,10 @@ eval_callable(Name, Args, Vars) ->
         {ok, {ArgVar, FnExpr}} ->
             eval_user_function(ArgVar, FnExpr, Args, Vars);
         error ->
+            case is_user_fn_name(Name) of
+                true ->
+                    {error, undefined_function};
+                false ->
             case erlbasic_eval_builtins:apply_math_function(Name, Args) of
                 {ok, Value} ->
                     {ok, Value};
@@ -360,7 +364,20 @@ eval_callable(Name, Args, Vars) ->
                 {error, Reason} ->
                     {error, Reason}
             end
+            end
     end.
+
+is_user_fn_name([$F, $N | Rest]) when Rest =/= [] ->
+    lists:all(fun(C) ->
+        (C >= $A andalso C =< $Z) orelse
+        (C >= $0 andalso C =< $9) orelse
+        C =:= $_ orelse
+        C =:= $% orelse
+        C =:= $& orelse
+        C =:= $#
+    end, Rest);
+is_user_fn_name(_) ->
+    false.
 
 eval_user_function(undefined, FnExpr, [], Vars) ->
     case erlbasic_eval:eval_expr_result(FnExpr, Vars) of

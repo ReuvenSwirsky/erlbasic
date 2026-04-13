@@ -40,7 +40,7 @@ get_array_value(Name, Indices, Vars) ->
         error ->
             case auto_array_dims(Indices) of
                 {ok, _} ->
-                    {ok, default_scalar_value(Name)};
+                    {error, undimmed_array};
                 error ->
                     {error, illegal_function_call}
             end

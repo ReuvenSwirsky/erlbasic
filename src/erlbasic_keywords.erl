@@ -8,7 +8,8 @@
     is_expr_keyword/1,
     is_list_keyword/1,
     is_builtin_function_keyword/1,
-    is_reserved_variable_name/1
+    is_reserved_variable_name/1,
+    is_user_fn_name/1
 ]).
 
 expr_keywords() ->
@@ -66,6 +67,18 @@ is_reserved_variable_name(Name) ->
 
 is_reserved_only_keyword(Upper) ->
     lists:member(Upper, reserved_only_keywords()).
+
+is_user_fn_name([$F, $N | Rest]) when Rest =/= [] ->
+    lists:all(fun(C) ->
+        (C >= $A andalso C =< $Z) orelse
+        (C >= $0 andalso C =< $9) orelse
+        C =:= $_ orelse
+        C =:= $% orelse
+        C =:= $& orelse
+        C =:= $#
+    end, Rest);
+is_user_fn_name(_) ->
+    false.
 
 strip_var_sigil([]) ->
     [];
