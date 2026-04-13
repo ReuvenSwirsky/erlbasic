@@ -133,6 +133,10 @@ RUN
 - File I/O is sandboxed to the user directory; max 15 channels open simultaneously.
 - Absolute paths and `..` path traversal are rejected.
 
+## Architecture Notes
+
+- Time-sharing and distributed-node roadmap: [TIMESHARING_DISTRIBUTION_ARCHITECTURE.md](TIMESHARING_DISTRIBUTION_ARCHITECTURE.md)
+
 ## Syntax Reference
 
 See [Basic_Syntax.md](Basic_Syntax.md) for full syntax documentation.

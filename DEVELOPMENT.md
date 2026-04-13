@@ -4,6 +4,25 @@ This document tracks significant development changes, bug fixes, and their ratio
 
 ---
 
+## April 12, 2026 - Time-Sharing and Multi-Node Architecture Reference
+
+### Documentation
+Added a dedicated architecture reference:
+
+- `TIMESHARING_DISTRIBUTION_ARCHITECTURE.md`
+
+The document captures:
+
+- Current session/process model and existing fairness behavior.
+- Resource-hogging risk review (timeouts, frame/input size bounds, mailbox/backpressure concerns).
+- Hardening phases for high-concurrency operation.
+- Required changes to support multi-node deployment (shared auth/quota/storage state, cluster-wide session registry, sticky routing, failure reconciliation).
+
+### Why
+The runtime already has strong per-session process isolation and memory quotas, but scaling safely to large numbers of long-lived WS/TCP clients depends on explicit operational bounds and cluster-ready state boundaries. This document provides that roadmap for future implementation work.
+
+---
+
 ## April 12, 2026 - Numeric Conversion + Scientific Notation Docs Sync
 
 ### Enhancement
