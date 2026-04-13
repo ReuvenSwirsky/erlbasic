@@ -20,4 +20,5 @@
 - [x] Redo lexer to use LEEX
 - [ ] Implement REDIM statement
 - [ ] Additional options to HOME
-- [ ] Can I specify a number in scientific format? Will it parse it?
+- [X] Can I specify a number in scientific format? Will it parse it?
+- [ ] Allow BASIC-PLUS style COMMON statement so variables can persist in a CHAINed program
