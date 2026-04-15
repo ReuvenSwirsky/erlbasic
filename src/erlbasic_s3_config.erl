@@ -10,10 +10,15 @@
                        storage_s3_secret_access_key]).
 
 load() ->
-    case file:consult(path()) of
+    ConfigPath = path(),
+    case file:consult(ConfigPath) of
         {ok, Terms} ->
-            apply_terms(Terms);
+            apply_terms(Terms),
+            maybe_warn_s3_startup(ConfigPath),
+            ok;
         {error, enoent} ->
+            maybe_warn_missing_config(ConfigPath),
+            maybe_warn_s3_startup(ConfigPath),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -41,3 +46,77 @@ normalize_terms(_Other) ->
 
 filter_allowed_entries(Entries) ->
     [{Key, Value} || {Key, Value} <- Entries, lists:member(Key, ?ALLOWED_KEYS)].
+
+maybe_warn_missing_config(ConfigPath) ->
+    case application:get_env(erlbasic, storage_backend, local) of
+        s3 ->
+            io:format("Warning: storage_backend is s3 but config file ~s was not found~n", [ConfigPath]);
+        _ ->
+            ok
+    end.
+
+maybe_warn_s3_startup(ConfigPath) ->
+    case application:get_env(erlbasic, storage_backend, local) of
+        s3 ->
+            maybe_warn_missing_required_settings(),
+            maybe_warn_config_not_ignored(ConfigPath);
+        _ ->
+            ok
+    end.
+
+maybe_warn_missing_required_settings() ->
+    case has_value(storage_s3_bucket, undefined) of
+        true ->
+            ok;
+        false ->
+            io:format("Warning: storage_backend is s3 but storage_s3_bucket is not configured~n")
+    end,
+    AccessSet = has_value(storage_s3_access_key_id, os:getenv("AWS_ACCESS_KEY_ID")),
+    SecretSet = has_value(storage_s3_secret_access_key, os:getenv("AWS_SECRET_ACCESS_KEY")),
+    case AccessSet andalso SecretSet of
+        true ->
+            ok;
+        false ->
+            io:format("Warning: storage_backend is s3 but credentials are not set (storage_s3_access_key_id/storage_s3_secret_access_key or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)~n")
+    end.
+
+has_value(Key, Default) ->
+    case application:get_env(erlbasic, Key) of
+        {ok, undefined} -> false;
+        {ok, []} -> false;
+        {ok, <<>>} -> false;
+        {ok, _} -> true;
+        undefined ->
+            case Default of
+                undefined -> false;
+                false -> false;
+                [] -> false;
+                <<>> -> false;
+                _ -> true
+            end
+    end.
+
+maybe_warn_config_not_ignored(ConfigPath) ->
+    case file:read_file(".gitignore") of
+        {ok, Bin} ->
+            case config_ignored(ConfigPath, binary_to_list(Bin)) of
+                true ->
+                    ok;
+                false ->
+                    io:format("Warning: S3 credential file ~s is not listed in .gitignore~n", [ConfigPath])
+            end;
+        {error, _} ->
+            io:format("Warning: .gitignore not found; ensure S3 credential file ~s is ignored~n", [ConfigPath])
+    end.
+
+config_ignored(ConfigPath, GitignoreText) ->
+    BaseName = filename:basename(ConfigPath),
+    Lines = string:split(GitignoreText, "\n", all),
+    lists:any(fun(Line) ->
+                      Entry = string:trim(Line),
+                      Entry =/= [] andalso
+                      hd(Entry) =/= $# andalso
+                      (Entry =:= ConfigPath orelse
+                       Entry =:= BaseName orelse
+                       Entry =:= "./" ++ ConfigPath)
+              end, Lines).
