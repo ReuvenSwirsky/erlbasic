@@ -14,10 +14,7 @@ Automatically creates certificates valid for:
 
 ### 2. Enable HTTPS
 ```powershell
-# Use the pre-configured HTTPS config
-cp sys.config.https sys.config
-
-# Or manually edit sys.config and set:
+# Edit sys.config and set:
 # {enable_https, true}
 ```
 
@@ -132,7 +129,6 @@ https://192.168.1.100:8443
 
 - **generate_certs.ps1** - Certificate generation script
 - **sys.config** - Main configuration file
-- **sys.config.https** - Example HTTPS configuration
 - **priv/ssl/** - Directory for certificates (gitignored)
 - **CERTBOT_DEPLOYMENT.md** - Production deployment guide
 - **HTTPS_TESTING.md** - Comprehensive testing guide

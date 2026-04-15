@@ -23,11 +23,6 @@ Edit `sys.config` and set:
 {enable_https, true}
 ```
 
-Or use the pre-configured HTTPS config:
-```powershell
-cp sys.config.https sys.config
-```
-
 ### 3. Build and Run
 
 ```powershell

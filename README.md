@@ -64,6 +64,28 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 
 The BASIC terminal server listens on port **5555** (TCP). The web interface listens on port **8081** (HTTP).
 
+### Local override config (gitignored)
+
+You can keep machine-specific settings in `.sys.override.config` (gitignored) so
+`sys.config` stays unchanged.
+
+- Copy `sys.override.config-EXAMPLE` to `.sys.override.config`
+- Add only the keys you want to override
+- Overrides apply to the `erlbasic` app env at startup (after `sys.config`)
+
+Example:
+
+```erlang
+[
+	{erlbasic, [
+		{http_port, 8082},
+		{enable_https, false},
+		{storage_backend, s3},
+		{storage_s3_config_file, "s3.config"}
+	]}
+].
+```
+
 ## Connect
 
 ```powershell
@@ -82,7 +104,7 @@ For development with self-signed certificates:
 
 ```powershell
 pwsh generate_certs.ps1
-cp sys.config.https sys.config
+# In sys.config, ensure {enable_https, true}
 pwsh run.ps1
 ```
 

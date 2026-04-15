@@ -552,7 +552,6 @@ Added comprehensive HTTPS/TLS support to the Cowboy web server with both develop
 - `src/erlbasic_sup.erl`: Added `start_https_listener/1` with TLS configuration
 - `run.ps1`: Updated to load `sys.config` for runtime configuration
 - `sys.config`: New configuration file with HTTP/HTTPS parameters
-- `sys.config.https`: Example HTTPS-enabled configuration
 - `generate_certs.ps1`: Self-signed certificate generation script with SAN support
 - `CERTBOT_DEPLOYMENT.md`: Production deployment guide with auto-renewal
 - `HTTPS_TESTING.md`: Local and network testing guide

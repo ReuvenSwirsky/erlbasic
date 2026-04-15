@@ -1,0 +1,11 @@
+%% Copy this file to .sys.override.config for machine-local settings.
+%% This file is loaded after sys.config and should never be checked in.
+[
+  {erlbasic, [
+    %% Example local overrides:
+    %% {http_port, 8082},
+    %% {enable_https, false},
+    %% {storage_backend, local},
+    %% {storage_s3_config_file, "s3.config"}
+  ]}
+].
