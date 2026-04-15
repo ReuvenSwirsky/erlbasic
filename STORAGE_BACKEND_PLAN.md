@@ -1,136 +1,149 @@
-# Storage Backend Plan: Local vs S3
+# Storage Backend Plan: Local Disk or S3
 
-Add a pluggable storage backend so either local disk or AWS S3 can be used
-for user BASIC program directories and cached asset storage, controlled by a
-single `sys.config` setting.
+Goal: configurable storage for user BASIC program files so development/testing
+can run on local disk and deployment can run on S3, selected by config.
 
----
-
-## Affected areas
-
-| Area | Module | Current impl |
-|---|---|---|
-| User BASIC programs | `erlbasic_storage.erl` | Local disk `~/ErlUsers/<P_N>/` |
-| BASIC file I/O channels (OPEN/PRINT#/INPUT#) | `erlbasic_filestore.erl` | Local disk via `open_local/*` |
-| Homepage render cache | `erlbasic_homepage_handler.erl` | `.home_cache` binary file in user dir |
+The non-secret selector lives in `sys.config`; S3 connection details and
+credentials live in a private `.s3.config` secrets file.
 
 ---
 
-## Step 1 — Behavior module: `erlbasic_storage_backend.erl`
+## Status snapshot
 
-- [ ] Create `src/erlbasic_storage_backend.erl` defining a behavior
-- [ ] Callback `read(Key :: string()) -> {ok, binary()} | {error, term()}`
-- [ ] Callback `write(Key :: string(), Bin :: binary()) -> ok | {error, term()}`
-- [ ] Callback `list(Prefix :: string()) -> {ok, [{Name, Size, MTime}]} | {error, term()}`
-- [ ] Callback `delete(Key :: string()) -> ok | {error, term()}`
-- [ ] Callback `key_exists(Key :: string()) -> boolean()`
+### Done
 
-> `Key` is always a `/`-separated path relative to the storage root,
-> e.g. `"1_2/GAME.BAS"` or `"1_2/.home_cache"`.
+- [x] Backend behavior exists (`src/erlbasic_storage_backend.erl`)
+- [x] Local backend exists (`src/erlbasic_storage_local.erl`)
+- [x] `erlbasic_storage` dispatches by `{storage_backend, ...}` and supports
+      `local | s3 | ModuleAtom`
+- [x] `sys.config` already has `storage_backend`, `storage_local_root`,
+      `storage_s3_config_file`, and `homepage_cache_dir` comments/examples
+- [x] Private S3 config loader exists (`src/erlbasic_s3_config.erl`) and is
+      loaded on app start (`erlbasic_app:start/2`)
+- [x] `.s3.config` is ignored, and `s3.config-EXAMPLE` exists
+- [x] EUnit tests cover private S3 config loading behavior
 
----
+### Not done
 
-## Step 2 — Local backend: `erlbasic_storage_local.erl`
-
-Extract existing file ops from `erlbasic_storage.erl` into a dedicated module implementing the behavior above. No behavior change — purely a refactor.
-
-- [ ] `read/1` → `file:read_file(Root ++ Key)`
-- [ ] `write/2` → `filelib:ensure_dir` + `file:write_file/2`
-- [ ] `list/1` → existing `list_files_with_info` logic
-- [ ] `delete/1` → `file:delete/1`
-- [ ] `key_exists/1` → `filelib:is_regular/1`
-- [ ] Root path read from `application:get_env(erlbasic, storage_local_root)`, falling back to `~/ErlUsers/`
+- [x] End-to-end S3 smoke tests (opt-in via `AWS_SMOKE_TESTS=1`)
 
 ---
 
-## Step 3 — S3 backend: `erlbasic_storage_s3.erl`
+## Configuration contract (source of truth)
 
-- [ ] Add `erlcloud` to `rebar.config` as a dependency
-- [ ] Create `src/erlbasic_storage_s3.erl` implementing the behavior
-- [ ] `read/1` → `erlcloud_s3:get_object(Bucket, Prefix ++ Key)` → body binary
-- [ ] `write/2` → `erlcloud_s3:put_object(Bucket, Prefix ++ Key, Bin)`
-- [ ] `list/1` → `erlcloud_s3:list_objects/2` with `{prefix, ...}`, parse result into `[{Name, Size, MTime}]`
-- [ ] `delete/1` → `erlcloud_s3:delete_object/2`
-- [ ] `key_exists/1` → `erlcloud_s3:get_object_metadata`, treat 404 as `false`
-- [ ] Read bucket, prefix, region from `application:get_env(erlbasic, storage_s3_*)`
-- [ ] Support standard AWS env vars (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) for credentials / IAM instance role
+### `sys.config` (non-secret)
 
----
+Required/optional keys under `erlbasic` app env:
 
-## Step 4 — Dispatch layer in `erlbasic_storage.erl`
+- `{storage_backend, local | s3}`
+- `{storage_local_root, "/path"}` (optional; local backend only)
+- `{storage_s3_config_file, ".s3.config"}` (optional; default `.s3.config`)
+- `{homepage_cache_dir, "/path"}` (optional; always local)
 
-- [ ] Add private `backend/0` helper:
-  ```erlang
-  backend() ->
-      case application:get_env(erlbasic, storage_backend, local) of
-          local -> erlbasic_storage_local;
-          s3    -> erlbasic_storage_s3
-      end.
-  ```
-- [ ] Replace direct `file:read_file/write_file/list_dir/delete` calls in public API with `backend():read(Key)`, etc.
-- [ ] Quota accounting remains in `erlbasic_storage.erl` (sizes come from `list/1` result)
+### `.s3.config` (secret file, never committed)
+
+Private file contains S3 connection details used when `storage_backend = s3`:
+
+- `{storage_s3_endpoint, "https://..."}`
+- `{storage_s3_bucket, "bucket-name"}`
+- `{storage_s3_prefix, "users/"}`
+- `{storage_s3_region, "us-east-1"}`
+- `{storage_s3_access_key_id, "..."}`
+- `{storage_s3_secret_access_key, "..."}`
+
+The checked-in `s3.config-EXAMPLE` shows this exact schema.
 
 ---
 
-## Step 5 — BASIC file I/O channels: `erlbasic_filestore.erl`
+## Remaining implementation plan
 
-S3 is object storage with no file handle, so use a temp-file round-trip strategy. `erlbasic_fileio.erl` is **not** changed — it only ever sees an `io` device.
+### Phase 1 - S3 backend module
 
-- [ ] **INPUT mode**: download object to local temp file on `open/3`; delete temp on `close`
-- [ ] **OUTPUT mode**: write to local temp file; upload to S3 on `close`, then delete temp
-- [ ] **APPEND mode**: download existing object to temp (if it exists), open in append mode; upload and delete on `close`
-- [ ] **RANDOM mode**: download to temp on `open`; upload and delete on `close` (temp file preserves seek semantics)
-- [ ] Store temp file path in the channel entry map so `close_entry` can clean up
+- [x] Add S3 client dependency to `rebar.config`
+- [x] Create `src/erlbasic_storage_s3.erl` implementing
+      `erlbasic_storage_backend` callbacks
+- [x] Resolve config from app env loaded by `erlbasic_s3_config:load/0`
+- [x] Implement object key mapping as `Prefix ++ Key`
+- [x] Normalize list results to `[{Name, Size, UnixMTime}]`
+- [x] Map not-found to `enoent`/`false` consistently with local backend
 
----
+Acceptance:
 
-## Step 6 — Homepage render cache: `erlbasic_homepage_handler.erl`
+- `erlbasic_storage:read_program/write_program/list_programs/delete_program`
+  work unchanged with `{storage_backend, s3}`.
 
-The `.home_cache` blob is derived output, not authoritative data. Keep it **always local** to avoid S3 latency on every page request.
+### Phase 2 - File channel strategy (`OPEN`/`INPUT #`/`PRINT #`)
 
-- [ ] Read cache dir from `application:get_env(erlbasic, homepage_cache_dir)`, defaulting to system temp dir
-- [ ] Key cache files as `<cache_dir>/<P>_<N>/.home_cache`
-- [ ] Do **not** route cache reads/writes through the storage backend
-- [ ] No change to TTL / `detect_dynamic` logic
+Current `erlbasic_filestore` uses `erlbasic_storage_local:key_to_path/1`
+directly, which bypasses backend selection.
 
----
+- [x] Keep local path fast path for `storage_backend = local`
+- [x] Add S3 temp-file strategy for channel modes:
+- [x] INPUT: download object to temp file before `file:open`
+- [x] OUTPUT: write temp file, upload on close
+- [x] APPEND: pre-download if object exists, append, upload on close
+- [x] RANDOM: pre-download/create temp, random read/write, upload on close
+- [x] Track temp metadata in channel entry so close cleanup is reliable
 
-## Step 7 — Configuration
+Acceptance:
 
-- [ ] Add new keys to `sys.config` (commented-out examples):
-  ```erlang
-  %% Storage backend: 'local' (default) or 's3'
-  {storage_backend, local},
+- Existing BASIC file I/O semantics remain unchanged for local backend.
+- S3 backend supports channel operations without modifying BASIC syntax/runtime.
 
-  %% Local backend root (overrides ~/ErlUsers/)
-  %% {storage_local_root, "/data/erlbasic/users"},
+### Phase 3 - Test matrix
 
-  %% S3 backend (only used when storage_backend = s3)
-  %% {storage_s3_bucket, "my-erlbasic-bucket"},
-  %% {storage_s3_prefix, "users/"},
-  %% {storage_s3_region, "us-east-1"},
+- [ ] Unit tests for S3 backend key mapping and error normalization
+- [x] Unit tests for filestore temp-file lifecycle and cleanup on failures
+- [x] Opt-in integration smoke test against real S3/MinIO/LocalStack,
+      guarded by env var (for example `AWS_SMOKE_TESTS=1`)
 
-  %% Homepage cache directory (always local, defaults to os:get_env("TMPDIR"))
-  %% {homepage_cache_dir, "/var/cache/erlbasic"},
-  ```
-- [ ] Update `credentials-EXAMPLE` with the corresponding AWS credential env vars
+Acceptance:
 
----
-
-## Step 8 — Test coverage
-
-- [ ] Create `src/erlbasic_storage_mem.erl` — ETS-backed in-memory backend (test-only) implementing the behavior
-- [ ] Update existing eunit tests in `eunit_tests/erlbasic_eunit_tests.erl` to inject the mem backend instead of hitting the filesystem
-- [ ] Add opt-in S3 smoke test (guard with `AWS_SMOKE_TESTS=1` env var check) that exercises the S3 backend against a real or LocalStack bucket
+- Default CI/test flow passes without cloud credentials.
+- Opt-in S3 test validates real object round-trip behavior.
 
 ---
 
-## Implementation order
+## Deployment and dev examples
 
-1. Step 1 — behavior module
-2. Steps 2 + 4 — local refactor + dispatch (smoke tests stay green throughout)
-3. Step 7 — update `sys.config` and `credentials-EXAMPLE`
-4. Step 3 — S3 backend + `erlcloud` dep
-5. Step 5 — filestore temp-file strategy
-6. Step 6 — cache dir config
-7. Step 8 — test coverage
+### Local development/testing
+
+`sys.config`:
+
+```erlang
+{storage_backend, local},
+```
+
+Optional:
+
+```erlang
+{storage_local_root, "/tmp/erlbasic-users"},
+```
+
+### Deployment on S3
+
+`sys.config`:
+
+```erlang
+{storage_backend, s3},
+{storage_s3_config_file, ".s3.config"},
+```
+
+`.s3.config` (private):
+
+```erlang
+[
+  {storage_s3_endpoint, "https://s3.example.internal"},
+  {storage_s3_bucket, "erlbasic-private-bucket"},
+  {storage_s3_prefix, "users/"},
+  {storage_s3_region, "us-east-1"},
+  {storage_s3_access_key_id, "REPLACE_ME"},
+  {storage_s3_secret_access_key, "REPLACE_ME"}
+].
+```
+
+---
+
+## Sequence to execute next
+
+1. Add focused unit tests for S3 backend key mapping and error normalization.

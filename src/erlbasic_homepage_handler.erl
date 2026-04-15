@@ -15,9 +15,7 @@ serve_homepage(Req, State) ->
     Username = cowboy_req:binding(username, Req),
     case erlbasic_accounts:find_by_username(Username) of
         {ok, {Project, Programmer, Name, StoredUsername}} ->
-            UserDir = user_dir(Project, Programmer),
-            _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
-            case read_home_bas(UserDir) of
+            case read_home_bas(Project, Programmer) of
                 {ok, HomeBas} ->
                     Body = render_home_bas_html(StoredUsername, Name, Project, Programmer, HomeBas),
                     reply_html(Req, State, Body);
@@ -40,32 +38,16 @@ reply_html(Req, State, Body) ->
         Req),
     {ok, Req2, State}.
 
-read_home_bas(UserDir) ->
-    Candidates = [
-        filename:join(UserDir, "HOME.BAS"),
-        filename:join(UserDir, "home.bas")
-    ],
-    read_first_existing(Candidates).
+read_home_bas(Project, Programmer) ->
+    with_ppn({Project, Programmer}, fun() ->
+        erlbasic_storage:read_program("HOME.BAS")
+    end).
 
-read_first_existing([]) ->
-    {error, enoent};
-read_first_existing([Path | Rest]) ->
-    case file:read_file(Path) of
-        {error, enoent} ->
-            read_first_existing(Rest);
-        Result ->
-            Result
-    end.
-
-user_dir(Project, Programmer) ->
-    SubDir = integer_to_list(Project) ++ "_" ++ integer_to_list(Programmer),
-    filename:join([erl_users_root(), SubDir]).
-
-render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir) ->
+render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     UsernameText = escape_html(to_text(Username)),
     NameText = escape_html(to_text(Name)),
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
-    CacheFile = filename:join(UserDir, ".home_cache"),
+    CacheFile = homepage_cache_file(Project, Programmer),
     FileHash = crypto:hash(sha256, HomeBas),
     Sections = execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer),
     SectionsHtml = [render_section(S) || S <- Sections],
@@ -89,9 +71,7 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir) ->
     ]).
 
 render_home_bas_html(Username, Name, Project, Programmer, HomeBas) ->
-    UserDir = user_dir(Project, Programmer),
-    _ = filelib:ensure_dir(filename:join(UserDir, ".keep")),
-    render_home_from_bas(Username, Name, Project, Programmer, HomeBas, UserDir).
+    render_home_from_bas(Username, Name, Project, Programmer, HomeBas).
 
 render_section({text, Html}) ->
     ["<div class=\"home-section\"><pre>", Html, "</pre></div>"];
@@ -189,6 +169,7 @@ cache_store(_CacheFile, _FileHash, _Output, never) ->
 cache_store(CacheFile, FileHash, Output, TTL) ->
     Now = erlang:system_time(second),
     Bin = term_to_binary({FileHash, Now, TTL, Output}),
+    _ = filelib:ensure_dir(CacheFile),
     _ = file:write_file(CacheFile, Bin),
     ok.
 
@@ -249,15 +230,38 @@ to_text(Int) when is_integer(Int) ->
 to_text(Other) ->
     lists:flatten(io_lib:format("~p", [Other])).
 
-erl_users_root() ->
-    filename:join(home_dir(), "ErlUsers").
+homepage_cache_file(Project, Programmer) ->
+    UserCacheDir = integer_to_list(Project) ++ "_" ++ integer_to_list(Programmer),
+    filename:join([homepage_cache_dir(), UserCacheDir, ".home_cache"]).
 
-home_dir() ->
-    case os:getenv("HOME") of
+homepage_cache_dir() ->
+    case application:get_env(erlbasic, homepage_cache_dir) of
+        {ok, Dir} -> Dir;
+        undefined -> temp_dir()
+    end.
+
+temp_dir() ->
+    case os:getenv("TMPDIR") of
         false ->
-            case os:getenv("USERPROFILE") of
-                false -> ".";
-                Path  -> Path
+            case os:getenv("TMP") of
+                false ->
+                    case os:getenv("TEMP") of
+                        false -> ".";
+                        Dir -> Dir
+                    end;
+                Dir -> Dir
             end;
-        Path -> Path
+        Dir -> Dir
+    end.
+
+with_ppn(Ppn, Fun) ->
+    PrevPpn = erlang:get(erlbasic_ppn),
+    erlang:put(erlbasic_ppn, Ppn),
+    try
+        Fun()
+    after
+        case PrevPpn of
+            undefined -> erlang:erase(erlbasic_ppn);
+            _ -> erlang:put(erlbasic_ppn, PrevPpn)
+        end
     end.

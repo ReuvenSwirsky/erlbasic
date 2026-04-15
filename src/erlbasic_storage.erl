@@ -28,6 +28,8 @@
          delete_program/1,
          check_quota_for_size/2,
          check_quota_for_growth/2,
+         resolve_existing_program_key/1,
+         program_key_for_write/1,
          resolve_existing_program_path/1,
          program_path_for_write/1,
          user_dir/0,
@@ -44,9 +46,9 @@ read_program(FileName) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case resolve_existing_program_path(FileName) of
-        {ok, Path} ->
-            file:read_file(Path);
+    case resolve_existing_program_key(FileName) of
+        {ok, Key} ->
+            apply(backend(), read, [Key]);
         {error, enoent} ->
             {error, enoent};
         {error, Reason} ->
@@ -61,12 +63,12 @@ write_program(FileName, Content) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case program_path_for_write(FileName) of
-        {ok, Path} ->
+    case program_key_for_write(FileName) of
+        {ok, Key} ->
             ContentBin = iolist_to_binary(Content),
-            case check_quota_for_size(Path, byte_size(ContentBin)) of
+            case check_quota_for_size(Key, byte_size(ContentBin)) of
                 ok ->
-                    file:write_file(Path, ContentBin);
+                    apply(backend(), write, [Key, ContentBin]);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -76,52 +78,43 @@ write_program(FileName, Content) ->
     end.
 
 %% @doc Check whether writing a file to TargetSize bytes would exceed quota.
--spec check_quota_for_size(Path :: string(), TargetSize :: non_neg_integer()) ->
+-spec check_quota_for_size(Key :: string(), TargetSize :: non_neg_integer()) ->
         ok | {error, quota_exceeded | term()}.
-check_quota_for_size(Path, TargetSize) when is_integer(TargetSize), TargetSize >= 0 ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            case project_limit_bytes() of
-                unlimited ->
-                    ok;
-                LimitBytes when is_integer(LimitBytes), LimitBytes >= 0 ->
-                    case total_usage_bytes(Dir) of
-                        {ok, TotalBytes} ->
-                            OldSize =
-                                case path_in_user_dir(Path, Dir) of
-                                    true -> file_size(Path);
-                                    false -> 0
-                                end,
-                            Projected = TotalBytes - OldSize + TargetSize,
-                            case Projected =< LimitBytes of
-                                true -> ok;
-                                false -> {error, quota_exceeded}
-                            end;
-                        {error, Reason} ->
-                            {error, Reason}
-                    end
-            end;
-        {error, Reason} ->
-            {error, Reason}
+check_quota_for_size(Key, TargetSize) when is_integer(TargetSize), TargetSize >= 0 ->
+    case project_limit_bytes() of
+        unlimited ->
+            ok;
+        LimitBytes when is_integer(LimitBytes), LimitBytes >= 0 ->
+            case list_programs_with_info() of
+                {ok, Infos} ->
+                    TotalBytes = lists:sum([Size || {_Name, Size, _MTime} <- Infos]),
+                    OldSize = existing_size_for_key(Key, Infos),
+                    Projected = TotalBytes - OldSize + TargetSize,
+                    case Projected =< LimitBytes of
+                        true -> ok;
+                        false -> {error, quota_exceeded}
+                    end;
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end;
-check_quota_for_size(_Path, _TargetSize) ->
+check_quota_for_size(_Key, _TargetSize) ->
     {error, quota_exceeded}.
 
 %% @doc Check whether growing a file by GrowthBytes would exceed quota.
--spec check_quota_for_growth(Path :: string(), GrowthBytes :: non_neg_integer()) ->
+-spec check_quota_for_growth(Key :: string(), GrowthBytes :: non_neg_integer()) ->
         ok | {error, quota_exceeded | term()}.
-check_quota_for_growth(Path, GrowthBytes) when is_integer(GrowthBytes), GrowthBytes >= 0 ->
-    CurrentSize = file_size(Path),
-    check_quota_for_size(Path, CurrentSize + GrowthBytes);
-check_quota_for_growth(_Path, _GrowthBytes) ->
+check_quota_for_growth(Key, GrowthBytes) when is_integer(GrowthBytes), GrowthBytes >= 0 ->
+    check_quota_for_size(Key, current_size(Key) + GrowthBytes);
+check_quota_for_growth(_Key, _GrowthBytes) ->
     {error, quota_exceeded}.
 
 %% @doc List the names of all program files in the user's storage area.
 -spec list_programs() -> {ok, [string()]} | {error, term()}.
 list_programs() ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            list_regular_files(Dir);
+    case list_programs_with_info() of
+        {ok, Infos} ->
+            {ok, [Name || {Name, _Size, _MTime} <- Infos]};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -129,12 +122,7 @@ list_programs() ->
 %% @doc List program files with metadata (name, size, mtime).
 -spec list_programs_with_info() -> {ok, [{string(), integer(), integer()}]} | {error, term()}.
 list_programs_with_info() ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            list_files_with_info(Dir);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    apply(backend(), list, [user_prefix()]).
 
 %% @doc Delete a program file from the user's storage area.
 -spec delete_program(FileName :: string()) -> ok | {error, term()}.
@@ -142,9 +130,9 @@ delete_program(FileName) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case resolve_existing_program_path(FileName) of
-        {ok, Path} ->
-            file:delete(Path);
+    case resolve_existing_program_key(FileName) of
+        {ok, Key} ->
+            apply(backend(), delete, [Key]);
         {error, enoent} ->
             {error, enoent};
         {error, Reason} ->
@@ -152,39 +140,46 @@ delete_program(FileName) ->
     end
     end.
 
-resolve_existing_program_path(FileName) ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            case resolve_existing_name_in_dir(Dir, FileName) of
-                {ok, ExistingName} ->
-                    {ok, filename:join(Dir, ExistingName)};
-                {error, Reason} ->
-                    {error, Reason}
+resolve_existing_program_key(FileName) ->
+    case list_programs_with_info() of
+        {ok, Infos} ->
+            Names = [Name || {Name, _Size, _MTime} <- Infos],
+            case pick_case_insensitive_name(FileName, Names) of
+                undefined -> {error, enoent};
+                ExistingName -> {ok, user_key(ExistingName)}
             end;
         {error, Reason} ->
             {error, Reason}
     end.
+
+program_key_for_write(FileName) ->
+    case list_programs_with_info() of
+        {ok, Infos} ->
+            Names = [Name || {Name, _Size, _MTime} <- Infos],
+            case pick_case_insensitive_name(FileName, Names) of
+                undefined -> {ok, user_key(FileName)};
+                ExistingName -> {ok, user_key(ExistingName)}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+resolve_existing_program_path(FileName) ->
+    resolve_existing_program_key(FileName).
 
 program_path_for_write(FileName) ->
-    case ensure_user_dir() of
-        {ok, Dir} ->
-            case resolve_existing_name_in_dir(Dir, FileName) of
-                {ok, ExistingName} ->
-                    {ok, filename:join(Dir, ExistingName)};
-                {error, enoent} ->
-                    {ok, filename:join(Dir, FileName)};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    program_key_for_write(FileName).
 
-%% @doc Return the filesystem path of the current user's storage directory.
-%%      Intended for display purposes only; do not build paths from this.
+%% @doc Return the current user's storage location string.
+%%      Intended for display purposes only; do not build keys from this.
 -spec user_dir() -> string().
 user_dir() ->
-    filename:join(erl_users_root(), user_subdir()).
+    case backend() of
+        erlbasic_storage_local ->
+            erlbasic_storage_local:user_dir(user_prefix());
+        _ ->
+            user_prefix()
+    end.
 
 %% @doc Return the user's PPN as a formatted string "[P,N]".
 -spec user_ppn_string() -> string().
@@ -199,19 +194,35 @@ user_ppn_string() ->
 %% @doc Ensure the user's storage directory exists, creating it if needed.
 -spec ensure_user_dir() -> {ok, string()} | {error, term()}.
 ensure_user_dir() ->
-    Dir = user_dir(),
-    case filelib:ensure_dir(filename:join(Dir, ".keep")) of
-        ok    -> {ok, Dir};
-        Error -> Error
+    case backend() of
+        erlbasic_storage_local ->
+            erlbasic_storage_local:ensure_prefix(user_prefix());
+        _ ->
+            {ok, user_dir()}
     end.
 
 %% ===================================================================
-%% Internal – local disk backend
+%% Internal helpers
 %% ===================================================================
 
-%% Root of all per-user storage: ~/ErlUsers/
-erl_users_root() ->
-    filename:join(home_dir(), "ErlUsers").
+backend() ->
+    case application:get_env(erlbasic, storage_backend, local) of
+        local -> erlbasic_storage_local;
+        s3 -> storage_s3_module();
+        Module when is_atom(Module) -> Module
+    end.
+
+storage_s3_module() ->
+    case application:get_env(erlbasic, storage_s3_module) of
+        {ok, Module} when is_atom(Module) -> Module;
+        _ -> erlbasic_storage_s3
+    end.
+
+user_prefix() ->
+    user_subdir().
+
+user_key(Name) ->
+    user_prefix() ++ "/" ++ Name.
 
 %% Per-user subdirectory derived from the PPN stored in the process dict.
 %% Format: "P_N"  (e.g. PPN {1,1} → "1_1"),  or "default" if unknown.
@@ -221,53 +232,6 @@ user_subdir() ->
             integer_to_list(P) ++ "_" ++ integer_to_list(N);
         _ ->
             "default"
-    end.
-
-home_dir() ->
-    case os:getenv("HOME") of
-        false ->
-            case os:getenv("USERPROFILE") of
-                false -> ".";
-                Path  -> Path
-            end;
-        Path -> Path
-    end.
-
--include_lib("kernel/include/file.hrl").
-
-list_regular_files(Dir) ->
-    case file:list_dir(Dir) of
-        {ok, Names} ->
-            {ok, lists:sort([N || N <- Names, is_regular_file(Dir, N)])};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-is_regular_file(Dir, Name) ->
-    case file:read_file_info(filename:join(Dir, Name)) of
-        {ok, #file_info{type = regular}} -> true;
-        _ -> false
-    end.
-
-list_files_with_info(Dir) ->
-    case file:list_dir(Dir) of
-        {ok, Names} ->
-            Visible = [N || N <- Names, hd(N) =/= $.],
-            Infos = lists:filtermap(fun(N) -> get_file_info(Dir, N) end, Visible),
-            {ok, lists:sort(Infos)};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-get_file_info(Dir, Name) ->
-    Path = filename:join(Dir, Name),
-    case file:read_file_info(Path) of
-        {ok, #file_info{type = regular, size = Size, mtime = MTime}} ->
-            %% Convert mtime to Unix timestamp
-            UnixTime = calendar:datetime_to_gregorian_seconds(MTime) - 62167219200,
-            {true, {Name, Size, UnixTime}};
-        _ ->
-            false
     end.
 
 project_limit_bytes() ->
@@ -288,38 +252,31 @@ blocks_to_bytes(Blocks) when is_integer(Blocks), Blocks >= 0 ->
 blocks_to_bytes(_Other) ->
     erlbasic_limits:default_limit_blocks() * 1024.
 
-total_usage_bytes(Dir) ->
-    case list_files_with_info(Dir) of
+current_size(Key) ->
+    case list_programs_with_info() of
         {ok, Infos} ->
-            {ok, lists:sum([Size || {_Name, Size, _MTime} <- Infos])};
-        {error, Reason} ->
-            {error, Reason}
+            existing_size_for_key(Key, Infos);
+        {error, _Reason} ->
+            0
     end.
 
-file_size(Path) ->
-    case file:read_file_info(Path) of
-        {ok, #file_info{type = regular, size = Size}} -> Size;
-        _ -> 0
-    end.
-
-path_in_user_dir(Path, UserDir) ->
-    AbsPath = filename:absname(Path),
-    AbsDir = filename:absname(UserDir),
-    Prefix = AbsDir ++ [$/],
-    lists:prefix(Prefix, AbsPath) orelse AbsPath =:= AbsDir.
-
-resolve_existing_name_in_dir(Dir, FileName) ->
-    case file:list_dir(Dir) of
-        {ok, Names} ->
-            case pick_case_insensitive_name(FileName, Names) of
-                undefined -> {error, enoent};
-                ExistingName -> {ok, ExistingName}
+existing_size_for_key(Key, Infos) ->
+    case key_in_user_prefix(Key, user_prefix()) of
+        true ->
+            Name = key_name(Key),
+            case lists:keyfind(Name, 1, Infos) of
+                {Name, Size, _MTime} -> Size;
+                false -> 0
             end;
-        {error, enoent} ->
-            {error, enoent};
-        {error, Reason} ->
-            {error, Reason}
+        false ->
+            0
     end.
+
+key_in_user_prefix(Key, Prefix) ->
+    Key =:= Prefix orelse lists:prefix(Prefix ++ "/", Key).
+
+key_name(Key) ->
+    hd(lists:reverse(string:split(Key, "/", all))).
 
 pick_case_insensitive_name(FileName, Names) ->
     case lists:member(FileName, Names) of

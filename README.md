@@ -211,3 +211,9 @@ Environment variable overrides:
 | `ERLBASIC_PERF_MAX_LIFE_MS` | 15000 | Budget for `life.bas` perf gate |
 | `ERLBASIC_PERF_MAX_ASCIILIFE_MS` | 30000 | Budget for `asciilife.bas` perf gate |
 | `ERLBASIC_TEXTLIFE_BENCH_RUNS` | 5 | Number of benchmark runs |
+
+Optional S3 smoke test:
+
+- Set `AWS_SMOKE_TESTS=1` to enable a real S3/MinIO/LocalStack roundtrip test inside `smoke_tests/smoke_runner.escript`.
+- The smoke test uses `ERLBASIC_S3_CONFIG_FILE` when set, otherwise it looks for `.s3.config`, then `s3.config`.
+- The smoke test validates both storage API (`SAVE`/`LOAD` path) and BASIC channel I/O (`OPEN`/`PRINT#`/`INPUT#`) under `storage_backend = s3`.

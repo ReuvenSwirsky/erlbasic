@@ -1787,6 +1787,8 @@ homepage_render_home_publish_sections_regression_test() ->
     TempDir = temp_dir(),
     OldHome = os:getenv("HOME"),
     OldUserProfile = os:getenv("USERPROFILE"),
+    OldHomepageCacheDir = application:get_env(erlbasic, homepage_cache_dir),
+    CachePath = filename:join([TempDir, "home_cache", "88_9", ".home_cache"]),
     HomeBas = <<
         "10 COLOR 14,0\n",
         "20 PRINT \"FIRST PANEL\"\n",
@@ -1799,6 +1801,7 @@ homepage_render_home_publish_sections_regression_test() ->
     try
         true = os:putenv("HOME", TempDir),
         true = os:putenv("USERPROFILE", TempDir),
+        ok = application:set_env(erlbasic, homepage_cache_dir, filename:join(TempDir, "home_cache")),
         BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
         Body = binary_to_list(BodyBin),
         ?assertEqual(match, re:run(Body, "FIRST PANEL", [{capture, none}])),
@@ -1809,9 +1812,13 @@ homepage_render_home_publish_sections_regression_test() ->
     after
         restore_env("HOME", OldHome),
         restore_env("USERPROFILE", OldUserProfile),
-        file:delete(filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"])),
-        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
-        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        case OldHomepageCacheDir of
+            undefined -> application:unset_env(erlbasic, homepage_cache_dir);
+            {ok, Dir} -> application:set_env(erlbasic, homepage_cache_dir, Dir)
+        end,
+        file:delete(CachePath),
+        file:del_dir(filename:join([TempDir, "home_cache", "88_9"])),
+        file:del_dir(filename:join(TempDir, "home_cache")),
         file:del_dir(TempDir)
     end.
 
@@ -1819,6 +1826,8 @@ homepage_render_text_gfx_text_sections_regression_test() ->
     TempDir = temp_dir(),
     OldHome = os:getenv("HOME"),
     OldUserProfile = os:getenv("USERPROFILE"),
+    OldHomepageCacheDir = application:get_env(erlbasic, homepage_cache_dir),
+    CachePath = filename:join([TempDir, "home_cache", "88_9", ".home_cache"]),
     HomeBas = <<
         "10 COLOR 14,0\n",
         "20 PRINT \"TEXT PANEL ONE\"\n",
@@ -1835,6 +1844,7 @@ homepage_render_text_gfx_text_sections_regression_test() ->
     try
         true = os:putenv("HOME", TempDir),
         true = os:putenv("USERPROFILE", TempDir),
+        ok = application:set_env(erlbasic, homepage_cache_dir, filename:join(TempDir, "home_cache")),
         BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
         Body = binary_to_list(BodyBin),
         Text1Pos = string:str(Body, "TEXT PANEL ONE"),
@@ -1849,9 +1859,13 @@ homepage_render_text_gfx_text_sections_regression_test() ->
     after
         restore_env("HOME", OldHome),
         restore_env("USERPROFILE", OldUserProfile),
-        file:delete(filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"])),
-        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
-        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        case OldHomepageCacheDir of
+            undefined -> application:unset_env(erlbasic, homepage_cache_dir);
+            {ok, Dir} -> application:set_env(erlbasic, homepage_cache_dir, Dir)
+        end,
+        file:delete(CachePath),
+        file:del_dir(filename:join([TempDir, "home_cache", "88_9"])),
+        file:del_dir(filename:join(TempDir, "home_cache")),
         file:del_dir(TempDir)
     end.
 
@@ -1859,18 +1873,20 @@ homepage_render_legacy_text_cache_is_ignored_test() ->
     TempDir = temp_dir(),
     OldHome = os:getenv("HOME"),
     OldUserProfile = os:getenv("USERPROFILE"),
+    OldHomepageCacheDir = application:get_env(erlbasic, homepage_cache_dir),
     HomeBas = <<
         "10 PRINT \"FRESH PANEL\"\n",
         "20 HOME PUBLISH\n",
         "30 END\n"
     >>,
-    CachePath = filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"]),
+    CachePath = filename:join([TempDir, "home_cache", "88_9", ".home_cache"]),
     FileHash = crypto:hash(sha256, HomeBas),
     LegacyOutput = "\e[31mLEGACY TEXT\e[0m",
     LegacyTerm = {FileHash, erlang:system_time(second), infinity, LegacyOutput},
     try
         true = os:putenv("HOME", TempDir),
         true = os:putenv("USERPROFILE", TempDir),
+        ok = application:set_env(erlbasic, homepage_cache_dir, filename:join(TempDir, "home_cache")),
         ok = filelib:ensure_dir(CachePath),
         ok = file:write_file(CachePath, term_to_binary(LegacyTerm)),
         BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
@@ -1885,9 +1901,13 @@ homepage_render_legacy_text_cache_is_ignored_test() ->
     after
         restore_env("HOME", OldHome),
         restore_env("USERPROFILE", OldUserProfile),
+        case OldHomepageCacheDir of
+            undefined -> application:unset_env(erlbasic, homepage_cache_dir);
+            {ok, Dir} -> application:set_env(erlbasic, homepage_cache_dir, Dir)
+        end,
         file:delete(CachePath),
-        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
-        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(filename:join([TempDir, "home_cache", "88_9"])),
+        file:del_dir(filename:join(TempDir, "home_cache")),
         file:del_dir(TempDir)
     end.
 
@@ -1895,15 +1915,17 @@ homepage_render_malformed_cache_is_ignored_test() ->
     TempDir = temp_dir(),
     OldHome = os:getenv("HOME"),
     OldUserProfile = os:getenv("USERPROFILE"),
+    OldHomepageCacheDir = application:get_env(erlbasic, homepage_cache_dir),
     HomeBas = <<
         "10 PRINT \"REBUILT\"\n",
         "20 HOME PUBLISH\n",
         "30 END\n"
     >>,
-    CachePath = filename:join([TempDir, "ErlUsers", "88_9", ".home_cache"]),
+    CachePath = filename:join([TempDir, "home_cache", "88_9", ".home_cache"]),
     try
         true = os:putenv("HOME", TempDir),
         true = os:putenv("USERPROFILE", TempDir),
+        ok = application:set_env(erlbasic, homepage_cache_dir, filename:join(TempDir, "home_cache")),
         ok = filelib:ensure_dir(CachePath),
         ok = file:write_file(CachePath, <<"not-a-valid-term">>),
         BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
@@ -1913,10 +1935,138 @@ homepage_render_malformed_cache_is_ignored_test() ->
     after
         restore_env("HOME", OldHome),
         restore_env("USERPROFILE", OldUserProfile),
+        case OldHomepageCacheDir of
+            undefined -> application:unset_env(erlbasic, homepage_cache_dir);
+            {ok, Dir} -> application:set_env(erlbasic, homepage_cache_dir, Dir)
+        end,
         file:delete(CachePath),
-        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
-        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(filename:join([TempDir, "home_cache", "88_9"])),
+        file:del_dir(filename:join(TempDir, "home_cache")),
         file:del_dir(TempDir)
+    end.
+
+s3_config_loads_private_file_test() ->
+    TempDir = temp_dir(),
+    ConfigPath = filename:join(TempDir, ".s3.config"),
+    OldConfigFile = application:get_env(erlbasic, storage_s3_config_file),
+    OldEndpoint = application:get_env(erlbasic, storage_s3_endpoint),
+    OldBucket = application:get_env(erlbasic, storage_s3_bucket),
+    OldPrefix = application:get_env(erlbasic, storage_s3_prefix),
+    OldRegion = application:get_env(erlbasic, storage_s3_region),
+    OldAccessKey = application:get_env(erlbasic, storage_s3_access_key_id),
+    OldSecretKey = application:get_env(erlbasic, storage_s3_secret_access_key),
+    try
+        ok = file:make_dir(TempDir),
+        ok = file:write_file(ConfigPath, <<
+            "[\n",
+            "  {storage_s3_endpoint, \"https://minio.internal:9000\"},\n",
+            "  {storage_s3_bucket, \"erlbasic-prod\"},\n",
+            "  {storage_s3_prefix, \"tenant-a/users/\"},\n",
+            "  {storage_s3_region, \"us-east-1\"},\n",
+            "  {storage_s3_access_key_id, \"ACCESS123\"},\n",
+            "  {storage_s3_secret_access_key, \"SECRET456\"}\n",
+            "].\n"
+        >>),
+        ok = application:set_env(erlbasic, storage_s3_config_file, ConfigPath),
+        application:unset_env(erlbasic, storage_s3_endpoint),
+        application:unset_env(erlbasic, storage_s3_bucket),
+        application:unset_env(erlbasic, storage_s3_prefix),
+        application:unset_env(erlbasic, storage_s3_region),
+        application:unset_env(erlbasic, storage_s3_access_key_id),
+        application:unset_env(erlbasic, storage_s3_secret_access_key),
+        ok = erlbasic_s3_config:load(),
+        ?assertEqual({ok, "https://minio.internal:9000"}, application:get_env(erlbasic, storage_s3_endpoint)),
+        ?assertEqual({ok, "erlbasic-prod"}, application:get_env(erlbasic, storage_s3_bucket)),
+        ?assertEqual({ok, "tenant-a/users/"}, application:get_env(erlbasic, storage_s3_prefix)),
+        ?assertEqual({ok, "us-east-1"}, application:get_env(erlbasic, storage_s3_region)),
+        ?assertEqual({ok, "ACCESS123"}, application:get_env(erlbasic, storage_s3_access_key_id)),
+        ?assertEqual({ok, "SECRET456"}, application:get_env(erlbasic, storage_s3_secret_access_key))
+    after
+        restore_app_env(storage_s3_config_file, OldConfigFile),
+        restore_app_env(storage_s3_endpoint, OldEndpoint),
+        restore_app_env(storage_s3_bucket, OldBucket),
+        restore_app_env(storage_s3_prefix, OldPrefix),
+        restore_app_env(storage_s3_region, OldRegion),
+        restore_app_env(storage_s3_access_key_id, OldAccessKey),
+        restore_app_env(storage_s3_secret_access_key, OldSecretKey),
+        file:delete(ConfigPath),
+        file:del_dir(TempDir)
+    end.
+
+s3_config_missing_file_is_ok_test() ->
+    TempDir = temp_dir(),
+    MissingPath = filename:join(TempDir, ".missing-s3.config"),
+    OldConfigFile = application:get_env(erlbasic, storage_s3_config_file),
+    try
+        ok = file:make_dir(TempDir),
+        ok = application:set_env(erlbasic, storage_s3_config_file, MissingPath),
+        ?assertEqual(ok, erlbasic_s3_config:load())
+    after
+        restore_app_env(storage_s3_config_file, OldConfigFile),
+        file:del_dir(TempDir)
+    end.
+
+s3_fileio_output_print_close_uploads_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        S0 = erlbasic_interp:new_state(),
+        {S1, Out1} = erlbasic_interp:handle_input("OPEN \"S3CHAN.DAT\" FOR OUTPUT AS #1", S0),
+        ?assertEqual("OK\r\n", lists:flatten(Out1)),
+        {S2, Out2} = erlbasic_interp:handle_input("PRINT #1, \"HELLO S3\"", S1),
+        ?assertEqual("OK\r\n", lists:flatten(Out2)),
+        {_S3, Out3} = erlbasic_interp:handle_input("CLOSE #1", S2),
+        ?assertEqual("OK\r\n", lists:flatten(Out3)),
+        ?assertEqual({ok, <<"HELLO S3\r\n">>}, erlbasic_storage_s3_test_backend:fetch("default/S3CHAN.DAT"))
+    after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
+    end.
+
+s3_fileio_input_reads_seeded_content_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        ok = erlbasic_storage_s3_test_backend:seed("default/INCHAN.DAT", <<"alpha\r\n">>),
+        S0 = erlbasic_interp:new_state(),
+        {S1, Out1} = erlbasic_interp:handle_input("OPEN \"INCHAN.DAT\" FOR INPUT AS #1", S0),
+        ?assertEqual("OK\r\n", lists:flatten(Out1)),
+        {S2, Out2} = erlbasic_interp:handle_input("INPUT #1, A$", S1),
+        ?assertEqual("OK\r\n", lists:flatten(Out2)),
+        {S3, Out3} = erlbasic_interp:handle_input("CLOSE #1", S2),
+        ?assertEqual("OK\r\n", lists:flatten(Out3)),
+        {_S4, Out4} = erlbasic_interp:handle_input("PRINT A$", S3),
+        ?assertEqual(match, re:run(lists:flatten(Out4), "alpha", [{capture, none}]))
+    after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
+    end.
+
+s3_fileio_close_reports_upload_failure_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        ok = erlbasic_storage_s3_test_backend:set_fail_writes(true),
+        S0 = erlbasic_interp:new_state(),
+        {S1, _} = erlbasic_interp:handle_input("OPEN \"FAILCLOSE.DAT\" FOR OUTPUT AS #1", S0),
+        {S2, _} = erlbasic_interp:handle_input("PRINT #1, \"WILL FAIL\"", S1),
+        {_S3, CloseOutput} = erlbasic_interp:handle_input("CLOSE #1", S2),
+        ?assertEqual(match, re:run(lists:flatten(CloseOutput), "ILLEGAL FUNCTION CALL", [{capture, none}]))
+    after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
     end.
 
 dir_groups_personal_and_example_files_test() ->
@@ -2178,6 +2328,13 @@ restore_env(Name, false) ->
     ok;
 restore_env(Name, Value) ->
     true = os:putenv(Name, Value),
+    ok.
+
+restore_app_env(Key, undefined) ->
+    application:unset_env(erlbasic, Key),
+    ok;
+restore_app_env(Key, {ok, Value}) ->
+    application:set_env(erlbasic, Key, Value),
     ok.
 
 collect_output_messages() ->

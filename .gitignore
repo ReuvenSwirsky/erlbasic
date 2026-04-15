@@ -19,6 +19,7 @@ priv/ssl/
 
 # Credentials (contains passwords — never commit)
 .credentials
+.s3.config
 
 # Debug/scratch escripts
 dump_accounts.escript

@@ -48,12 +48,17 @@ open_file(Path, Mode, ChannelValue, RecLenValue, Vars, State) ->
     end.
 
 close_file(all, State) ->
-    maps:foreach(
-        fun(_Channel, Entry) ->
-            close_entry(Entry)
+    Results = maps:fold(
+        fun(_Channel, Entry, Acc) ->
+            [close_entry(Entry) | Acc]
         end,
+        [],
         State#state.open_files),
-    {ok, State#state{open_files = #{}}};
+    ClearedState = State#state{open_files = #{}},
+    case lists:all(fun(Result) -> Result =:= ok end, Results) of
+        true -> {ok, ClearedState};
+        false -> {error, illegal_function_call, ClearedState}
+    end;
 close_file(ChannelValues, State) when is_list(ChannelValues) ->
     close_file_channels(ChannelValues, State#state.open_files, State);
 close_file(_Other, State) ->
@@ -343,9 +348,13 @@ close_file_channels([ChannelValue | Rest], OpenFiles, State) ->
         {ok, Channel} ->
             case maps:find(Channel, OpenFiles) of
                 {ok, Entry} ->
-                    close_entry(Entry),
-                    NextFiles = maps:remove(Channel, OpenFiles),
-                    close_file_channels(Rest, NextFiles, State#state{open_files = NextFiles});
+                    case close_entry(Entry) of
+                        ok ->
+                            NextFiles = maps:remove(Channel, OpenFiles),
+                            close_file_channels(Rest, NextFiles, State#state{open_files = NextFiles});
+                        {error, _} ->
+                            {error, illegal_function_call, State}
+                    end;
                 error ->
                     {error, illegal_function_call, State}
             end;
@@ -377,8 +386,7 @@ ensure_target_size_quota(Entry, TargetSize) ->
     erlbasic_storage:check_quota_for_size(Path, TargetSize).
 
 close_entry(Entry) ->
-    catch file:close(maps:get(io, Entry)),
-    ok.
+    erlbasic_filestore:close(Entry).
 
 normalize_channel(Value) when is_integer(Value), Value > 0 ->
     {ok, Value};
@@ -589,7 +597,7 @@ lookup_builtin_channel(ChannelValue) ->
     end.
 
 file_size_from_entry(Entry) ->
-    Path = maps:get(path, Entry),
+    Path = maps:get(local_path, Entry, maps:get(path, Entry)),
     case file:read_file_info(Path) of
         {ok, Info} -> {ok, Info#file_info.size};
         _ -> {error, illegal_function_call}
