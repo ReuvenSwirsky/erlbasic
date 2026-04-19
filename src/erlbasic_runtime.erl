@@ -692,12 +692,6 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                 {error, Reason, _Vars1} ->
                     handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
             end;
-        {input, Targets} ->
-            PromptState = State#state{pending_input = {Targets, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Targets)]};
-        {input_line, Target} ->
-            PromptState = State#state{pending_input = {input_line, Target, {program, Pc, [], LoopStack, CallStack}}},
-            {continue, PromptState, LoopStack, CallStack, [format_input_prompt(Target)]};
         {cls} ->
             case erlang:get(erlbasic_conn_type) of
                 home_bas ->
@@ -950,42 +944,13 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             Existing = State#state.common_vars,
             NewCommon = lists:usort(Existing ++ Names),
             {continue, State#state{common_vars = NewCommon}, LoopStack, CallStack, []};
-        {sprite_clear} = Stmt ->
-            case execute_sprite_stmt(Stmt, State) of
-                {ok, NextState, Output} ->
-                    {continue, NextState, LoopStack, CallStack, Output};
-                {error, Reason, ErrState} ->
-                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
-            end;
-        {sprite_hide, _} = Stmt ->
-            case execute_sprite_stmt(Stmt, State) of
-                {ok, NextState, Output} ->
-                    {continue, NextState, LoopStack, CallStack, Output};
-                {error, Reason, ErrState} ->
-                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
-            end;
-        {sprite_show, _} = Stmt ->
-            case execute_sprite_stmt(Stmt, State) of
-                {ok, NextState, Output} ->
-                    {continue, NextState, LoopStack, CallStack, Output};
-                {error, Reason, ErrState} ->
-                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
-            end;
-        {sprite_scale, _, _} = Stmt ->
-            case execute_sprite_stmt(Stmt, State) of
-                {ok, NextState, Output} ->
-                    {continue, NextState, LoopStack, CallStack, Output};
-                {error, Reason, ErrState} ->
-                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
-            end;
-        {sprite_move, _, _, _} = Stmt ->
-            case execute_sprite_stmt(Stmt, State) of
-                {ok, NextState, Output} ->
-                    {continue, NextState, LoopStack, CallStack, Output};
-                {error, Reason, ErrState} ->
-                    handle_runtime_error(Reason, LineNumber, ErrState, Pc, LoopStack, CallStack)
-            end;
-        {sprite_load, _, _, _, _} = Stmt ->
+        Stmt when is_tuple(Stmt),
+                 (element(1, Stmt) =:= sprite_clear orelse
+                  element(1, Stmt) =:= sprite_hide  orelse
+                  element(1, Stmt) =:= sprite_show  orelse
+                  element(1, Stmt) =:= sprite_scale orelse
+                  element(1, Stmt) =:= sprite_move  orelse
+                  element(1, Stmt) =:= sprite_load) ->
             case execute_sprite_stmt(Stmt, State) of
                 {ok, NextState, Output} ->
                     {continue, NextState, LoopStack, CallStack, Output};
@@ -1157,40 +1122,24 @@ resume_program_input(State, Pc, RemainingStatements, LoopStack, CallStack) ->
             end
     end.
 
-update_pending_input_rest(State = #state{pending_input = {Targets, {immediate, _OldRemaining}}}, RemainingStatements) when is_list(Targets) ->
-    State#state{pending_input = {Targets, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {Targets, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) when is_list(Targets) ->
-    State#state{pending_input = {Targets, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {input_line, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {input_line, Target, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {input_line, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {input_line, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {get_nb, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {get_nb, Target, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {get_nb, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {get_nb, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {getkey, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {getkey, Target, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {getkey, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {getkey, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {sleep_keypress, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {sleep_keypress, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {sleep_keypress, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {home_publish_keypress, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {home_publish_keypress, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {home_publish_keypress, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {home_publish_keypress, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {pget_query, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {pget_query, Target, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {pget_query, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {pget_query, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State = #state{pending_input = {getchar_query, Target, {immediate, _OldRemaining}}}, RemainingStatements) ->
-    State#state{pending_input = {getchar_query, Target, {immediate, RemainingStatements}}};
-update_pending_input_rest(State = #state{pending_input = {getchar_query, Target, {program, Pc, _OldRemaining, LoopStack, CallStack}}}, RemainingStatements) ->
-    State#state{pending_input = {getchar_query, Target, {program, Pc, RemainingStatements, LoopStack, CallStack}}};
-update_pending_input_rest(State, _RemainingStatements) ->
+update_pending_input_rest(State = #state{pending_input = PendingInput}, Rem)
+        when PendingInput =/= undefined ->
+    State#state{pending_input = update_pending_context(PendingInput, Rem)};
+update_pending_input_rest(State, _Rem) ->
     State.
+
+update_pending_context({Targets, {immediate, _}}, Rem) when is_list(Targets) ->
+    {Targets, {immediate, Rem}};
+update_pending_context({Targets, {program, Pc, _, LS, CS}}, Rem) when is_list(Targets) ->
+    {Targets, {program, Pc, Rem, LS, CS}};
+update_pending_context({Tag, {immediate, _}}, Rem) ->
+    {Tag, {immediate, Rem}};
+update_pending_context({Tag, {program, Pc, _, LS, CS}}, Rem) ->
+    {Tag, {program, Pc, Rem, LS, CS}};
+update_pending_context({Tag, Extra, {immediate, _}}, Rem) ->
+    {Tag, Extra, {immediate, Rem}};
+update_pending_context({Tag, Extra, {program, Pc, _, LS, CS}}, Rem) ->
+    {Tag, Extra, {program, Pc, Rem, LS, CS}}.
 
 format_input_prompt(_Targets) ->
     "? ".

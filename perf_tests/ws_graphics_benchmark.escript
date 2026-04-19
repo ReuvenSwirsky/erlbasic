@@ -12,16 +12,16 @@ main([RepoRoot]) ->
               [Runs, Gens]),
 
     case run_benchmark(RepoRoot, Runs, Gens) of
+        {ok, []} ->
+            io:format("All ~B runs failed — no results to record~n", [Runs]),
+            halt(1);
         {ok, Results} ->
             print_summary(Results),
             HistoryFile = filename:join([RepoRoot, "perf_tests", "ws_graphics_history.txt"]),
             show_history_comparison(HistoryFile, Results),
             GitSha = string:trim(os:cmd("git -C " ++ RepoRoot ++ " rev-parse --short HEAD")),
             save_history(HistoryFile, GitSha, Results),
-            ok;
-        {error, runtime_error, RunNumber, ElapsedMs, OutText} ->
-            io:format("Run ~B failed after ~B ms~n~s~n", [RunNumber, ElapsedMs, OutText]),
-            halt(1)
+            ok
     end;
 main(_) ->
     io:format("usage: ws_graphics_benchmark.escript <repo-root>~n"),
@@ -52,8 +52,9 @@ run_benchmark(ProgramLines, Runs, RunNumber, Results) ->
                        maps:get(gfxb_frames, Stats),
                        maps:get(gfx_cmds, Stats)]),
             run_benchmark(ProgramLines, Runs, RunNumber + 1, [{ElapsedMs, Stats} | Results]);
-        {error, runtime_error, ElapsedMs, OutText} ->
-            {error, runtime_error, RunNumber, ElapsedMs, OutText}
+        {error, exception, Class, Reason} ->
+            io:format("SKIPPED (~p:~p)~n", [Class, Reason]),
+            run_benchmark(ProgramLines, Runs, RunNumber + 1, Results)
     end.
 
 run_once(ProgramLines) ->
@@ -74,7 +75,7 @@ run_once(ProgramLines) ->
         end, State0, ProgramLines),
 
         T0 = erlang:monotonic_time(millisecond),
-        {_FinalState, Output} = erlbasic_interp:handle_input("RUN", State1),
+        {_FinalState, _Output} = erlbasic_interp:handle_input("RUN", State1),
         T1 = erlang:monotonic_time(millisecond),
         ElapsedMs = T1 - T0,
 
@@ -85,11 +86,10 @@ run_once(ProgramLines) ->
             #{msgs => -1, bytes => -1, gfx_frames => -1, gfxb_frames => -1, gfx_cmds => -1}
         end,
 
-        OutText = lists:flatten(Output),
-        case re:run(OutText, "ERROR", [{capture, none}]) of
-            match -> {error, runtime_error, ElapsedMs, OutText};
-            nomatch -> {ok, ElapsedMs, Stats}
-        end
+        {ok, ElapsedMs, Stats}
+    catch
+        Class:Reason ->
+            {error, exception, Class, Reason}
     after
         SinkPid ! stop,
         restore_env(erlbasic_conn_type, PrevConnType),

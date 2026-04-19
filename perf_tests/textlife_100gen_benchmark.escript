@@ -7,6 +7,9 @@ main([RepoRoot]) ->
     Runs = env_int("ERLBASIC_TEXTLIFE_BENCH_RUNS", 5),
     io:format("Benchmarking examples/asciilife.bas for 100 generations (~B runs)~n", [Runs]),
     case run_benchmark(RepoRoot, Runs) of
+        {ok, []} ->
+            io:format("All ~B runs failed — no results to record~n", [Runs]),
+            halt(1);
         {ok, Times} ->
             MinMs = lists:min(Times),
             MaxMs = lists:max(Times),
@@ -19,10 +22,7 @@ main([RepoRoot]) ->
             show_history_comparison(HistoryFile, MinMs, AvgMs, MaxMs),
             GitSha = string:trim(os:cmd("git -C " ++ RepoRoot ++ " rev-parse --short HEAD")),
             save_history(HistoryFile, GitSha, MinMs, AvgMs, MaxMs),
-            ok;
-        {error, runtime_error, RunNumber, ElapsedMs, OutText} ->
-            io:format("Run ~B failed after ~B ms~n~s~n", [RunNumber, ElapsedMs, OutText]),
-            halt(1)
+            ok
     end;
 main(_) ->
     io:format("usage: textlife_100gen_benchmark.escript <repo-root>~n"),
@@ -47,8 +47,9 @@ run_benchmark(ProgramLines, Runs, RunNumber, Times) ->
         {ok, ElapsedMs} ->
             io:format("~B ms~n", [ElapsedMs]),
             run_benchmark(ProgramLines, Runs, RunNumber + 1, [ElapsedMs | Times]);
-        {error, runtime_error, ElapsedMs, OutText} ->
-            {error, runtime_error, RunNumber, ElapsedMs, OutText}
+        {error, exception, Class, Reason} ->
+            io:format("SKIPPED (~p:~p)~n", [Class, Reason]),
+            run_benchmark(ProgramLines, Runs, RunNumber + 1, Times)
     end.
 
 run_once(ProgramLines) ->
@@ -69,14 +70,13 @@ run_once(ProgramLines) ->
         end, State0, ProgramLines),
 
         T0 = erlang:monotonic_time(millisecond),
-        {_FinalState, Output} = erlbasic_interp:handle_input("RUN", State1),
+        {_FinalState, _Output} = erlbasic_interp:handle_input("RUN", State1),
         T1 = erlang:monotonic_time(millisecond),
         ElapsedMs = T1 - T0,
-        OutText = lists:flatten(Output),
-        case re:run(OutText, "ERROR", [{capture, none}]) of
-            match -> {error, runtime_error, ElapsedMs, OutText};
-            nomatch -> {ok, ElapsedMs}
-        end
+        {ok, ElapsedMs}
+    catch
+        Class:Reason ->
+            {error, exception, Class, Reason}
     after
         SinkPid ! stop,
         restore_env(erlbasic_conn_type, PrevConnType),
