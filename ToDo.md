@@ -18,7 +18,7 @@
 - [x] What is ?Too Many Sessions for this account bug? We're getting this when trying to log in again
 - [x] When a user creates a home.bas and we try to go to the home page for /user the server won't serve it up the first time, and the session will disconnect. If we reconnect, the home page then appears.
 - [x] Redo lexer to use LEEX
-- [ ] Implement REDIM statement
+- [X] Implement REDIM statement (rejected)
 - [ ] Additional options to HOME
 - [X] Can I specify a number in scientific format? Will it parse it?
-- [ ] Allow BASIC-PLUS style COMMON statement so variables can persist in a CHAINed program
+- [x] Allow BASIC-PLUS style COMMON statement so variables can persist in a CHAINed program
