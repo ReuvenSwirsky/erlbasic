@@ -1360,6 +1360,48 @@ elseif_run_else_branch_test() ->
     ?assertEqual(match, re:run(Text, "OTHER", [{capture, none}])).
 
 %% =============================================================================
+%% COMMON / CHAIN Variable Persistence Tests
+%% =============================================================================
+
+%% COMMON statement parses to {common, [VarNames]}
+common_statement_parse_test() ->
+    ?assertEqual(
+        {common, ["A", "B$"]},
+        erlbasic_parser:parse_statement("COMMON A,B$")
+    ),
+    ?assertEqual(
+        {common, ["X", "Y", "Z%"]},
+        erlbasic_parser:parse_statement("COMMON X, Y, Z%")
+    ).
+
+%% Variables declared with COMMON persist through CHAIN; others are cleared.
+%% Chains to examples/common_chain_target.bas which does: PRINT A / PRINT B
+common_chain_persists_declared_vars_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 COMMON A", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 A = 42", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 B = 100", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 CHAIN \"common_chain_target\"", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("RUN", S4),
+    Text = lists:flatten(Output),
+    %% A was declared COMMON so it survives: PRINT A should give 42
+    ?assertEqual(match, re:run(Text, "42", [{capture, none}])),
+    %% B was not declared COMMON so it is cleared: PRINT B should give 0
+    ?assertEqual(nomatch, re:run(Text, "100", [{capture, none}])).
+
+%% An array declared with COMMON (using trailing parens) persists through CHAIN.
+%% Chains to examples/common_chain_array_target.bas which does: PRINT A(1)
+common_chain_preserves_arrays_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 COMMON A()", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 DIM A(5)", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 A(1) = 99", S2),
+    {S4, _} = erlbasic_interp:handle_input("40 CHAIN \"common_chain_array_target\"", S3),
+    {_S5, Output} = erlbasic_interp:handle_input("RUN", S4),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "99", [{capture, none}])).
+
+%% =============================================================================
 %% ON ERROR GOTO and RESUME Tests
 %% =============================================================================
 

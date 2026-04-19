@@ -548,8 +548,17 @@ parse_sprite_stmt(TextToken) ->
     end.
 
 parse_raw_stmt({raw_stmt, _Line, Command}) ->
-    _ = Command,
-    unknown.
+    case re:run(Command, "^COMMON\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [VarList]} ->
+            Names = [string:trim(string:trim(V), both, "()") || V <- string:split(VarList, ",", all)],
+            Valid = [N || N <- Names, N =/= ""],
+            case Valid of
+                [] -> unknown;
+                _  -> {common, Valid}
+            end;
+        nomatch ->
+            unknown
+    end.
 
 text_value({text, _Line, Rest}) ->
     string:trim(Rest).

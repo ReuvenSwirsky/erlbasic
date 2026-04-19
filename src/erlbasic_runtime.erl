@@ -946,6 +946,10 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
             execute_resume_line(LineExpr, Program, State, Pc, LoopStack, CallStack);
         {chain, FileExpr} ->
             execute_chain(FileExpr, LineNumber, State);
+        {common, Names} ->
+            Existing = State#state.common_vars,
+            NewCommon = lists:usort(Existing ++ Names),
+            {continue, State#state{common_vars = NewCommon}, LoopStack, CallStack, []};
         {sprite_clear} = Stmt ->
             case execute_sprite_stmt(Stmt, State) of
                 {ok, NextState, Output} ->
@@ -1370,15 +1374,41 @@ execute_chain(FileExpr, LineNumber, State) ->
         {error, Reason, _} ->
             {stop, [erlbasic_eval:format_runtime_error(Reason, LineNumber)]};
         {ok, FileValue, _} when is_list(FileValue) ->
-            case erlbasic_commands:handle_load_command(State, FileValue) of
+            CommonNames = State#state.common_vars,
+            ChainState = filter_vars_for_chain(State, CommonNames),
+            case erlbasic_commands:handle_load_command(ChainState, FileValue) of
                 {NewState, ["OK\r\n"]} ->
-                    {chain, NewState, []};
+                    {chain, NewState#state{common_vars = []}, []};
                 {_LoadState, ErrorOutput} ->
                     {stop, ErrorOutput}
             end;
         {ok, _Other, _} ->
             {stop, [erlbasic_eval:format_runtime_error(type_mismatch, LineNumber)]}
     end.
+
+filter_vars_for_chain(State, []) ->
+    %% No COMMON declared: clear all variables
+    State#state{vars = #{}};
+filter_vars_for_chain(State, CommonNames) ->
+    Vars = State#state.vars,
+    CommonSet = sets:from_list(CommonNames),
+    %% Variable names are strings (lists); keep only those in CommonSet.
+    %% Non-list keys (like the '$ARRAYS$' atom) are handled separately below.
+    FilteredScalars = maps:filter(
+        fun(Key, _Val) ->
+            not is_list(Key) orelse sets:is_element(Key, CommonSet)
+        end,
+        Vars
+    ),
+    %% Filter the arrays sub-map to only keep arrays whose name is in CommonSet
+    Arrays = erlbasic_eval_arrays:get_arrays(Vars),
+    FilteredArrays = maps:filter(
+        fun(ArrayName, _Meta) ->
+            sets:is_element(ArrayName, CommonSet)
+        end,
+        Arrays
+    ),
+    State#state{vars = erlbasic_eval_arrays:put_arrays(FilteredScalars, FilteredArrays)}.
 
 get_line_number(Program, Pc) when Pc >= 1, Pc =< length(Program) ->
     {LineNumber, _Code} = lists:nth(Pc, Program),

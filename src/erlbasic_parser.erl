@@ -329,6 +329,8 @@ validate_statement(Stmt) ->
             validate_expr_syntax(Expr);
         {chain, FileExpr} ->
             validate_expr_syntax(FileExpr);
+        {common, _Names} ->
+            ok;
         {sound, VoiceExpr, PitchExpr, DistortionExpr, VolumeExpr} ->
             case validate_expr_pair(VoiceExpr, PitchExpr) of
                 ok -> validate_expr_pair(DistortionExpr, VolumeExpr);
