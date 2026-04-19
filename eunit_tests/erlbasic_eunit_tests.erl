@@ -1320,6 +1320,45 @@ if_then_line_number_run_test() ->
     ?assertEqual(match, re:run(Text, "OK", [{capture, none}])),
     ?assertEqual(nomatch, re:run(Text, "BAD", [{capture, none}])).
 
+elseif_parse_test() ->
+    ?assertEqual(
+        {if_then_else, "X=1", "PRINT \"ONE\"", "IF X=2 THEN PRINT \"TWO\" ELSE PRINT \"OTHER\""},
+        erlbasic_parser:parse_statement("IF X=1 THEN PRINT \"ONE\" ELSEIF X=2 THEN PRINT \"TWO\" ELSE PRINT \"OTHER\"")
+    ).
+
+elseif_run_first_branch_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 1", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 IF X=1 THEN PRINT \"ONE\" ELSEIF X=2 THEN PRINT \"TWO\" ELSE PRINT \"OTHER\"", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {_S4, Output} = erlbasic_interp:handle_input("RUN", S3),
+    Text = lists:flatten(Output),
+    ?assertEqual(match, re:run(Text, "ONE", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "TWO", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "OTHER", [{capture, none}])).
+
+elseif_run_middle_branch_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 2", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 IF X=1 THEN PRINT \"ONE\" ELSEIF X=2 THEN PRINT \"TWO\" ELSE PRINT \"OTHER\"", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {_S4, Output} = erlbasic_interp:handle_input("RUN", S3),
+    Text = lists:flatten(Output),
+    ?assertEqual(nomatch, re:run(Text, "ONE", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "TWO", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "OTHER", [{capture, none}])).
+
+elseif_run_else_branch_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 LET X = 9", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 IF X=1 THEN PRINT \"ONE\" ELSEIF X=2 THEN PRINT \"TWO\" ELSE PRINT \"OTHER\"", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {_S4, Output} = erlbasic_interp:handle_input("RUN", S3),
+    Text = lists:flatten(Output),
+    ?assertEqual(nomatch, re:run(Text, "ONE", [{capture, none}])),
+    ?assertEqual(nomatch, re:run(Text, "TWO", [{capture, none}])),
+    ?assertEqual(match, re:run(Text, "OTHER", [{capture, none}])).
+
 %% =============================================================================
 %% ON ERROR GOTO and RESUME Tests
 %% =============================================================================

@@ -269,16 +269,25 @@ parse_getchar_stmt(TextToken) ->
     end.
 
 parse_if_stmt(TextToken) ->
-    case re:run(trim_text(TextToken), "^(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
-        {match, [CondExpr, ThenStmt]} ->
-            {if_then_else, CondExpr, normalize_if_branch_statement(ThenStmt), undefined};
-        {match, [CondExpr, ThenStmt, ElseStmt]} ->
+    Text = trim_text(TextToken),
+    case re:run(Text, "^(.+?)\\s+THEN\\s+(.+?)\\s+ELSEIF\\s+(.+)$", [{capture, [1, 2, 3], list}]) of
+        {match, [CondExpr, ThenStmt, ElseIfRest]} ->
             {if_then_else,
              CondExpr,
              normalize_if_branch_statement(ThenStmt),
-             normalize_if_branch_statement(ElseStmt)};
+             normalize_if_branch_statement("IF " ++ ElseIfRest)};
         nomatch ->
-            unknown
+            case re:run(Text, "^(.+?)\\s+THEN\\s+(.+?)(?:\\s+ELSE\\s+(.+))?$", [{capture, all_but_first, list}]) of
+                {match, [CondExpr, ThenStmt]} ->
+                    {if_then_else, CondExpr, normalize_if_branch_statement(ThenStmt), undefined};
+                {match, [CondExpr, ThenStmt, ElseStmt]} ->
+                    {if_then_else,
+                     CondExpr,
+                     normalize_if_branch_statement(ThenStmt),
+                     normalize_if_branch_statement(ElseStmt)};
+                nomatch ->
+                    unknown
+            end
     end.
 
 parse_for_stmt(TextToken) ->

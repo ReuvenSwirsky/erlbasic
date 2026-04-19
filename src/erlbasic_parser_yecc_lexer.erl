@@ -122,13 +122,12 @@ tokenize_if_statement(Rest) ->
                 {"", _} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
                 {_, ""} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
                 _ ->
-                    case re:run(ThenElse, "^(.+?)\\s+ELSE\\s+(.+)$", [{capture, [1, 2], list}]) of
-                        {match, [ThenText, ElseText]} ->
+                    case re:run(ThenElse, "^(.+?)\\s+ELSEIF\\s+(.+)$", [{capture, [1, 2], list}]) of
+                        {match, [ThenText, ElseIfRest]} ->
                             ThenStmt = string:trim(ThenText),
-                            ElseStmt = string:trim(ElseText),
-                            case {ThenStmt, ElseStmt} of
-                                {"", _} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
-                                {_, ""} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                            ElseStmt = "IF " ++ string:trim(ElseIfRest),
+                            case ThenStmt of
+                                "" -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
                                 _ ->
                                     CondTokens = condition_tokens(Cond),
                                     {ok, [{kw_if, 1} | CondTokens] ++ [
@@ -139,11 +138,29 @@ tokenize_if_statement(Rest) ->
                                     ]}
                             end;
                         nomatch ->
-                            CondTokens = condition_tokens(Cond),
-                            {ok, [{kw_if, 1} | CondTokens] ++ [
-                                {kw_then, 1},
-                                {text, 1, ThenElse}
-                            ]}
+                            case re:run(ThenElse, "^(.+?)\\s+ELSE\\s+(.+)$", [{capture, [1, 2], list}]) of
+                                {match, [ThenText, ElseText]} ->
+                                    ThenStmt = string:trim(ThenText),
+                                    ElseStmt = string:trim(ElseText),
+                                    case {ThenStmt, ElseStmt} of
+                                        {"", _} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                                        {_, ""} -> {ok, [{kw_if, 1}, {text, 1, Rest}]};
+                                        _ ->
+                                            CondTokens = condition_tokens(Cond),
+                                            {ok, [{kw_if, 1} | CondTokens] ++ [
+                                                {kw_then, 1},
+                                                {text, 1, ThenStmt},
+                                                {kw_else, 1},
+                                                {text, 1, ElseStmt}
+                                            ]}
+                                    end;
+                                nomatch ->
+                                    CondTokens = condition_tokens(Cond),
+                                    {ok, [{kw_if, 1} | CondTokens] ++ [
+                                        {kw_then, 1},
+                                        {text, 1, ThenElse}
+                                    ]}
+                            end
                     end
             end;
         nomatch ->
