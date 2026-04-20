@@ -30,3 +30,5 @@
 - [ ] First guest is [255,1] second guest is [255,2]. Guests will take the lowest available slot
       in the 255 group. Up to 255 guests can be in the system at once. 
 - [ ] users in group 255 can't create homepages or save files
+- [x] fix REM == gives "Reserved word error"
+- [ ] Find out how to back up MNSESIA database in production
