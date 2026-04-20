@@ -1,5 +1,5 @@
 -module(erlbasic_homepage_handler).
--export([init/2, init_cache/0, render_home_bas_html/5]).
+-export([init/2, init_cache/0, render_home_bas_html/5, validate_home_bas/3]).
 
 -include("erlbasic_state.hrl").
 
@@ -49,8 +49,8 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
     PpnText = io_lib:format("[~w,~w]", [Project, Programmer]),
     CacheFile = homepage_cache_file(Project, Programmer),
     FileHash = crypto:hash(sha256, HomeBas),
-    Sections = execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer),
-    SectionsHtml = [render_section(S) || S <- Sections],
+    RenderResult = execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer),
+    SectionsHtml = render_sections_html(RenderResult),
     iolist_to_binary([
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
         "<title>", UsernameText, " - Homepage</title>",
@@ -73,10 +73,60 @@ render_home_from_bas(Username, Name, Project, Programmer, HomeBas) ->
 render_home_bas_html(Username, Name, Project, Programmer, HomeBas) ->
     render_home_from_bas(Username, Name, Project, Programmer, HomeBas).
 
+validate_home_bas(HomeBas, Project, Programmer) ->
+    HomeBasBin = iolist_to_binary(HomeBas),
+    case run_home_bas(HomeBasBin, Project, Programmer) of
+        {ok, Sections} ->
+            {ok, length(Sections)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 render_section({text, Html}) ->
     ["<div class=\"home-section\"><pre>", Html, "</pre></div>"];
 render_section({gfx, Svg}) ->
     ["<div class=\"home-section home-section-gfx\">", Svg, "</div>"].
+
+render_sections_html({ok, Sections}) ->
+    [render_section(S) || S <- Sections];
+render_sections_html({error, Reason}) ->
+    [render_home_error_section(Reason)].
+
+render_home_error_section(no_home_publish) ->
+    render_text_error_section([
+        "HOME.BAS did not publish any homepage sections.",
+        "Add at least one HOME PUBLISH statement so the homepage has something to render."
+    ]);
+render_home_error_section(no_sections) ->
+    render_text_error_section([
+        "HOME.BAS ran, but no homepage sections were captured.",
+        "Check that the program reaches HOME PUBLISH and does not stop before it."
+    ]);
+render_home_error_section(timeout) ->
+    render_text_error_section([
+        "HOME.BAS rendering timed out.",
+        "Homepage rendering must finish within 5 seconds."
+    ]);
+render_home_error_section({runtime_crash, Reason}) ->
+    render_text_error_section([
+        "HOME.BAS crashed during homepage rendering.",
+        io_lib:format("Reason: ~p", [Reason])
+    ]);
+render_home_error_section(parse_failed) ->
+    render_text_error_section([
+        "HOME.BAS could not be parsed for homepage rendering.",
+        "Reload or resave the program and check for syntax problems."
+    ]);
+render_home_error_section(Reason) ->
+    render_text_error_section([
+        "HOME.BAS could not be rendered.",
+        io_lib:format("Reason: ~p", [Reason])
+    ]).
+
+render_text_error_section(Lines) ->
+    ["<div class=\"home-section\"><pre>",
+     escape_html(lists:flatten(string:join([lists:flatten(Line) || Line <- Lines], "\n\n"))),
+     "</pre></div>"].
 
 init_cache() ->
     ok.
@@ -84,12 +134,16 @@ init_cache() ->
 execute_home_bas(CacheFile, FileHash, HomeBas, Project, Programmer) ->
     case cache_lookup(CacheFile, FileHash) of
         {hit, CachedOutput} ->
-            CachedOutput;
+            {ok, CachedOutput};
         miss ->
             TTL = detect_dynamic(HomeBas),
-            Output = run_home_bas(HomeBas, Project, Programmer),
-            cache_store(CacheFile, FileHash, Output, TTL),
-            Output
+            case run_home_bas(HomeBas, Project, Programmer) of
+                {ok, Output} ->
+                    cache_store(CacheFile, FileHash, Output, TTL),
+                    {ok, Output};
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end.
 
 run_home_bas(HomeBas, Project, Programmer) ->
@@ -100,19 +154,39 @@ run_home_bas(HomeBas, Project, Programmer) ->
             Pid = spawn(fun() ->
                 erlang:put(erlbasic_ppn, {Project, Programmer}),
                 erlang:put(erlbasic_conn_type, home_bas),
-                erlbasic_home_screen:init(),
-                {_RanState, _Output} = erlbasic_runtime:run_program(State),
-                Self ! {bas_sections, erlbasic_home_screen:get_sections()}
+                try
+                    erlbasic_home_screen:init(),
+                    {_RanState, _Output} = erlbasic_runtime:run_program(State),
+                    Self ! {bas_sections, erlbasic_home_screen:get_sections()}
+                catch
+                    Class:Reason ->
+                        Self ! {bas_error, {Class, Reason}}
+                end
             end),
             receive
-                {bas_sections, Sections} -> Sections
+                {bas_sections, Sections} ->
+                    case Sections of
+                        [] ->
+                            case has_home_publish(HomeBas) of
+                                true -> {error, no_sections};
+                                false -> {error, no_home_publish}
+                            end;
+                        _ ->
+                            {ok, Sections}
+                    end;
+                {bas_error, Reason} ->
+                    {error, {runtime_crash, Reason}}
             after 5000 ->
                 exit(Pid, kill),
-                []
+                {error, timeout}
             end;
         _ ->
-            []
+            {error, parse_failed}
     end.
+
+has_home_publish(HomeBas) ->
+    Upper = string:to_upper(binary_to_list(HomeBas)),
+    string:find(Upper, "HOME PUBLISH") =/= nomatch.
 
 %% Detect whether HOME.BAS uses dynamic keywords that affect caching.
 %% Returns: never (volatile - don't cache), or an integer TTL in seconds,

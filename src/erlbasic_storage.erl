@@ -46,7 +46,7 @@ read_program(FileName) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case resolve_existing_program_key(FileName) of
+    case find_existing_program_key(FileName) of
         {ok, Key} ->
             apply(backend(), read, [Key]);
         {error, enoent} ->
@@ -130,7 +130,7 @@ delete_program(FileName) ->
     case erlbasic_filestore:validate_name(FileName) of
         {error, _} = Err -> Err;
         ok ->
-    case resolve_existing_program_key(FileName) of
+    case find_existing_program_key(FileName) of
         {ok, Key} ->
             apply(backend(), delete, [Key]);
         {error, enoent} ->
@@ -141,23 +141,41 @@ delete_program(FileName) ->
     end.
 
 resolve_existing_program_key(FileName) ->
+    find_existing_program_key(FileName).
+
+program_key_for_write(FileName) ->
+    case find_existing_program_key(FileName) of
+        {ok, Key} ->
+            {ok, Key};
+        {error, enoent} ->
+            {ok, user_key(FileName)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+find_existing_program_key(FileName) ->
+    case direct_existing_program_key(FileName) of
+        {ok, _} = Ok ->
+            Ok;
+        {error, enoent} ->
+            find_existing_program_key_by_listing(FileName);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+direct_existing_program_key(FileName) ->
+    DirectKeys = [user_key(Name) || Name <- direct_name_candidates(FileName)],
+    case first_existing_key(DirectKeys) of
+        undefined -> {error, enoent};
+        Key -> {ok, Key}
+    end.
+
+find_existing_program_key_by_listing(FileName) ->
     case list_programs_with_info() of
         {ok, Infos} ->
             Names = [Name || {Name, _Size, _MTime} <- Infos],
             case pick_case_insensitive_name(FileName, Names) of
                 undefined -> {error, enoent};
-                ExistingName -> {ok, user_key(ExistingName)}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-program_key_for_write(FileName) ->
-    case list_programs_with_info() of
-        {ok, Infos} ->
-            Names = [Name || {Name, _Size, _MTime} <- Infos],
-            case pick_case_insensitive_name(FileName, Names) of
-                undefined -> {ok, user_key(FileName)};
                 ExistingName -> {ok, user_key(ExistingName)}
             end;
         {error, Reason} ->
@@ -293,3 +311,40 @@ pick_case_insensitive_name(FileName, Names) ->
 
 filename_key(Name) ->
     string:to_upper(Name).
+
+first_existing_key([Key | Rest]) ->
+    case apply(backend(), key_exists, [Key]) of
+        true -> Key;
+        false -> first_existing_key(Rest)
+    end;
+first_existing_key([]) ->
+    undefined.
+
+direct_name_candidates(FileName) ->
+    Base = filename:rootname(FileName),
+    Ext = filename:extension(FileName),
+    lists:reverse(
+        lists:foldl(
+            fun(Name, Acc) ->
+                case lists:member(Name, Acc) of
+                    true -> Acc;
+                    false -> [Name | Acc]
+                end
+            end,
+            [],
+            case Ext of
+                [] ->
+                    [FileName,
+                     string:to_lower(FileName),
+                     string:to_upper(FileName)];
+                _ ->
+                    [FileName,
+                     Base ++ string:to_lower(Ext),
+                     Base ++ string:to_upper(Ext),
+                     string:to_lower(Base) ++ string:to_lower(Ext),
+                     string:to_lower(Base) ++ string:to_upper(Ext),
+                     string:to_upper(Base) ++ string:to_lower(Ext),
+                     string:to_upper(Base) ++ string:to_upper(Ext),
+                     string:to_lower(FileName),
+                     string:to_upper(FileName)]
+            end)).

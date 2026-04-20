@@ -210,13 +210,7 @@ handle_save_command(State, RawName) ->
                             Warning = case string:uppercase(FileName) =:= "HOME.BAS" of
                                 false -> [];
                                 true  ->
-                                    case home_blocking_lines(State#state.prog) of
-                                        [] -> [];
-                                        BLines ->
-                                            Nums = string:join([integer_to_list(L) || {L, _} <- BLines], ", "),
-                                            ["?WARNING: SLEEP, INPUT, GET and GETKEY are skipped during\r\n"
-                                             "  homepage rendering. Found at line(s): " ++ Nums ++ "\r\n"]
-                                    end
+                                    home_save_warnings(State#state.prog, Content)
                             end,
                             {State, [SaveMsg | Warning]};
                         {error, quota_exceeded} -> {State, [erlbasic_eval:format_runtime_error(storage_quota_exceeded)]};
@@ -359,6 +353,45 @@ home_blocking_lines(Program) ->
                 end
         end
     end, Program).
+
+home_save_warnings(Program, Content) ->
+    BlockingWarnings =
+        case home_blocking_lines(Program) of
+            [] -> [];
+            BLines ->
+                Nums = string:join([integer_to_list(L) || {L, _} <- BLines], ", "),
+                ["?WARNING: SLEEP, INPUT, GET and GETKEY are skipped during\r\n"
+                 "  homepage rendering. Found at line(s): " ++ Nums ++ "\r\n"]
+        end,
+    RenderWarnings =
+        case erlang:get(erlbasic_ppn) of
+            {Project, Programmer} ->
+                case erlbasic_homepage_handler:validate_home_bas(Content, Project, Programmer) of
+                    {ok, _SectionCount} ->
+                        [];
+                    {error, no_home_publish} ->
+                        ["?WARNING: HOME.BAS does not contain HOME PUBLISH, so the homepage\r\n"
+                         "  will render with no published sections\r\n"];
+                    {error, no_sections} ->
+                        ["?WARNING: HOME.BAS ran during save validation, but no homepage\r\n"
+                         "  sections were captured\r\n"];
+                    {error, timeout} ->
+                        ["?WARNING: HOME.BAS render validation timed out after 5 seconds\r\n"];
+                    {error, {runtime_crash, Reason}} ->
+                        [lists:flatten(io_lib:format(
+                            "?WARNING: HOME.BAS crashed during render validation: ~p\r\n",
+                            [Reason]))];
+                    {error, parse_failed} ->
+                        ["?WARNING: HOME.BAS could not be parsed during render validation\r\n"];
+                    {error, Reason} ->
+                        [lists:flatten(io_lib:format(
+                            "?WARNING: HOME.BAS render validation failed: ~p\r\n",
+                            [Reason]))]
+                end;
+            _ ->
+                []
+        end,
+    BlockingWarnings ++ RenderWarnings.
 
 parse_program_text(Text) ->
     Lines = [string:trim(Line) || Line <- string:split(Text, "\n", all)],

@@ -2109,6 +2109,59 @@ homepage_render_malformed_cache_is_ignored_test() ->
         file:del_dir(TempDir)
     end.
 
+homepage_render_missing_home_publish_shows_error_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    OldHomepageCacheDir = application:get_env(erlbasic, homepage_cache_dir),
+    HomeBas = <<
+        "10 PRINT \"VISIBLE TEXT\"\n",
+        "20 END\n"
+    >>,
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        ok = application:set_env(erlbasic, homepage_cache_dir, filename:join(TempDir, "home_cache")),
+        BodyBin = erlbasic_homepage_handler:render_home_bas_html("alice", "Alice", 88, 9, HomeBas),
+        Body = binary_to_list(BodyBin),
+        ?assertEqual(match, re:run(Body, "did not publish any homepage sections", [{capture, none}])),
+        ?assertEqual(match, re:run(Body, "HOME PUBLISH", [{capture, none}]))
+    after
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        case OldHomepageCacheDir of
+            undefined -> application:unset_env(erlbasic, homepage_cache_dir);
+            {ok, Dir} -> application:set_env(erlbasic, homepage_cache_dir, Dir)
+        end,
+        file:del_dir(filename:join(TempDir, "home_cache")),
+        file:del_dir(TempDir)
+    end.
+
+save_home_bas_without_publish_warns_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        erlang:put(erlbasic_ppn, {88, 9}),
+        S0 = erlbasic_interp:new_state(),
+        {S1, _} = erlbasic_interp:handle_input("10 PRINT \"HELLO\"", S0),
+        {_S2, Output} = erlbasic_interp:handle_input("SAVE HOME", S1),
+        Text = lists:flatten(Output),
+        ?assertEqual(match, re:run(Text, "Saved HOME\\.bas|Saved HOME\\.BAS", [{capture, none}])),
+        ?assertEqual(match, re:run(Text, "does not contain HOME PUBLISH", [{capture, none}]))
+    after
+        erlang:erase(erlbasic_ppn),
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        file:delete(filename:join([TempDir, "ErlUsers", "88_9", "HOME.bas"])),
+        file:delete(filename:join([TempDir, "ErlUsers", "88_9", "HOME.BAS"])),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "88_9"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
 s3_config_loads_private_file_test() ->
     TempDir = temp_dir(),
     ConfigPath = filename:join(TempDir, ".s3.config"),
@@ -2228,6 +2281,24 @@ s3_fileio_close_reports_upload_failure_test() ->
         {_S3, CloseOutput} = erlbasic_interp:handle_input("CLOSE #1", S2),
         ?assertEqual(match, re:run(lists:flatten(CloseOutput), "ILLEGAL FUNCTION CALL", [{capture, none}]))
     after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
+    end.
+
+s3_homepage_program_lookup_survives_list_failure_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        erlang:put(erlbasic_ppn, {2, 1}),
+        ok = erlbasic_storage_s3_test_backend:seed("2_1/HOME.bas", <<"10 PRINT \"THRILLSCIENCE\"\n">>),
+        ok = erlbasic_storage_s3_test_backend:set_fail_lists(true),
+        ?assertEqual({ok, <<"10 PRINT \"THRILLSCIENCE\"\n">>}, erlbasic_storage:read_program("HOME.BAS"))
+    after
+        erlang:erase(erlbasic_ppn),
         restore_app_env(storage_backend, OldBackend),
         restore_app_env(storage_s3_module, OldS3Module),
         ok = erlbasic_storage_s3_test_backend:reset()
