@@ -22,7 +22,10 @@ init(Req, State) ->
 %% Called once the WebSocket handshake is complete.
 websocket_init(_State) ->
     %% Start a fresh interpreter session, telling it to send output to this process.
-    {ok, Pid} = erlbasic_conn:start_ws(self()),
+    {ok, Pid} = case whereis(erlbasic_conn_sup) of
+        undefined -> erlbasic_ws_conn:start(self());
+        _ -> erlbasic_conn_sup:start_ws_session(self())
+    end,
     MonitorRef = erlang:monitor(process, Pid),
     {ok, #{conn => Pid, monitor => MonitorRef}}.
 
@@ -32,7 +35,7 @@ websocket_handle({text, <<3>>}, State = #{conn := Pid}) ->
     Pid ! interrupt,
     {ok, State};
 websocket_handle({text, Data}, State = #{conn := Pid}) ->
-    erlbasic_conn:send_input(Pid, binary_to_list(Data)),
+    erlbasic_ws_conn:send_input(Pid, binary_to_list(Data)),
     {ok, State};
 websocket_handle(_Frame, State) ->
     {ok, State}.

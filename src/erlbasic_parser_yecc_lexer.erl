@@ -420,11 +420,16 @@ tokenize_def_fn_statement(Rest) ->
     end.
 
 classify_statement(Text) ->
-    case split_implicit_let(Text) of
-        {match, Rest} ->
-            {token, kw_implicit_let, Rest};
-        nomatch ->
-            classify_by_keywords(Text, keyword_splitters())
+    case classify_by_keywords(Text, keyword_splitters()) of
+        raw ->
+            case split_implicit_let(Text) of
+                {match, Rest} ->
+                    {token, kw_implicit_let, Rest};
+                nomatch ->
+                    raw
+            end;
+        Other ->
+            Other
     end.
 
 classify_by_keywords(Text, []) ->

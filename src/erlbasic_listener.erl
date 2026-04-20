@@ -1,53 +1,51 @@
 -module(erlbasic_listener).
--behaviour(gen_server).
 
--export([start_link/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([start_link/0, init/0]).
 
 -define(DEFAULT_PORT, 5555).
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    proc_lib:start_link(?MODULE, init, []).
 
-init([]) ->
+init() ->
     Port = application:get_env(erlbasic, port, ?DEFAULT_PORT),
-    {ok, ListenSocket} = gen_tcp:listen(Port, [
+    case gen_tcp:listen(Port, [
         binary,
-        {packet, line},
+        {packet, raw},
         {active, false},
         {reuseaddr, true},
         {nodelay, true}
-    ]),
-    _AcceptPid = spawn_link(fun() -> accept_loop(ListenSocket) end),
-    io:format("erlbasic listening on port ~p~n", [Port]),
-    {ok, #{listen_socket => ListenSocket, port => Port}}.
-
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
-
-handle_cast(_Message, State) ->
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(_Reason, #{listen_socket := ListenSocket}) ->
-    gen_tcp:close(ListenSocket),
-    ok;
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    ]) of
+        {ok, ListenSocket} ->
+            proc_lib:init_ack({ok, self()}),
+            io:format("erlbasic listening on port ~p~n", [Port]),
+            accept_loop(ListenSocket);
+        {error, Reason} ->
+            proc_lib:init_ack({error, Reason}),
+            exit(Reason)
+    end.
 
 accept_loop(ListenSocket) ->
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            spawn_link(fun() -> erlbasic_conn:start(Socket) end),
-            accept_loop(ListenSocket);
+            case erlbasic_conn_sup:start_tcp_session(Socket) of
+                {ok, Pid} ->
+                    case gen_tcp:controlling_process(Socket, Pid) of
+                        ok ->
+                            accept_loop(ListenSocket);
+                        {error, Reason} ->
+                            io:format("failed to transfer TCP socket ownership: ~p~n", [Reason]),
+                            exit(Pid, shutdown),
+                            gen_tcp:close(Socket),
+                            accept_loop(ListenSocket)
+                    end;
+                {error, Reason} ->
+                    io:format("failed to start TCP session: ~p~n", [Reason]),
+                    gen_tcp:close(Socket),
+                    accept_loop(ListenSocket)
+            end;
         {error, closed} ->
             ok;
         {error, Reason} ->
-            io:format("accept failed: ~p~n", [Reason]),
-            ok
+            exit({accept_failed, Reason})
     end.

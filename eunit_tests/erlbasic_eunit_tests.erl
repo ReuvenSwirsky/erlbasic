@@ -16,6 +16,13 @@ reserved_word_variable_name_test() ->
     {_State1, Output} = erlbasic_interp:handle_input("LET FOR = 1", State0),
     ?assertEqual("?RESERVED WORD ERROR\r\n", lists:flatten(Output)).
 
+rem_comment_with_equals_regression_test() ->
+    ?assertEqual({remark}, erlbasic_parser:parse_statement("REM =======")),
+    ?assertEqual(ok, erlbasic_parser:validate_program_line("REM =======")),
+    State0 = erlbasic_interp:new_state(),
+    {_State1, Output} = erlbasic_interp:handle_input("REM =======", State0),
+    ?assertEqual([], Output).
+
 keyword_category_intent_test() ->
     ?assert(erlbasic_keywords:is_expr_keyword("AND")),
     ?assert(erlbasic_keywords:is_expr_keyword("LEFT$")),
@@ -1559,8 +1566,8 @@ load_program_skips_bad_lines_test() ->
         "40 END\n",
     {syntax_errors, Program, ErrorLines} = erlbasic_commands:parse_bin_as_program(list_to_binary(ProgramText)),
     ?assertEqual([20, 30], ErrorLines),
-    ?assertEqual(undefined, proplists:get_value(20, Program)),
-    ?assertEqual(undefined, proplists:get_value(30, Program)),
+    ?assertEqual("~ERR DIM NEXT(1)", proplists:get_value(20, Program)),
+    ?assertEqual("~ERR LET X =", proplists:get_value(30, Program)),
     ?assertEqual("PRINT \"OK\"", proplists:get_value(10, Program)),
     ?assertEqual("END", proplists:get_value(40, Program)).
 
@@ -1584,12 +1591,36 @@ load_malformed_shared_example_reports_error_without_crash_test() ->
         {_State2, List10} = erlbasic_interp:handle_input("LIST 10", State1),
         {_State3, List20} = erlbasic_interp:handle_input("LIST 20", State1),
         {_State4, List30} = erlbasic_interp:handle_input("LIST 30", State1),
+        {_State5, RunOutput} = erlbasic_interp:handle_input("RUN", State1),
         ?assertEqual(match, re:run(lists:flatten(List10), "PRINT \"OK\"", [{capture, none}])),
-        ?assertEqual(nomatch, re:run(lists:flatten(List20), "LET X", [{capture, none}])),
-        ?assertEqual(match, re:run(lists:flatten(List30), "END", [{capture, none}]))
+        ?assertEqual(match, re:run(lists:flatten(List20), "~ERR LET X =", [{capture, none}])),
+        ?assertEqual(match, re:run(lists:flatten(List30), "END", [{capture, none}])),
+        ?assertEqual(match, re:run(lists:flatten(RunOutput), "SYNTAX ERROR IN 20", [{capture, none}]))
     after
         _ = file:delete(TempFile)
     end.
+
+err_marker_reload_preserved_test() ->
+    ProgramText =
+        "10 PRINT \"OK\"\n"
+        "20 ~ERR LET X =\n"
+        "30 END\n",
+    {syntax_errors, Program, ErrorLines} = erlbasic_commands:parse_bin_as_program(list_to_binary(ProgramText)),
+    ?assertEqual([20], ErrorLines),
+    ?assertEqual("~ERR LET X =", proplists:get_value(20, Program)),
+    State0 = erlbasic_interp:new_state(),
+    State1 = State0#state{prog = Program},
+    {_State2, ListOutput} = erlbasic_interp:handle_input("LIST", State1),
+    ?assertEqual(match, re:run(lists:flatten(ListOutput), "20 ~ERR LET X =", [{capture, none}])).
+
+run_with_err_marker_line_reports_syntax_error_test() ->
+    State0 = erlbasic_interp:new_state(),
+    {State1, _} = erlbasic_interp:handle_input("10 PRINT \"OK\"", State0),
+    {State2, _} = erlbasic_interp:handle_input("20 ~ERR LET X =", State1),
+    {State3, _} = erlbasic_interp:handle_input("30 END", State2),
+    {_State4, Output} = erlbasic_interp:handle_input("RUN", State3),
+    ?assertEqual(match, re:run(lists:flatten(Output), "SYNTAX ERROR IN 20", [{capture, none}])).
+
 
 find_repo_root_from(Dir) ->
     ConfigPath = filename:join(Dir, "rebar.config"),
@@ -2403,6 +2434,69 @@ normalize_char_input_space_test() ->
     ?assertEqual(" ", erlbasic_conn:normalize_char_input(<<" \n">>)),
     ?assertEqual("A", erlbasic_conn:normalize_char_input(<<"A\n">>)),
     ?assertEqual("",  erlbasic_conn:normalize_char_input(<<"\n">>)).
+
+tty_ctrl_c_interrupts_running_program_test() ->
+    Dir = accounts_setup(),
+    WdHandle = ensure_mem_watchdog_started(),
+    Port = 20000 + (erlang:unique_integer([positive]) rem 10000),
+    OldPort = application:get_env(erlbasic, port),
+    try
+        ok = application:set_env(erlbasic, port, Port),
+        {ok, ConnSupPid} = erlbasic_conn_sup:start_link(),
+        unlink(ConnSupPid),
+        {ok, ListenerPid} = erlbasic_listener:start_link(),
+        unlink(ListenerPid),
+        try
+            {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port,
+                [binary, {packet, raw}, {active, false}], 5000),
+            try
+                _ = tty_tcp_recv_available(Socket, 200),
+                ok = gen_tcp:send(Socket, <<"HELLO 1,1;SYSTEM\r\n">>),
+                _ = tty_tcp_recv_available(Socket, 300),
+                ok = gen_tcp:send(Socket, <<"10 A=A+1\r\n">>),
+                _ = tty_tcp_recv_available(Socket, 100),
+                ok = gen_tcp:send(Socket, <<"20 GOTO 10\r\n">>),
+                _ = tty_tcp_recv_available(Socket, 100),
+                ok = gen_tcp:send(Socket, <<"RUN\r\n">>),
+                _ = tty_tcp_recv_available(Socket, 150),
+                ok = gen_tcp:send(Socket, <<3>>),
+                Text = binary_to_list(tty_tcp_recv_available(Socket, 400)),
+                ?assertEqual(match, re:run(Text, "BREAK", [{capture, none}]))
+            after
+                gen_tcp:close(Socket)
+            end
+        after
+            stop_process(ListenerPid),
+            stop_process(ConnSupPid)
+        end
+    after
+        restore_app_env(port, OldPort),
+        cleanup_mem_watchdog(WdHandle),
+        accounts_teardown(Dir)
+    end.
+
+tty_tcp_recv_available(Socket, WaitMs) ->
+    receive after WaitMs -> ok end,
+    tty_tcp_recv_available_loop(Socket, <<>>).
+
+tty_tcp_recv_available_loop(Socket, Acc) ->
+    case gen_tcp:recv(Socket, 0, 100) of
+        {ok, Bin} ->
+            tty_tcp_recv_available_loop(Socket, <<Acc/binary, Bin/binary>>);
+        {error, timeout} ->
+            Acc;
+        {error, closed} ->
+            Acc
+    end.
+
+stop_process(Pid) when is_pid(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    exit(Pid, shutdown),
+    receive
+        {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 ->
+        ok
+    end.
 
 restore_env(Name, false) ->
     true = os:unsetenv(Name),

@@ -1,0 +1,3 @@
+10 PRINT "OK"
+20 LET X =
+30 END

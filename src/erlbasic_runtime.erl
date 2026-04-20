@@ -14,27 +14,37 @@
 -include("erlbasic_state.hrl").
 
 run_program(State = #state{prog = Program}) ->
-    DataItems = collect_program_data(Program),
-    RunState = State#state{data_items = DataItems, data_index = 1, continue_ctx = undefined},
-    erlang:put(line_exec_count, 0),
-    erlang:put(stmt_parse_cache, #{}),
-    erlang:put(expr_parse_cache, #{}),
-    erlang:erase(interrupted),
-    Result = run_program_lines(Program, 1, RunState, [], [], []),
-    erlang:erase(line_exec_count),
-    erlang:erase(stmt_parse_cache),
-    erlang:erase(expr_parse_cache),
-    Result.
+    case erlbasic_commands:first_error_marker_line(Program) of
+        undefined ->
+            DataItems = collect_program_data(Program),
+            RunState = State#state{data_items = DataItems, data_index = 1, continue_ctx = undefined},
+            erlang:put(line_exec_count, 0),
+            erlang:put(stmt_parse_cache, #{}),
+            erlang:put(expr_parse_cache, #{}),
+            erlang:erase(interrupted),
+            Result = run_program_lines(Program, 1, RunState, [], [], []),
+            erlang:erase(line_exec_count),
+            erlang:erase(stmt_parse_cache),
+            erlang:erase(expr_parse_cache),
+            Result;
+        LineNumber ->
+            {State, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]}
+    end.
 
 continue_program(State = #state{prog = Program}, Pc, LoopStack, CallStack) ->
-    erlang:put(line_exec_count, 0),
-    erlang:put(stmt_parse_cache, #{}),
-    erlang:put(expr_parse_cache, #{}),
-    Result = run_program_lines(Program, Pc, State, LoopStack, CallStack, []),
-    erlang:erase(line_exec_count),
-    erlang:erase(stmt_parse_cache),
-    erlang:erase(expr_parse_cache),
-    Result.
+    case erlbasic_commands:first_error_marker_line(Program) of
+        undefined ->
+            erlang:put(line_exec_count, 0),
+            erlang:put(stmt_parse_cache, #{}),
+            erlang:put(expr_parse_cache, #{}),
+            Result = run_program_lines(Program, Pc, State, LoopStack, CallStack, []),
+            erlang:erase(line_exec_count),
+            erlang:erase(stmt_parse_cache),
+            erlang:erase(expr_parse_cache),
+            Result;
+        LineNumber ->
+            {State, [erlbasic_eval:format_runtime_error(syntax_error, LineNumber)]}
+    end.
 
 run_program_lines([], _Pc, State, _LoopStack, _CallStack, Acc) ->
     {State, lists:reverse(Acc)};
@@ -50,6 +60,12 @@ run_program_lines_continue(Program, Pc, State, LoopStack, CallStack, Acc, Count)
     receive
         interrupt ->
             erlang:put(interrupted, true);
+        {tcp, _Socket, Bin} ->
+            handle_runtime_tcp_message(Bin);
+        {tcp_closed, _Socket} ->
+            ok;
+        {tcp_error, _Socket, _Reason} ->
+            ok;
         memory_limit_exceeded ->
             erlang:put(memory_limit_exceeded, true)
     after 0 ->
@@ -826,6 +842,9 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                             Ms = min(300000, max(0, trunc(Value * 1000))),
                             receive
                                 interrupt             -> erlang:put(interrupted, true);
+                                {tcp, _Socket, Bin}   -> handle_runtime_tcp_message(Bin);
+                                {tcp_closed, _Socket} -> ok;
+                                {tcp_error, _Socket, _Reason} -> ok;
                                 memory_limit_exceeded -> erlang:put(memory_limit_exceeded, true)
                             after Ms -> ok end,
                             {continue, State#state{vars = Vars1}, LoopStack, CallStack, []}
@@ -1154,12 +1173,18 @@ collect_program_data_from_line(Program, LineNum) ->
 collect_program_data([], Acc) ->
     lists:reverse(Acc);
 collect_program_data([{_LineNumber, Code} | Rest], Acc) ->
-    Statements =
-        case erlbasic_parser:should_split_top_level_sequence(Code) of
-            true -> erlbasic_parser:split_statements(Code);
-            false -> [Code]
+    NextAcc =
+        case erlbasic_commands:is_error_marker_line(Code) of
+            true ->
+                Acc;
+            false ->
+                Statements =
+                    case erlbasic_parser:should_split_top_level_sequence(Code) of
+                        true -> erlbasic_parser:split_statements(Code);
+                        false -> [Code]
+                    end,
+                collect_data_from_statements(Statements, Acc)
         end,
-    NextAcc = collect_data_from_statements(Statements, Acc),
     collect_program_data(Rest, NextAcc).
 
 collect_data_from_statements([], Acc) ->
@@ -1382,9 +1407,22 @@ parse_statement_cached(Command) ->
 
 drain_interrupt_messages() ->
     receive
-        interrupt -> drain_interrupt_messages()
+        interrupt -> drain_interrupt_messages();
+        {tcp, _Socket, Bin} ->
+            handle_runtime_tcp_message(Bin),
+            drain_interrupt_messages();
+        {tcp_closed, _Socket} ->
+            drain_interrupt_messages();
+        {tcp_error, _Socket, _Reason} ->
+            drain_interrupt_messages()
     after 0 ->
         ok
+    end.
+
+handle_runtime_tcp_message(Bin) ->
+    case binary:match(Bin, <<3>>) =/= nomatch orelse binary:match(Bin, <<255, 244>>) =/= nomatch of
+        true -> erlang:put(interrupted, true);
+        false -> ok
     end.
 
 should_flush_output() ->
@@ -1557,6 +1595,12 @@ execute_play(Expr, State) ->
                                     receive
                                         interrupt ->
                                             erlang:put(interrupted, true);
+                                        {tcp, _Socket, Bin} ->
+                                            handle_runtime_tcp_message(Bin);
+                                        {tcp_closed, _Socket} ->
+                                            ok;
+                                        {tcp_error, _Socket, _Reason} ->
+                                            ok;
                                         memory_limit_exceeded ->
                                             erlang:put(memory_limit_exceeded, true)
                                     after TotalMs -> ok end,

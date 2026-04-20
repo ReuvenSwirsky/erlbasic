@@ -11,7 +11,10 @@
          handle_dir_command/1, handle_save_command/2, handle_load_command/2,
          handle_scratch_command/2,
          parse_renum_command/1, renumber_program/3,
-         parse_bin_as_program/1, serialize_program/1]).
+         parse_bin_as_program/1, serialize_program/1,
+         is_error_marker_line/1, mark_error_marker_line/1, first_error_marker_line/1]).
+
+-define(ERROR_MARKER_PREFIX, "~ERR").
 
 parse_program_line("") ->
     immediate;
@@ -331,24 +334,29 @@ serialize_program(Program) ->
 %% least one such statement.
 home_blocking_lines(Program) ->
     lists:filtermap(fun({LineNum, Code}) ->
-        Stmts = case erlbasic_parser:should_split_top_level_sequence(Code) of
-            true  -> erlbasic_parser:split_statements(Code);
-            false -> [Code]
-        end,
-        Kinds = lists:filtermap(fun(S) ->
-            case erlbasic_parser:parse_statement(string:trim(S)) of
-                {input, _}       -> {true, "INPUT"};
-                {input_line, _}  -> {true, "INPUT LINE"};
-                {get, _}         -> {true, "GET"};
-                {getkey, _}      -> {true, "GETKEY"};
-                {sleep, _}       -> {true, "SLEEP"};
-                {sleep_keypress} -> {true, "SLEEP"};
-                _                -> false
-            end
-        end, Stmts),
-        case lists:usort(Kinds) of
-            []    -> false;
-            Uniq  -> {true, {LineNum, Uniq}}
+        case is_error_marker_line(Code) of
+            true ->
+                false;
+            false ->
+                Stmts = case erlbasic_parser:should_split_top_level_sequence(Code) of
+                    true  -> erlbasic_parser:split_statements(Code);
+                    false -> [Code]
+                end,
+                Kinds = lists:filtermap(fun(S) ->
+                    case erlbasic_parser:parse_statement(string:trim(S)) of
+                        {input, _}       -> {true, "INPUT"};
+                        {input_line, _}  -> {true, "INPUT LINE"};
+                        {get, _}         -> {true, "GET"};
+                        {getkey, _}      -> {true, "GETKEY"};
+                        {sleep, _}       -> {true, "SLEEP"};
+                        {sleep_keypress} -> {true, "SLEEP"};
+                        _                -> false
+                    end
+                end, Stmts),
+                case lists:usort(Kinds) of
+                    []    -> false;
+                    Uniq  -> {true, {LineNum, Uniq}}
+                end
         end
     end, Program).
 
@@ -365,16 +373,24 @@ parse_program_lines(["" | Rest], Acc, ErrorLines) ->
 parse_program_lines([Line | Rest], Acc, ErrorLines) ->
     case parse_program_line(Line) of
         {program_line, Num, Code} ->
-            case erlbasic_parser:validate_program_line(Code) of
-                ok ->
+            case is_error_marker_line(Code) of
+                true ->
                     NextAcc = [{Num, Code} | lists:keydelete(Num, 1, Acc)],
-                    parse_program_lines(Rest, NextAcc, ErrorLines);
-                {error, _Reason} ->
-                    %% Keep loading, but skip invalid lines and report all bad line numbers.
-                    parse_program_lines(Rest, Acc, [Num | ErrorLines]);
-                error ->
-                    %% Keep loading, but skip invalid lines and report all bad line numbers.
-                    parse_program_lines(Rest, Acc, [Num | ErrorLines])
+                    parse_program_lines(Rest, NextAcc, [Num | ErrorLines]);
+                false ->
+                    case erlbasic_parser:validate_program_line(Code) of
+                        ok ->
+                            NextAcc = [{Num, Code} | lists:keydelete(Num, 1, Acc)],
+                            parse_program_lines(Rest, NextAcc, ErrorLines);
+                        {error, _Reason} ->
+                            %% Keep loading, mark invalid lines so LIST can show and users can fix them.
+                            NextAcc = [{Num, mark_error_marker_line(Code)} | lists:keydelete(Num, 1, Acc)],
+                            parse_program_lines(Rest, NextAcc, [Num | ErrorLines]);
+                        error ->
+                            %% Keep loading, mark invalid lines so LIST can show and users can fix them.
+                            NextAcc = [{Num, mark_error_marker_line(Code)} | lists:keydelete(Num, 1, Acc)],
+                            parse_program_lines(Rest, NextAcc, [Num | ErrorLines])
+                    end
             end;
         immediate ->
             error
@@ -549,11 +565,16 @@ build_line_map([{OldLine, _Code} | Rest], StartLine, Increment, Index, Acc) ->
     build_line_map(Rest, StartLine, Increment, Index + 1, maps:put(OldLine, NewLine, Acc)).
 
 rewrite_line_refs(Code, LineMap) ->
-    case erlbasic_parser:should_split_top_level_sequence(Code) of
+    case is_error_marker_line(Code) of
         true ->
-            join_statements([rewrite_line_refs(Stmt, LineMap) || Stmt <- erlbasic_parser:split_statements(Code)]);
+            Code;
         false ->
-            rewrite_single_statement_line_refs(Code, LineMap)
+            case erlbasic_parser:should_split_top_level_sequence(Code) of
+                true ->
+                    join_statements([rewrite_line_refs(Stmt, LineMap) || Stmt <- erlbasic_parser:split_statements(Code)]);
+                false ->
+                    rewrite_single_statement_line_refs(Code, LineMap)
+            end
     end.
 
 rewrite_single_statement_line_refs(Code, LineMap) ->
@@ -589,6 +610,25 @@ join_statements([One]) ->
     One;
 join_statements(Parts) ->
     string:join(Parts, ": ").
+
+is_error_marker_line(Code) when is_list(Code) ->
+    lists:prefix(?ERROR_MARKER_PREFIX, Code);
+is_error_marker_line(_Other) ->
+    false.
+
+mark_error_marker_line(Code) when is_list(Code) ->
+    case is_error_marker_line(Code) of
+        true -> Code;
+        false -> ?ERROR_MARKER_PREFIX ++ " " ++ Code
+    end.
+
+first_error_marker_line([]) ->
+    undefined;
+first_error_marker_line([{LineNumber, Code} | Rest]) ->
+    case is_error_marker_line(Code) of
+        true -> LineNumber;
+        false -> first_error_marker_line(Rest)
+    end.
 
 format_program(Program) ->
     [integer_to_list(LineNumber) ++ " " ++ normalize_keywords_for_list(Code) ++ "\r\n" || {LineNumber, Code} <- Program].

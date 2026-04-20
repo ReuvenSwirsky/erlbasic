@@ -23,10 +23,16 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 | Module | Role |
 |---|---|
 | `erlbasic_app` | OTP application entry point; initialises limits, accounts, homepage cache |
-| `erlbasic_sup` | Supervisor; starts memory watchdog, TCP listener, Cowboy HTTP/HTTPS server |
-| `erlbasic_listener` | `gen_server` accepting TCP connections on port 5555 |
-| `erlbasic_conn` | TCP and WebSocket connection handlers; RSTS/E login loop |
-| `erlbasic_ws_handler` | Cowboy WebSocket handler; bridges browser ↔ `erlbasic_conn` |
+| `erlbasic_sup` | Top-level supervisor; starts memory watchdog, web listener workers, connection supervisor, and TCP listener |
+| `erlbasic_listener` | Accept loop for raw TCP connections on port 5555 |
+| `erlbasic_web_listener` | Worker that starts and owns an HTTP or HTTPS Cowboy listener |
+| `erlbasic_conn_sup` | Dynamic supervisor for per-connection TCP and WebSocket session workers |
+| `erlbasic_conn` | Compatibility facade for the split connection modules |
+| `erlbasic_tcp_conn` | Raw TCP transport adapter for one session |
+| `erlbasic_ws_conn` | WebSocket transport adapter for one session |
+| `erlbasic_session` | Transport-neutral shell/session state machine |
+| `erlbasic_shell` | Login shell, PPN command parsing, and interpreter selection |
+| `erlbasic_ws_handler` | Cowboy WebSocket handler; bridges browser ↔ `erlbasic_ws_conn` |
 | `erlbasic_http_handler` | Serves `priv/www/index.html` for unmatched HTTP routes |
 | `erlbasic_homepage_handler` | Serves user homepages at `/:username`; runs `HOME.BAS`, caches output |
 | `erlbasic_admin_handler` | Web admin UI (account management, quota inspection) |

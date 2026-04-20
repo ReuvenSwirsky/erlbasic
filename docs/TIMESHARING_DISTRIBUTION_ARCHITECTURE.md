@@ -11,18 +11,23 @@ This document describes:
 
 The runtime is mostly process-per-session:
 
-- TCP: listener accepts a socket, spawns a connection process, and that process spawns a worker.
-- WebSocket: Cowboy process starts one erlbasic connection process per upgraded socket.
+- TCP: supervised listener accepts a socket and starts an `erlbasic_tcp_conn` worker under `erlbasic_conn_sup`; that worker owns the raw socket receive loop and delegates shell/session state to `erlbasic_session`.
+- WebSocket: Cowboy process starts an `erlbasic_ws_conn` worker per upgraded socket, also backed by `erlbasic_session`.
 - Each session executes BASIC in its own BEAM process.
 
 Relevant modules:
 
 - `src/erlbasic_listener.erl`: TCP accept loop.
-- `src/erlbasic_conn.erl`: TCP and WebSocket login/session loops.
+- `src/erlbasic_web_listener.erl`: explicit supervised HTTP/HTTPS listener workers.
+- `src/erlbasic_conn.erl`: compatibility facade for the split connection modules.
+- `src/erlbasic_tcp_conn.erl`: TCP transport adapter.
+- `src/erlbasic_ws_conn.erl`: WebSocket transport adapter.
+- `src/erlbasic_session.erl`: transport-neutral shell/session state machine.
+- `src/erlbasic_shell.erl`: login shell and interpreter selection.
 - `src/erlbasic_ws_handler.erl`: Cowboy WebSocket bridge process.
 - `src/erlbasic_runtime.erl`: RUN loop and output flush behavior.
 - `src/erlbasic_mem_watchdog.erl`: per-session memory polling/quota enforcement.
-- `src/erlbasic_sup.erl`: supervisor and Cowboy startup.
+- `src/erlbasic_sup.erl`: top-level supervision tree.
 
 ## Current Time-Sharing Behavior
 
@@ -87,15 +92,16 @@ Recommended action:
 - Option A: drop/coalesce non-critical frames (best-effort visual updates).
 - Option B: pause producer when ws mailbox exceeds threshold.
 
-### Medium: Accept loops are not under a dedicated supervisor strategy
+### Medium: TCP listener/session supervision is explicit, but the protocol implementation is still custom
 
-- TCP accept loop and connection processes are spawned with links from process code paths.
+- The listener and session roots are now supervised explicitly.
+- TCP session logic is now single-process, but it still uses a hand-rolled socket/protocol loop rather than a Ranch protocol module.
 
 Impact:
-- Works, but operational behavior is harder to reason about under extreme churn.
+- Works, but the runtime still owns custom TCP protocol/session lifecycle code rather than delegating that layer to Ranch.
 
 Recommended action:
-- Move to supervised connection workers via Ranch/Cowboy patterns for both protocols.
+- Keep the current explicit supervision model unless you later want to standardize the raw TCP side onto Ranch as well.
 
 ### Medium: DETS-backed account/limits state is node-local
 

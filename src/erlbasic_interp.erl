@@ -49,14 +49,20 @@ handle_program_line(LineNumber, "", State) ->
     NextProgram = update_program(State#state.prog, LineNumber, ""),
     {State#state{prog = NextProgram, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
 handle_program_line(LineNumber, Code, State) ->
-    case erlbasic_parser:validate_program_line(Code) of
-        ok ->
+    case erlbasic_commands:is_error_marker_line(Code) of
+        true ->
             NextProgram = update_program(State#state.prog, LineNumber, Code),
             {State#state{prog = NextProgram, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
-        {error, Reason} ->
-            {State, [erlbasic_eval:format_runtime_error(Reason)]};
-        error ->
-            {State, ["?SYNTAX ERROR\r\n"]}
+        false ->
+            case erlbasic_parser:validate_program_line(Code) of
+                ok ->
+                    NextProgram = update_program(State#state.prog, LineNumber, Code),
+                    {State#state{prog = NextProgram, data_items = [], data_index = 1, continue_ctx = undefined}, ["OK\r\n"]};
+                {error, Reason} ->
+                    {State, [erlbasic_eval:format_runtime_error(Reason)]};
+                error ->
+                    {State, ["?SYNTAX ERROR\r\n"]}
+            end
     end.
 
 update_program(Program, LineNumber, "") ->
