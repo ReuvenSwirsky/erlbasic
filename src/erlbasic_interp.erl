@@ -173,6 +173,8 @@ exec_immediate_other(Upper, Command, State) ->
                         LoadResult ->
                             LoadResult
                     end;
+                {chain, FileName} ->
+                    normalize_immediate_result(execute_statement(immediate_chain_command(FileName), State), State);
                 {scratch, FileName} ->
                     erlbasic_commands:handle_scratch_command(State, FileName);
                 nomatch ->
@@ -188,8 +190,19 @@ exec_immediate_other(Upper, Command, State) ->
 
 normalize_immediate_result({NextState, Output}, _State) ->
     {NextState, Output};
+normalize_immediate_result({chain, NextState, Output}, _State) ->
+    {RanState, RunOutput} = run_program(NextState),
+    {RanState, Output ++ RunOutput};
 normalize_immediate_result(stop, State) ->
     {State, ["Program ended\r\n"]}.
+
+immediate_chain_command(FileName) ->
+    "CHAIN " ++ quote_chain_filename(FileName).
+
+quote_chain_filename([$" | _] = FileName) ->
+    FileName;
+quote_chain_filename(FileName) ->
+    [$" | FileName] ++ [$"].
 
 run_program(State) ->
     erlbasic_runtime:run_program(State#state{continue_ctx = undefined}).
@@ -674,6 +687,19 @@ execute_statement_single(Command, State) ->
                 _ ->
                     {State, [erlbasic_eval:format_runtime_error(ws_only)]}
             end;
+        {chain, FileExpr} ->
+            execute_immediate_chain(FileExpr, State);
+        {common, Names} ->
+            Existing = State#state.common_vars,
+            {State#state{common_vars = lists:usort(Existing ++ Names)}, []};
+        {on_error_goto, _TargetExpr} ->
+            {State, ["?SYNTAX ERROR\r\n"]};
+        {resume} ->
+            {State, ["?SYNTAX ERROR\r\n"]};
+        {resume_next} ->
+            {State, ["?SYNTAX ERROR\r\n"]};
+        {resume_line, _LineExpr} ->
+            {State, ["?SYNTAX ERROR\r\n"]};
         {remark} ->
             {State, []};
         {goto, _LineExpr} ->
@@ -690,6 +716,43 @@ ensure_data_loaded(State = #state{data_items = []}) ->
     State#state{data_items = erlbasic_runtime:collect_program_data(State#state.prog), data_index = 1};
 ensure_data_loaded(State) ->
     State.
+
+execute_immediate_chain(FileExpr, State) ->
+    case erlbasic_eval:eval_expr_result(FileExpr, State#state.vars, State#state.funcs) of
+        {error, Reason, _} ->
+            {State, [erlbasic_eval:format_runtime_error(Reason)]};
+        {ok, FileValue, _} when is_list(FileValue) ->
+            CommonNames = State#state.common_vars,
+            ChainState = filter_vars_for_immediate_chain(State, CommonNames),
+            case erlbasic_commands:handle_load_command(ChainState, FileValue) of
+                {NewState, ["OK\r\n"]} ->
+                    {chain, NewState#state{common_vars = []}, []};
+                {_LoadState, ErrorOutput} ->
+                    {State, ErrorOutput}
+            end;
+        {ok, _Other, _} ->
+            {State, [erlbasic_eval:format_runtime_error(type_mismatch)]}
+    end.
+
+filter_vars_for_immediate_chain(State, []) ->
+    State#state{vars = #{}};
+filter_vars_for_immediate_chain(State, CommonNames) ->
+    Vars = State#state.vars,
+    CommonSet = sets:from_list(CommonNames),
+    FilteredScalars = maps:filter(
+        fun(Key, _Val) ->
+            not is_list(Key) orelse sets:is_element(Key, CommonSet)
+        end,
+        Vars
+    ),
+    Arrays = erlbasic_eval_arrays:get_arrays(Vars),
+    FilteredArrays = maps:filter(
+        fun(ArrayName, _Meta) ->
+            sets:is_element(ArrayName, CommonSet)
+        end,
+        Arrays
+    ),
+    State#state{vars = erlbasic_eval_arrays:put_arrays(FilteredScalars, FilteredArrays)}.
 
 execute_statement_sequence(StatementText, State) ->
     Statements = erlbasic_parser:split_statements(StatementText),
@@ -718,6 +781,9 @@ contains_for_loop([Stmt | Rest]) ->
 
 finalize_statement_list({continue, State, OutputAcc}) ->
     {State, OutputAcc};
+finalize_statement_list({chain, State, OutputAcc}) ->
+    {RanState, RunOutput} = run_program(State),
+    {RanState, OutputAcc ++ RunOutput};
 finalize_statement_list({stop, State, OutputAcc}) ->
     {State, OutputAcc ++ ["Program ended\r\n"]}.
 
@@ -733,6 +799,8 @@ execute_statement_list([Stmt | Rest], State, OutputAcc) ->
                     PendingState = erlbasic_runtime:update_pending_input_rest(NextState, Rest),
                     {continue, PendingState, OutputAcc ++ Output}
             end;
+        {chain, NextState, Output} ->
+            {chain, NextState, OutputAcc ++ Output};
         stop ->
             {stop, State, OutputAcc}
     end.

@@ -1408,6 +1408,46 @@ common_chain_preserves_arrays_test() ->
     Text = lists:flatten(Output),
     ?assertEqual(match, re:run(Text, "99", [{capture, none}])).
 
+immediate_chain_unquoted_filename_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("CHAIN chain_helper", S0),
+    ?assertEqual("CHAINED\r\n", lists:flatten(Output)).
+
+immediate_chain_quoted_filename_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("CHAIN \"chain_helper\"", S0),
+    ?assertEqual("CHAINED\r\n", lists:flatten(Output)).
+
+immediate_chain_sequence_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("PRINT \"BEFORE\":CHAIN \"chain_helper\"", S0),
+    ?assertEqual("BEFORE\r\nCHAINED\r\n", lists:flatten(Output)).
+
+immediate_if_then_chain_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("IF 1 THEN CHAIN \"chain_helper\"", S0),
+    ?assertEqual("CHAINED\r\n", lists:flatten(Output)).
+
+immediate_on_error_goto_rejected_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("ON ERROR GOTO 100", S0),
+    ?assertEqual("?SYNTAX ERROR\r\n", lists:flatten(Output)).
+
+immediate_resume_rejected_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("RESUME", S0),
+    ?assertEqual("?SYNTAX ERROR\r\n", lists:flatten(Output)).
+
+immediate_resume_next_rejected_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("RESUME NEXT", S0),
+    ?assertEqual("?SYNTAX ERROR\r\n", lists:flatten(Output)).
+
+immediate_resume_line_rejected_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("RESUME 100", S0),
+    ?assertEqual("?SYNTAX ERROR\r\n", lists:flatten(Output)).
+
 %% =============================================================================
 %% ON ERROR GOTO and RESUME Tests
 %% =============================================================================
