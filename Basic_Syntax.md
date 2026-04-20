@@ -36,11 +36,12 @@ These commands are entered without a line number.
 Loads and runs another program immediately.
 
 Syntax:
-- `CHAIN <name>`
+- `CHAIN <string-expression>`
 
-Example:
+Examples:
 ```text
-CHAIN demo
+CHAIN "demo"
+CHAIN FILE$
 ```
 
 ### CONT
@@ -381,20 +382,27 @@ Enters split graphics/text mode.
 Syntax:
 - `HGR2`
 
-### IF ... THEN ... ELSE
+### IF ... THEN ... ELSE ... ELSEIF
 
-Conditional statement.
+Conditional statement with optional chained conditions.
 
 Syntax:
 - `IF <condition> THEN <statement>`
 - `IF <condition> THEN <statement> ELSE <statement>`
+- `IF <condition> THEN <statement> ELSEIF <condition> THEN <statement> [ELSEIF ...] [ELSE <statement>]`
 - `IF <condition> THEN <line-number>`
 - `IF <condition> THEN <line-number> ELSE <line-number>`
+
+Notes:
+- `ELSEIF` allows chaining multiple conditions without nesting.
+- Multiple `ELSEIF` branches may be used in sequence.
+- An optional `ELSE` clause handles remaining cases and must appear last if present.
 
 Examples:
 ```text
 IF X>0 THEN PRINT "POS"
 IF X=0 THEN 500 ELSE 900
+IF X=1 THEN PRINT "ONE" ELSEIF X=2 THEN PRINT "TWO" ELSEIF X=3 THEN PRINT "THREE" ELSE PRINT "OTHER"
 ```
 
 ### INPUT
