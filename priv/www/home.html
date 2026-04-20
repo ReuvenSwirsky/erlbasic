@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FunctionTown on RSTS/Erlang</title>
+  <style>
+    :root {
+      --ink: #122231;
+      --paper: #f7f3e8;
+      --accent: #d4641a;
+      --accent-dark: #8f3908;
+      --river: #2f5f84;
+      --mist: #d7e4ef;
+      --card: #fff9f0;
+      --line: #c4b294;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 18%, #fff4db 0, #fff4db 10%, transparent 46%),
+        radial-gradient(circle at 86% 12%, #d5e8f8 0, #d5e8f8 14%, transparent 40%),
+        linear-gradient(135deg, var(--paper) 0%, #efe2cb 52%, #e8dcc9 100%);
+      line-height: 1.5;
+    }
+
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 18px 12px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .banner-panel {
+      border: 2px solid var(--line);
+      border-radius: 16px;
+      background: #ffffffba;
+      box-shadow: 0 12px 24px #8f39081f;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .banner-panel img {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #d6c9b0;
+      background: #fff;
+    }
+
+    .hero-copy {
+      padding: 8px 6px;
+    }
+
+    .kicker {
+      display: inline-block;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      color: var(--river);
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: clamp(1.9rem, 3.5vw, 3.1rem);
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+
+    .lead {
+      font-size: 1.07rem;
+      margin-bottom: 18px;
+      max-width: 58ch;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-block;
+      text-decoration: none;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      border-radius: 999px;
+      padding: 10px 18px;
+      transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, #e97b2f 0%, var(--accent) 100%);
+      color: #fff;
+      box-shadow: 0 8px 18px #8f390842;
+    }
+
+    .btn-secondary {
+      border: 1px solid #9cb5c8;
+      color: var(--river);
+      background: #f4f8fc;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .grid {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 12px 18px 34px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 18px #12223114;
+    }
+
+    .card h2 {
+      color: var(--accent-dark);
+      font-size: 1rem;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .card p {
+      font-size: 0.96rem;
+    }
+
+    .doc-links {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .doc-link {
+      color: var(--river);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .doc-link:hover {
+      text-decoration: underline;
+    }
+
+    .footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 18px 26px;
+      color: #355269;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="banner-panel">
+        <img src="/assets/functiontown.png" alt="FunctionTown banner" />
+        <img src="/assets/RSTS-Erlang.png" alt="RSTS Erlang system banner" />
+      </div>
+
+      <div class="hero-copy">
+        <span class="kicker">FunctionTown Public Access</span>
+        <h1>Classic Time Sharing, Modern Erlang Reliability</h1>
+        <p class="lead">
+          FunctionTown is a shared BASIC environment inspired by RSTS/E style computing.
+          Your browser connects to an Erlang-powered timesharing service where multiple users can
+          log in, edit, and run BASIC programs in isolated sessions.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/s/term">Open BASIC Terminal</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>What is FunctionTown?</h2>
+        <p>
+          A hosted BASIC community where old-school workflows are first-class: numbered lines,
+          immediate mode, program files, and shared machine culture.
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>What is RSTS/Erlang?</h2>
+        <p>
+          This system blends a RSTS-like user model with Erlang supervision and concurrency. Crashes
+          are isolated, sessions can be managed independently, and system services stay online.
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>How to Start</h2>
+        <p>
+          Use the terminal link above to sign in. From there you can load programs, run examples,
+          and interact with graphics and text applications in your own session.
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>BASIC Docs</h2>
+        <p>
+          Read the language reference and built-in function guide in browser-friendly format.
+        </p>
+        <div class="doc-links">
+          <a class="doc-link" href="/docs/basic-syntax">BASIC Syntax Reference</a>
+          <a class="doc-link" href="/docs/basic-functions">BASIC Built-in Functions</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    FunctionTown and RSTS/Erlang are designed for learning, play, and collaborative retro computing.
+  </footer>
+</body>
+</html>

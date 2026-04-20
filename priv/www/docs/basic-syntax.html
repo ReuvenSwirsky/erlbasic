@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BASIC Syntax Reference</title>
+  <style>
+    :root {
+      --ink: #1b2b38;
+      --paper: #f8f4e9;
+      --card: #fffdf8;
+      --line: #d8c8a9;
+      --accent: #a54812;
+      --link: #245b7b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 85% 6%, #d6e6f4 0, #d6e6f4 13%, transparent 40%),
+        radial-gradient(circle at 12% 18%, #ffefcf 0, #ffefcf 12%, transparent 40%),
+        linear-gradient(145deg, var(--paper) 0%, #efe4cd 100%);
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      line-height: 1.55;
+      padding: 18px;
+    }
+    .topbar {
+      max-width: 1040px;
+      margin: 0 auto 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .topbar a {
+      text-decoration: none;
+      border: 1px solid #9eb4c5;
+      color: #204f6b;
+      background: #f4f8fc;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.9rem;
+    }
+    .wrap {
+      max-width: 1040px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 12px 28px #1b2b3817;
+      padding: 28px 26px;
+    }
+    .eyebrow {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #48677d;
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    h1, h2, h3 { color: #173447; line-height: 1.2; }
+    h1 { margin-top: 0; font-size: clamp(1.8rem, 4vw, 2.5rem); }
+    h2 {
+      margin-top: 28px;
+      border-top: 1px solid #e7dcc6;
+      padding-top: 18px;
+      font-size: 1.35rem;
+    }
+    h3 { margin-top: 18px; font-size: 1.08rem; color: var(--accent); }
+    p { margin: 8px 0 12px; }
+    ul, ol { padding-left: 22px; margin: 8px 0 14px; }
+    code {
+      background: #eef3f7;
+      border: 1px solid #d3dfe8;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.95em;
+    }
+    pre {
+      background: #13212b;
+      color: #d7f4ff;
+      border-radius: 10px;
+      padding: 14px;
+      overflow-x: auto;
+      border: 1px solid #2d4656;
+    }
+    pre code {
+      background: transparent;
+      border: none;
+      color: inherit;
+      padding: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid #dccfb7;
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f1e7d3; color: #5f3a1f; }
+    a { color: var(--link); }
+    hr { border: none; border-top: 1px solid #e5d8bf; margin: 20px 0; }
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      .wrap { padding: 18px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar"><a href="/">Home</a><a href="/s/term">Terminal</a><a href="/docs/basic-syntax">Syntax</a><a href="/docs/basic-functions">Functions</a></div>
+  <main class="wrap">
+    <div class="eyebrow">FunctionTown Documentation</div>
+    <h1 id="basic-syntax-reference">BASIC Syntax Reference</h1>
+<p>This document lists the BASIC and REPL commands currently implemented in erlbasic.</p>
+<h2 id="program-line-structure">Program Line Structure</h2>
+<p>A stored program line starts with a numeric line number:</p>
+<pre><code class="language-text">10 PRINT &quot;HELLO&quot;
+20 END
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Line numbers are integers.</li>
+<li>Entering only a line number deletes that line from the stored program.</li>
+<li>Multiple statements can be placed on one line using <code>:</code>.</li>
+<li><code>REM</code> comments consume the rest of the statement text.</li>
+</ul>
+<h2 id="literal-notes">Literal Notes</h2>
+<ul>
+<li>Default numeric values in erlbasic are decimal-style numbers; this language model emphasizes decimal quantities rather than fixed-width machine integers.</li>
+<li>Unsuffixed numeric variables are treated as default numeric values, and a decimal point form is always valid (<code>1.0</code>, <code>0.25</code>, <code>10.</code>).</li>
+<li>Integer literals may be written in decimal or hexadecimal.</li>
+<li>Hexadecimal literals use the form <code>0x...</code> or <code>0X...</code> and can be used anywhere an integer expression is accepted.</li>
+<li>Hex literals are useful for packed bit masks, including sprite row definitions stored in <code>%</code> integer variables.</li>
+<li>Floating-point literals may be written in decimal (<code>1.5</code>, <code>.25</code>, <code>10.</code>) or scientific notation (<code>1E3</code>, <code>1.5e-3</code>, <code>3D2</code>).</li>
+<li>Scientific notation accepts <code>E</code>/<code>e</code> and <code>D</code>/<code>d</code> exponents.</li>
+</ul>
+<h2 id="repl-commands-immediate-mode">REPL Commands (Immediate Mode)</h2>
+<p>These commands are entered without a line number.</p>
+<h3 id="chain">CHAIN</h3>
+<p>Loads and runs another program immediately.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CHAIN &lt;name&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">CHAIN demo
+</code></pre>
+<h3 id="cont">CONT</h3>
+<p>Continues execution after a Ctrl-C break.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CONT</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>Requires a valid break context (from Ctrl-C or <code>STOP</code> in a running program).</li>
+</ul>
+<h3 id="delete">DELETE</h3>
+<p>Deletes lines from the current stored program.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DELETE &lt;line&gt;</code></li>
+<li><code>DELETE &lt;start&gt;-&lt;end&gt;</code></li>
+<li><code>DELETE -&lt;end&gt;</code></li>
+<li><code>DELETE &lt;start&gt;-</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">DELETE 100
+DELETE 100-200
+DELETE -50
+DELETE 500-
+</code></pre>
+<h3 id="dir">DIR</h3>
+<p>Lists available user programs and shared examples.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DIR</code></li>
+</ul>
+<h3 id="list">LIST</h3>
+<p>Lists stored program lines.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LIST</code></li>
+<li><code>LIST &lt;line&gt;</code></li>
+<li><code>LIST &lt;start&gt;-&lt;end&gt;</code></li>
+<li><code>LIST -&lt;end&gt;</code></li>
+<li><code>LIST &lt;start&gt;-</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">LIST
+LIST 100
+LIST 100-200
+LIST -50
+LIST 500-
+</code></pre>
+<h3 id="load">LOAD</h3>
+<p>Loads a program file into memory (replacing current program).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LOAD &lt;name&gt;</code></li>
+</ul>
+<h3 id="new">NEW</h3>
+<p>Clears the current stored program.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>NEW</code></li>
+</ul>
+<h3 id="quit">QUIT</h3>
+<p>Disconnects the current session.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>QUIT</code></li>
+</ul>
+<h3 id="renum">RENUM</h3>
+<p>Renumbers stored lines and rewrites direct <code>GOTO</code>/<code>GOSUB</code> line references.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RENUM</code></li>
+<li><code>RENUM &lt;start&gt;</code></li>
+<li><code>RENUM &lt;start&gt;,&lt;increment&gt;</code></li>
+</ul>
+<p>Defaults:</p>
+<ul>
+<li><code>start = 10</code></li>
+<li><code>increment = 10</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">RENUM
+RENUM 100
+RENUM 100,5
+</code></pre>
+<h3 id="run">RUN</h3>
+<p>Runs current program, or loads-and-runs a file.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RUN</code></li>
+<li><code>RUN &lt;name&gt;</code></li>
+</ul>
+<h3 id="save">SAVE</h3>
+<p>Saves the current stored program.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SAVE &lt;name&gt;</code></li>
+</ul>
+<h3 id="scratch">SCRATCH</h3>
+<p>Deletes a saved program file.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SCRATCH &lt;name&gt;</code></li>
+</ul>
+<h2 id="basic-statements">BASIC Statements</h2>
+<p>Statements below are listed in alphabetical order by command name. Unless noted otherwise, they work both in immediate mode and in stored program lines.</p>
+<p>Scope notes:</p>
+<ul>
+<li>Line-flow statements (<code>GOTO</code>, <code>GOSUB</code>, <code>RETURN</code>, <code>ON ... GOTO</code>, <code>ON ... GOSUB</code>, <code>ON PLAY(...) GOSUB</code>, <code>ON SPRITE GOSUB</code>, <code>ON TIMER(...) GOSUB</code>, <code>ON ERROR GOTO</code>, <code>RESUME</code>, <code>STOP</code>) are intended for stored program execution.</li>
+<li><code>INPUT</code>, <code>GET</code>, <code>GETKEY</code>, <code>SLEEP</code>, <code>PGET</code>, and <code>GETCHAR</code> may pause execution waiting for input or browser replies.</li>
+</ul>
+<h3 id="buffer">BUFFER</h3>
+<p>Controls double-buffered output mode (WebSocket sessions).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>BUFFER ON</code></li>
+<li><code>BUFFER OFF</code></li>
+</ul>
+<h3 id="chain-1">CHAIN</h3>
+<p>In program execution, loads another program and continues execution from that new program.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CHAIN &lt;string-expression&gt;</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">CHAIN &quot;nextprog&quot;
+CHAIN FILE$
+</code></pre>
+<h3 id="circle">CIRCLE</h3>
+<p>Draws a circle in graphics mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CIRCLE (&lt;x&gt;,&lt;y&gt;),&lt;radius&gt;,&lt;color&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">CIRCLE (320,240),50,12
+</code></pre>
+<h3 id="cls">CLS</h3>
+<p>Clears the text display.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CLS</code></li>
+</ul>
+<h3 id="close">CLOSE</h3>
+<p>Closes file channels.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CLOSE</code></li>
+<li><code>CLOSE #&lt;channel&gt;</code></li>
+<li><code>CLOSE #&lt;channel&gt;,#&lt;channel&gt;,...</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">CLOSE
+CLOSE #1
+CLOSE #1,#2,#3
+</code></pre>
+<h3 id="color">COLOR</h3>
+<p>Sets text foreground/background color.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>COLOR &lt;fg&gt;</code></li>
+<li><code>COLOR &lt;fg&gt;,&lt;bg&gt;</code></li>
+</ul>
+<h3 id="data">DATA</h3>
+<p>Defines literal data items for <code>READ</code>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DATA</code></li>
+<li><code>DATA &lt;item&gt;,&lt;item&gt;,...</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">DATA 10,20,30
+DATA &quot;ALPHA&quot;,&quot;BETA&quot;,99
+</code></pre>
+<h3 id="def-fn">DEF FN</h3>
+<p>Defines a user function.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DEF FN&lt;name&gt;=&lt;expr&gt;</code></li>
+<li><code>DEF FN&lt;name&gt;(&lt;arg&gt;)=&lt;expr&gt;</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">DEF FNQ(X)=X*X+1
+DEF FNPI=3.14159
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>User function names must start with <code>FN</code> followed by at least one letter or digit (e.g. <code>FNX</code>, <code>FNPI</code>, <code>FNQ%</code>).</li>
+<li>Calling a function that has not been defined with <code>DEF FN</code> raises <code>?UNDEFINED FUNCTION ERROR</code>.</li>
+<li>Variable names starting with <code>FN</code> are reserved for user functions and cannot be used as array names.</li>
+</ul>
+<h3 id="dim">DIM</h3>
+<p>Declares one or more arrays.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DIM A(&lt;d1&gt;)</code></li>
+<li><code>DIM A(&lt;d1&gt;,&lt;d2&gt;)</code></li>
+<li><code>DIM A(&lt;d1&gt;,&lt;d2&gt;,&lt;d3&gt;)</code></li>
+<li><code>DIM A(...),B(...),...</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">DIM A(10)
+DIM GRID(10,10)
+DIM CUBE(4,4,4),NAMES$(50)
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>Arrays support 1, 2, or 3 dimensions. Indices are 0-based; the dimension size is the maximum valid index.</li>
+<li>Referencing an array that has not been declared with <code>DIM</code> raises <code>?UNDIMMED ARRAY ERROR</code>.</li>
+<li>Array names starting with <code>FN</code> are not allowed (those names are reserved for user-defined functions).</li>
+</ul>
+<h3 id="end">END</h3>
+<p>Stops program execution.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>END</code></li>
+</ul>
+<h3 id="field">FIELD</h3>
+<p>Defines fixed-length string fields for a random-access channel.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>FIELD #&lt;channel&gt;, &lt;len-expr&gt; AS &lt;string-var&gt;, &lt;len-expr&gt; AS &lt;string-var&gt;, ...</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">FIELD #1, 20 AS NAME$, 4 AS AGE$
+</code></pre>
+<h3 id="flush">FLUSH</h3>
+<p>Forces buffered output to flush.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>FLUSH</code></li>
+</ul>
+<h3 id="for">FOR</h3>
+<p>Starts a counted loop.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>FOR &lt;var&gt;=&lt;start&gt; TO &lt;end&gt;</code></li>
+<li><code>FOR &lt;var&gt;=&lt;start&gt; TO &lt;end&gt; STEP &lt;step&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">FOR I=1 TO 10 STEP 2
+</code></pre>
+<h3 id="get">GET</h3>
+<p>Two implemented forms:</p>
+<p>Syntax:</p>
+<ul>
+<li><code>GET &lt;target&gt;</code></li>
+<li><code>GET #&lt;channel&gt;, &lt;record-expr&gt;</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><code>GET &lt;target&gt;</code> reads one character (non-blocking keyboard input behavior).</li>
+<li><code>GET #...</code> reads a random-access record from an open file channel.</li>
+</ul>
+<h3 id="getchar">GETCHAR</h3>
+<p>Reads character at a text cell position into a target variable (WebSocket text area behavior).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>GETCHAR &lt;row&gt;,&lt;col&gt;,&lt;target&gt;</code></li>
+</ul>
+<h3 id="getkey">GETKEY</h3>
+<p>Reads one key (blocking behavior) into a target variable.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>GETKEY &lt;target&gt;</code></li>
+</ul>
+<h3 id="gosub">GOSUB</h3>
+<p>Calls a subroutine at target line.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>GOSUB &lt;line-expr&gt;</code></li>
+</ul>
+<h3 id="goto">GOTO</h3>
+<p>Jumps to target line.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>GOTO &lt;line-expr&gt;</code></li>
+</ul>
+<h3 id="hgr">HGR</h3>
+<p>Enters graphics mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>HGR</code></li>
+</ul>
+<h3 id="hgr2">HGR2</h3>
+<p>Enters split graphics/text mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>HGR2</code></li>
+</ul>
+<h3 id="if.then.else">IF ... THEN ... ELSE</h3>
+<p>Conditional statement.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>IF &lt;condition&gt; THEN &lt;statement&gt;</code></li>
+<li><code>IF &lt;condition&gt; THEN &lt;statement&gt; ELSE &lt;statement&gt;</code></li>
+<li><code>IF &lt;condition&gt; THEN &lt;line-number&gt;</code></li>
+<li><code>IF &lt;condition&gt; THEN &lt;line-number&gt; ELSE &lt;line-number&gt;</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">IF X&gt;0 THEN PRINT &quot;POS&quot;
+IF X=0 THEN 500 ELSE 900
+</code></pre>
+<h3 id="input">INPUT</h3>
+<p>Reads one or more comma-separated values from user input.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>INPUT &lt;target&gt;</code></li>
+<li><code>INPUT &lt;target&gt;,&lt;target&gt;,...</code></li>
+</ul>
+<p>Targets may be scalar variables or array elements.</p>
+<h3 id="input-1">INPUT</h3>
+<p>Reads one or more values from a file channel.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>INPUT #&lt;channel&gt;, &lt;target&gt;</code></li>
+<li><code>INPUT #&lt;channel&gt;, &lt;target&gt;,&lt;target&gt;,...</code></li>
+</ul>
+<h3 id="input-line">INPUT LINE</h3>
+<p>Reads an entire input line (unparsed) into a target.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>INPUT LINE &lt;target&gt;</code></li>
+</ul>
+<h3 id="let">LET</h3>
+<p>Assignment statement.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LET &lt;target&gt;=&lt;expr&gt;</code></li>
+<li><code>&lt;target&gt;=&lt;expr&gt;</code> (implicit <code>LET</code> form)</li>
+</ul>
+<p>Targets may be scalar variables or array elements.</p>
+<p>Notes:</p>
+<ul>
+<li>String targets (<code>$</code> suffix) require string values.</li>
+<li>Numeric targets (no <code>$</code>) require numeric values.</li>
+<li>Assigning incompatible types raises <code>?TYPE MISMATCH ERROR</code>.</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">LET X=42
+TOTAL=TOTAL+1
+LET A(3,2)=99
+LET A$=20      ' TYPE MISMATCH
+LET A=&quot;FOO&quot;   ' TYPE MISMATCH
+</code></pre>
+<h3 id="line">LINE</h3>
+<p>Draws a line segment in graphics mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LINE (&lt;x1&gt;,&lt;y1&gt;)-(&lt;x2&gt;,&lt;y2&gt;),&lt;color&gt;</code></li>
+</ul>
+<h3 id="line-input">LINE INPUT</h3>
+<p>Reads a full raw line from a file channel into a target.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LINE INPUT #&lt;channel&gt;, &lt;target&gt;</code></li>
+</ul>
+<h3 id="lineto">LINETO</h3>
+<p>Draws from previous graphics pen position to new point.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LINETO (&lt;x&gt;,&lt;y&gt;),&lt;color&gt;</code></li>
+</ul>
+<h3 id="locate">LOCATE</h3>
+<p>Moves cursor to row/column.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LOCATE &lt;row&gt;,&lt;col&gt;</code></li>
+</ul>
+<h3 id="next">NEXT</h3>
+<p>Advances a <code>FOR</code> loop.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>NEXT</code></li>
+<li><code>NEXT &lt;var&gt;</code></li>
+</ul>
+<h3 id="on.gosub">ON ... GOSUB</h3>
+<p>Computed subroutine dispatch.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ON &lt;expr&gt; GOSUB &lt;line&gt;,&lt;line&gt;,...</code></li>
+</ul>
+<h3 id="on.goto">ON ... GOTO</h3>
+<p>Computed jump dispatch.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ON &lt;expr&gt; GOTO &lt;line&gt;,&lt;line&gt;,...</code></li>
+</ul>
+<h3 id="on-error-goto">ON ERROR GOTO</h3>
+<p>Enables runtime error trap target.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ON ERROR GOTO &lt;line-expr&gt;</code></li>
+</ul>
+<h3 id="on-play.gosub">ON PLAY ... GOSUB</h3>
+<p>Background-music refill trigger.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ON PLAY(&lt;notes-expr&gt;) GOSUB &lt;line-expr&gt;</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>Works with <code>PLAY</code> background mode (<code>MB</code>) and checks after each executed statement.</li>
+<li>When remaining queued notes drop below <code>&lt;notes-expr&gt;</code>, the subroutine is invoked.</li>
+<li>Re-entry is guarded: the handler will not trigger again while its prior invocation is still active.</li>
+</ul>
+<h3 id="on-sprite-gosub">ON SPRITE GOSUB</h3>
+<p>Registers a collision event handler for sprite overlaps.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ON SPRITE GOSUB &lt;line-expr&gt;</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>Triggering is edge-based: the handler fires when a collision pair first appears (not every statement while still overlapping).</li>
+<li>During the handler, collision IDs are available in <code>SPRCOL1%</code> and <code>SPRCOL2%</code>.</li>
+<li>Re-entry is guarded while a prior sprite handler invocation is active.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">ON SPRITE GOSUB 900
+</code></pre>
+<h3 id="on-timer.gosub">ON TIMER ... GOSUB</h3>
+<p>Registers a periodic timer callback that fires approximately every <code>&lt;seconds-expr&gt;</code> seconds.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ON TIMER(&lt;seconds-expr&gt;) GOSUB &lt;line-expr&gt;</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>The handler is checked and fired after each executed statement during <code>RUN</code>.</li>
+<li><code>&lt;seconds-expr&gt;</code> is evaluated when the handler first fires and must be a positive number.</li>
+<li>Re-entry is guarded: the handler will not trigger again while its prior invocation is still active.</li>
+<li>The timer is cleared (along with all other event handlers) when <code>END</code> is executed or the program is broken with Ctrl-C.</li>
+<li>Setting a new <code>ON TIMER(...)</code> resets the interval and arms the timer from that point.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">ON TIMER(0.5) GOSUB 200   ' call subroutine at line 200 twice per second
+</code></pre>
+<h3 id="open">OPEN</h3>
+<p>Opens a file channel.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>OPEN &lt;path-expr&gt; FOR INPUT AS #&lt;channel&gt;</code></li>
+<li><code>OPEN &lt;path-expr&gt; FOR OUTPUT AS #&lt;channel&gt;</code></li>
+<li><code>OPEN &lt;path-expr&gt; FOR APPEND AS #&lt;channel&gt;</code></li>
+<li><code>OPEN &lt;path-expr&gt; FOR RANDOM AS #&lt;channel&gt;</code></li>
+<li><code>OPEN &lt;path-expr&gt; FOR &lt;mode&gt; AS #&lt;channel&gt; LEN=&lt;record-len-expr&gt;</code></li>
+</ul>
+<p>Modes:</p>
+<ul>
+<li><code>INPUT</code></li>
+<li><code>OUTPUT</code></li>
+<li><code>APPEND</code></li>
+<li><code>RANDOM</code></li>
+</ul>
+<h3 id="pget">PGET</h3>
+<p>Reads pixel palette index into target.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PGET (&lt;x&gt;,&lt;y&gt;),&lt;target&gt;</code></li>
+</ul>
+<h3 id="play">PLAY</h3>
+<p>Queues and plays Music Macro Language (MML) notes.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PLAY &lt;string-expr&gt;</code></li>
+</ul>
+<p>Implemented MML controls:</p>
+<ul>
+<li><code>O&lt;n&gt;</code> set octave (0-6)</li>
+<li><code>&lt;</code> and <code>&gt;</code> shift octave down/up</li>
+<li><code>L&lt;n&gt;[.]</code> default note length (1-64), optional dotted length</li>
+<li><code>T&lt;n&gt;</code> tempo (32-255 BPM)</li>
+<li><code>A</code>-<code>G</code> notes with optional accidental (<code>#</code>, <code>+</code>, <code>-</code>), optional length, optional dot</li>
+<li><code>N&lt;n&gt;[.]</code> note by number (<code>0</code> = rest, <code>1-84</code> = note)</li>
+<li><code>P&lt;n&gt;[.]</code> or <code>R&lt;n&gt;[.]</code> rest</li>
+<li><code>MN</code>, <code>ML</code>, <code>MS</code> articulation (normal, legato, staccato)</li>
+<li><code>MB</code>, <code>MF</code> playback mode (background, foreground)</li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><code>PLAY</code> is available in WebSocket sessions.</li>
+<li>In foreground mode (<code>MF</code>), execution waits for phrase duration.</li>
+<li>In background mode (<code>MB</code>), execution continues while notes remain queued.</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PLAY &quot;MF T160 L8 O4 C E G O5 C&quot;
+PLAY &quot;MB T140 ML O4 L4 C E G O5 C&quot;
+</code></pre>
+<h3 id="print">PRINT</h3>
+<p>Prints items.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PRINT</code></li>
+<li><code>PRINT &lt;item-list&gt;</code></li>
+<li><code>? &lt;item-list&gt;</code> (alias)</li>
+</ul>
+<p>Item separator options:</p>
+<ul>
+<li><code>,</code> zone separator</li>
+<li><code>;</code> concatenation/no spacing</li>
+<li>trailing <code>;</code> suppresses newline</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT &quot;A&quot;, &quot;B&quot;
+PRINT &quot;A&quot;;&quot;B&quot;;
+? X
+</code></pre>
+<h3 id="print-1">PRINT</h3>
+<p>Prints to file channel.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PRINT #&lt;channel&gt;</code></li>
+<li><code>PRINT #&lt;channel&gt;, &lt;item-list&gt;</code></li>
+</ul>
+<h3 id="print-using">PRINT USING</h3>
+<p>Formatted print.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PRINT USING &lt;format-expr&gt;; &lt;item-list&gt;</code></li>
+</ul>
+<p>Supported format placeholders:</p>
+<ul>
+<li><code>#</code> numeric mask (with optional decimal point)</li>
+<li><code>&amp;</code> string insertion</li>
+</ul>
+<h3 id="pset">PSET</h3>
+<p>Sets a pixel in graphics mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PSET (&lt;x&gt;,&lt;y&gt;),&lt;color&gt;</code></li>
+</ul>
+<h3 id="put">PUT</h3>
+<p>Writes random-access record to file channel.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PUT #&lt;channel&gt;, &lt;record-expr&gt;</code></li>
+</ul>
+<h3 id="read">READ</h3>
+<p>Reads values from <code>DATA</code> stream into targets.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>READ &lt;target&gt;</code></li>
+<li><code>READ &lt;target&gt;,&lt;target&gt;,...</code></li>
+</ul>
+<h3 id="rect">RECT</h3>
+<p>Draws filled rectangle in graphics mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RECT (&lt;x1&gt;,&lt;y1&gt;)-(&lt;x2&gt;,&lt;y2&gt;),&lt;color&gt;</code></li>
+</ul>
+<h3 id="rem">REM</h3>
+<p>Comment statement.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>REM</code></li>
+<li><code>REM &lt;text&gt;</code></li>
+</ul>
+<h3 id="resume">RESUME</h3>
+<p>Error handler resume control.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RESUME</code></li>
+<li><code>RESUME 0</code></li>
+<li><code>RESUME NEXT</code></li>
+<li><code>RESUME &lt;line-expr&gt;</code></li>
+</ul>
+<h3 id="return">RETURN</h3>
+<p>Returns from <code>GOSUB</code>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RETURN</code></li>
+</ul>
+<h3 id="sleep">SLEEP</h3>
+<p>Pause execution.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SLEEP</code></li>
+<li><code>SLEEP &lt;seconds-expr&gt;</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><code>SLEEP</code> with no argument waits for a keypress.</li>
+<li><code>SLEEP &lt;seconds-expr&gt;</code> pauses for that duration (bounded internally).</li>
+</ul>
+<h3 id="sprite">SPRITE</h3>
+<p>Loads, positions, and controls bitmap sprites in graphics mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SPRITE LOAD &lt;id-expr&gt;,&lt;width-expr&gt;,&lt;height-expr&gt;,&lt;byte-array-1d-element&gt;</code></li>
+<li><code>SPRITE &lt;id-expr&gt;,(&lt;x-expr&gt;,&lt;y-expr&gt;)</code></li>
+<li><code>SPRITE SHOW &lt;id-expr&gt;</code></li>
+<li><code>SPRITE HIDE &lt;id-expr&gt;</code></li>
+<li><code>SPRITE SCALE &lt;id-expr&gt;,&lt;scale-expr&gt;</code></li>
+<li><code>SPRITE CLEAR</code></li>
+</ul>
+<p>Bitmap source notes:</p>
+<ul>
+<li><code>SPRITE LOAD</code> reads <code>width * height</code> bytes from a 1D BYTE array (<code>&amp;</code> suffix), starting at the supplied index.</li>
+<li>Value <code>255</code> is treated as transparent; other values use the low 4 bits as palette color index.</li>
+</ul>
+<p>Behavior notes:</p>
+<ul>
+<li>Sprite rendering requires WebSocket graphics mode (<code>HGR</code> or <code>HGR2</code>).</li>
+<li>IDs are not fixed to legacy limits; many sprites and larger dimensions are supported.</li>
+</ul>
+<p>See also:</p>
+<ul>
+<li><a href="examples/sprites.bas">examples/sprites.bas</a></li>
+<li><a href="examples/sprites_hgr2.bas">examples/sprites_hgr2.bas</a></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">DIM ROW%(31),SHIP&amp;(1023)
+ROW%(6)=0x000FF000
+SPRITE LOAD 1,32,32,SHIP&amp;(0)
+SPRITE 1,(120,80)
+SPRITE SHOW 1
+</code></pre>
+<h3 id="sound">SOUND</h3>
+<p>Emits sound command.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SOUND &lt;voice&gt;,&lt;pitch&gt;,&lt;distortion&gt;,&lt;volume&gt;</code></li>
+</ul>
+<h3 id="stop">STOP</h3>
+<p>Breaks program execution and leaves a continuation context for <code>CONT</code>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>STOP</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>During <code>RUN</code>, <code>STOP</code> prints <code>BREAK IN &lt;line&gt;</code>.</li>
+<li><code>CONT</code> resumes from the statement after <code>STOP</code>.</li>
+</ul>
+<h3 id="text">TEXT</h3>
+<p>Returns to text mode.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TEXT</code></li>
+</ul>
+<h3 id="tron">TRON</h3>
+<p>Turns trace output on.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TRON</code></li>
+</ul>
+<h3 id="troff">TROFF</h3>
+<p>Turns trace output off.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TROFF</code></li>
+</ul>
+<h3 id="write">WRITE</h3>
+<p>Writes comma-separated values to file channel in WRITE format.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>WRITE #&lt;channel&gt;</code></li>
+<li><code>WRITE #&lt;channel&gt;, &lt;expr&gt;,&lt;expr&gt;,...</code></li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Variable names are case-insensitive and may include optional suffixes <code>$</code>, <code>%</code>, <code>&amp;</code>, or <code>#</code>.</li>
+<li>Unsuffixed numeric variables follow the default decimal numeric model.</li>
+<li><code>#</code> suffix declares an explicit floating-point variable (double-precision runtime float).</li>
+<li>Use <code>TYPEOF(&lt;expr&gt;)</code> to inspect runtime scalar type; it returns <code>&quot;INTEGER&quot;</code>, <code>&quot;FLOAT&quot;</code>, or <code>&quot;STRING&quot;</code>.</li>
+<li>Reserved words cannot be used as variable names.</li>
+<li>Arrays support 1, 2, or 3 dimensions.</li>
+<li><code>FOR</code> loop control variables are numeric variable forms.</li>
+<li>Many graphics-oriented statements require WebSocket mode and active graphics mode.</li>
+</ul>
+
+  </main>
+</body>
+</html>

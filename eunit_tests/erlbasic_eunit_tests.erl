@@ -574,7 +574,7 @@ compressed_websocket_quit_no_false_crash_test() ->
                 fun(Text) -> binary:matches(Text, <<"> ">>) =/= [] end),
 
             ok = ws_send_text(Socket, Extensions, <<"quit\n">>),
-            {QuitText, Closed, _Buffer11} = ws_collect_text_until_close(Socket, Extensions, Buffer10, 64),
+            {QuitText, Closed, _Buffer11} = ws_collect_text_until_close(Socket, Extensions, Buffer10, 4096),
             QuitTextList = binary_to_list(QuitText),
             ?assertEqual(true, Closed),
             ?assertEqual(nomatch, re:run(QuitTextList, "Interpreter crashed - normal", [{capture, none}]))

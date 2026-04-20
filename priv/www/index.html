@@ -23,10 +23,34 @@
       border-bottom: 2px solid #0f3460;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 1rem;
     }
     header h1 { font-size: 1.4rem; color: #00d4ff; letter-spacing: 0.05em; }
     header p  { font-size: 0.85rem; color: #aaa; }
+    .header-actions {
+      margin-left: auto;
+    }
+    .home-link {
+      display: inline-block;
+      text-decoration: none;
+      color: #d4f1ff;
+      border: 1px solid #0f3460;
+      background: #0b2b4a;
+      padding: 0.45rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: background 120ms ease, transform 120ms ease;
+    }
+    .home-link:hover {
+      background: #12406c;
+      transform: translateY(-1px);
+    }
+    .home-link:focus-visible {
+      outline: 2px solid #00d4ff;
+      outline-offset: 2px;
+    }
     #terminal-container {
       display: flex;
       flex-direction: column;
@@ -111,6 +135,15 @@
     #terminal-container.hgr2-mode .xterm-viewport::-webkit-scrollbar {
       display: none;
     }
+    @media (max-width: 700px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .header-actions {
+        margin-left: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -118,6 +151,9 @@
     <div>
       <h1>&#x1F5A5; Erlang BASIC</h1>
       <p>A time-shared BASIC interpreter — running live in Erlang</p>
+    </div>
+    <div class="header-actions">
+      <a class="home-link" href="/">Home</a>
     </div>
   </header>
 

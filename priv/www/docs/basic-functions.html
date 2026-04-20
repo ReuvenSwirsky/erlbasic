@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BASIC Built-in Functions</title>
+  <style>
+    :root {
+      --ink: #1b2b38;
+      --paper: #f8f4e9;
+      --card: #fffdf8;
+      --line: #d8c8a9;
+      --accent: #a54812;
+      --link: #245b7b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 85% 6%, #d6e6f4 0, #d6e6f4 13%, transparent 40%),
+        radial-gradient(circle at 12% 18%, #ffefcf 0, #ffefcf 12%, transparent 40%),
+        linear-gradient(145deg, var(--paper) 0%, #efe4cd 100%);
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      line-height: 1.55;
+      padding: 18px;
+    }
+    .topbar {
+      max-width: 1040px;
+      margin: 0 auto 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .topbar a {
+      text-decoration: none;
+      border: 1px solid #9eb4c5;
+      color: #204f6b;
+      background: #f4f8fc;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.9rem;
+    }
+    .wrap {
+      max-width: 1040px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 12px 28px #1b2b3817;
+      padding: 28px 26px;
+    }
+    .eyebrow {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #48677d;
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    h1, h2, h3 { color: #173447; line-height: 1.2; }
+    h1 { margin-top: 0; font-size: clamp(1.8rem, 4vw, 2.5rem); }
+    h2 {
+      margin-top: 28px;
+      border-top: 1px solid #e7dcc6;
+      padding-top: 18px;
+      font-size: 1.35rem;
+    }
+    h3 { margin-top: 18px; font-size: 1.08rem; color: var(--accent); }
+    p { margin: 8px 0 12px; }
+    ul, ol { padding-left: 22px; margin: 8px 0 14px; }
+    code {
+      background: #eef3f7;
+      border: 1px solid #d3dfe8;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.95em;
+    }
+    pre {
+      background: #13212b;
+      color: #d7f4ff;
+      border-radius: 10px;
+      padding: 14px;
+      overflow-x: auto;
+      border: 1px solid #2d4656;
+    }
+    pre code {
+      background: transparent;
+      border: none;
+      color: inherit;
+      padding: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid #dccfb7;
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f1e7d3; color: #5f3a1f; }
+    a { color: var(--link); }
+    hr { border: none; border-top: 1px solid #e5d8bf; margin: 20px 0; }
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      .wrap { padding: 18px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar"><a href="/">Home</a><a href="/s/term">Terminal</a><a href="/docs/basic-syntax">Syntax</a><a href="/docs/basic-functions">Functions</a></div>
+  <main class="wrap">
+    <div class="eyebrow">FunctionTown Documentation</div>
+    <h1 id="basic-built-in-functions-reference">BASIC Built-in Functions Reference</h1>
+<p>This document describes all built-in functions available in erlbasic.
+Functions return a value and can appear anywhere an expression is accepted.</p>
+<p>For BASIC statements (PRINT, IF, FOR, etc.) see <a href="Basic_Syntax.md">Basic_Syntax.md</a>.</p>
+<hr />
+<h2 id="numeric-conversion-quick-reference">Numeric Conversion Quick Reference</h2>
+<p>Numeric model note:</p>
+<ul>
+<li>erlbasic treats unsuffixed numeric values as default decimal numbers.</li>
+<li><code>#</code> suffixed variables are explicit floating-point variables.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Input</th>
+<th>Output</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default unsuffixed numeric (<code>A</code>)</td>
+<td>Numeric literal/expression</td>
+<td>Decimal numeric value</td>
+<td>Default language numeric model</td>
+</tr>
+<tr>
+<td><code>A#</code> variable</td>
+<td>Numeric literal/expression</td>
+<td>Float</td>
+<td>Explicit floating-point variable</td>
+</tr>
+<tr>
+<td><code>CDBL(x)</code></td>
+<td>Numeric</td>
+<td>Float</td>
+<td>Converts integer to float; float unchanged</td>
+</tr>
+<tr>
+<td><code>CSNG(x)</code></td>
+<td>Numeric</td>
+<td>Float</td>
+<td>Same runtime result type as <code>CDBL</code> in erlbasic</td>
+</tr>
+<tr>
+<td><code>CINT(x)</code></td>
+<td>Numeric</td>
+<td>Integer</td>
+<td>Rounds to nearest integer</td>
+</tr>
+<tr>
+<td><code>INT(x)</code></td>
+<td>Numeric</td>
+<td>Integer</td>
+<td>Rounds toward negative infinity</td>
+</tr>
+<tr>
+<td><code>FLOOR(x)</code></td>
+<td>Numeric</td>
+<td>Integer</td>
+<td>Rounds toward negative infinity</td>
+</tr>
+<tr>
+<td><code>CEIL(x)</code></td>
+<td>Numeric</td>
+<td>Integer</td>
+<td>Rounds toward positive infinity</td>
+</tr>
+<tr>
+<td><code>FIX(x)</code></td>
+<td>Numeric</td>
+<td>Integer</td>
+<td>Truncates toward zero</td>
+</tr>
+<tr>
+<td><code>TYPEOF(x)</code></td>
+<td>Any scalar expression</td>
+<td>String</td>
+<td>Returns <code>&quot;INTEGER&quot;</code>, <code>&quot;FLOAT&quot;</code>, or <code>&quot;STRING&quot;</code></td>
+</tr>
+<tr>
+<td><code>STR$(x)</code></td>
+<td>Numeric</td>
+<td>String</td>
+<td>Number to string; may emit scientific notation for extreme magnitudes</td>
+</tr>
+<tr>
+<td><code>VAL(s$)</code></td>
+<td>String</td>
+<td>Number</td>
+<td>Parses numeric prefix; supports decimal and scientific notation (<code>E</code>/<code>D</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Quick examples:</p>
+<pre><code class="language-text">PRINT CINT(2.5), FLOOR(2.5), CEIL(2.5), FIX(2.5)     '  3  2  3  2
+PRINT CINT(-2.5), FLOOR(-2.5), CEIL(-2.5), FIX(-2.5) ' -3 -3 -2 -2
+PRINT TYPEOF(A), TYPEOF(A#), TYPEOF(A$)               ' INTEGER FLOAT STRING
+PRINT STR$(1.25E3)                                     ' 1250.0
+PRINT VAL(&quot;3D-2&quot;)                                      ' 0.03
+</code></pre>
+<hr />
+<h2 id="math-functions">Math Functions</h2>
+<h3 id="abs">ABS</h3>
+<p>Returns the absolute value of a number.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ABS(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT ABS(-5)      '  5
+PRINT ABS(3.7)     '  3.7
+</code></pre>
+<hr />
+<h3 id="acos">ACOS</h3>
+<p>Returns the arc cosine of <em>x</em> in radians.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ACOS(&lt;expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>x</em> must be in the range −1 to 1; otherwise an Illegal function call error is raised.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT ACOS(1)      '  0.0
+</code></pre>
+<hr />
+<h3 id="asin">ASIN</h3>
+<p>Returns the arc sine of <em>x</em> in radians.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ASIN(&lt;expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>x</em> must be in the range −1 to 1; otherwise an Illegal function call error is raised.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT ASIN(0)      '  0.0
+</code></pre>
+<hr />
+<h3 id="atan-atn">ATAN / ATN</h3>
+<p>Returns the arc tangent of <em>x</em> in radians. Both names are equivalent.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ATAN(&lt;expr&gt;)</code></li>
+<li><code>ATN(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT ATN(1) * 4   '  pi
+</code></pre>
+<hr />
+<h3 id="atan2">ATAN2</h3>
+<p>Returns the arc tangent of <em>y/x</em> in radians, using the signs of both arguments to determine the correct quadrant.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ATAN2(&lt;y&gt;, &lt;x&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT ATAN2(1, 1)  '  0.785398...  (pi/4)
+</code></pre>
+<hr />
+<h3 id="ceil">CEIL</h3>
+<p>Returns the smallest integer that is greater than or equal to <em>x</em>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CEIL(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT CEIL(2.1)    '  3
+PRINT CEIL(-2.1)   '  -2
+PRINT CEIL(2.0)    '  2
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>Argument must be numeric; a string argument raises an Illegal function call error.</li>
+<li><code>CEIL</code> is distinct from <code>CINT</code>: <code>CEIL</code> always rounds toward +infinity, while <code>CINT</code> rounds to nearest integer.</li>
+</ul>
+<hr />
+<h3 id="cdbl">CDBL</h3>
+<p>Converts a numeric value to floating-point (double-precision runtime float).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CDBL(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT CDBL(5)      '  5.0
+PRINT CDBL(2.25)   '  2.25
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>Argument must be numeric; a non-numeric argument raises an Illegal function call error.</li>
+</ul>
+<hr />
+<h3 id="cint">CINT</h3>
+<p>Converts a numeric value to integer by rounding to nearest integer.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CINT(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT CINT(2.1)    '  2
+PRINT CINT(2.9)    '  3
+PRINT CINT(-2.5)   '  -3
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>CINT</code> is not the same as <code>FLOOR</code>/<code>INT</code>/<code>FIX</code>.</li>
+<li>Argument must be numeric; a non-numeric argument raises an Illegal function call error.</li>
+</ul>
+<hr />
+<h3 id="csng">CSNG</h3>
+<p>Converts a numeric value to floating-point.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CSNG(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT CSNG(9)      '  9.0
+PRINT CSNG(3.5)    '  3.5
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>In erlbasic runtime semantics, <code>CSNG</code> and <code>CDBL</code> both return the interpreter float type.</li>
+<li>Argument must be numeric; a non-numeric argument raises an Illegal function call error.</li>
+</ul>
+<hr />
+<h3 id="cos">COS</h3>
+<p>Returns the cosine of <em>x</em> (angle in radians).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>COS(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT COS(0)       '  1
+</code></pre>
+<hr />
+<h3 id="deg">DEG</h3>
+<p>Converts <em>x</em> from radians to degrees.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DEG(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT DEG(3.14159) '  ~180
+</code></pre>
+<hr />
+<h3 id="exp">EXP</h3>
+<p>Returns <em>e</em> raised to the power <em>x</em>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>EXP(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT EXP(1)       '  2.71828...
+</code></pre>
+<hr />
+<h3 id="fix">FIX</h3>
+<p>Truncates <em>x</em> toward zero (removes the fractional part without rounding).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>FIX(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT FIX(3.9)     '  3
+PRINT FIX(-3.9)    '  -3
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>Differs from <code>INT</code> for negative numbers: <code>INT(-3.9)</code> returns −4, <code>FIX(-3.9)</code> returns −3.</li>
+</ul>
+<hr />
+<h3 id="floor">FLOOR</h3>
+<p>Returns the largest integer less than or equal to <em>x</em>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>FLOOR(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT FLOOR(3.9)   '  3
+PRINT FLOOR(-2.1)  '  -3
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>FLOOR</code> is distinct from <code>CINT</code>: <code>FLOOR</code> always rounds toward -infinity, while <code>CINT</code> rounds to nearest integer.</li>
+</ul>
+<hr />
+<h3 id="int">INT</h3>
+<p>Returns the integer part of <em>x</em>, rounding toward negative infinity (GW-BASIC compatible).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>INT(&lt;expr&gt;)</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT INT(3.9)     '  3
+PRINT INT(-3.1)    '  -4
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>For positive numbers <code>INT</code> and <code>FLOOR</code> are equivalent. For negative numbers, <code>INT</code> rounds toward −∞ while <code>FIX</code> truncates toward zero.</li>
+</ul>
+<hr />
+<h3 id="ln-log">LN / LOG</h3>
+<p>Returns the natural logarithm (base <em>e</em>) of <em>x</em>. Both names are equivalent.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LN(&lt;expr&gt;)</code></li>
+<li><code>LOG(&lt;expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>x</em> must be positive; otherwise an Illegal function call error is raised.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT LOG(1)       '  0.0
+PRINT LN(2.71828)  '  ~1.0
+</code></pre>
+<hr />
+<h3 id="pi">PI</h3>
+<p>Returns the value of π (approximately 3.14159265358979).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PI()</code></li>
+<li><code>PI</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT PI           '  3.14159265358979
+</code></pre>
+<hr />
+<h3 id="pow">POW</h3>
+<p>Returns <em>x</em> raised to the power <em>y</em>. Equivalent to the <code>^</code> operator.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>POW(&lt;x&gt;, &lt;y&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT POW(2, 10)   '  1024
+</code></pre>
+<hr />
+<h3 id="rad">RAD</h3>
+<p>Converts <em>x</em> from degrees to radians.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RAD(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT RAD(180)     '  3.14159...
+</code></pre>
+<hr />
+<h3 id="rnd">RND</h3>
+<p>Returns a pseudo-random floating-point number in the range [0, 1).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RND</code></li>
+<li><code>RND()</code></li>
+<li><code>RND(&lt;x&gt;)</code></li>
+</ul>
+<p>Argument behavior (GW-BASIC compatible):</p>
+<ul>
+<li><code>RND</code> or <code>RND(positive)</code> — returns a new random number.</li>
+<li><code>RND(0)</code> — returns the last value generated by <code>RND</code>.</li>
+<li><code>RND(negative)</code> — seeds the generator from <em>x</em> and returns a new number. The same negative value always produces the same sequence.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">10 FOR I = 1 TO 5
+20   PRINT INT(RND * 100)
+30 NEXT I
+</code></pre>
+<hr />
+<h3 id="sgn">SGN</h3>
+<p>Returns the sign of <em>x</em>: −1 if <em>x</em> &lt; 0, 0 if <em>x</em> = 0, or 1 if <em>x</em> &gt; 0.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SGN(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT SGN(-7)      '  -1
+PRINT SGN(0)       '  0
+PRINT SGN(3.5)     '  1
+</code></pre>
+<hr />
+<h3 id="sin">SIN</h3>
+<p>Returns the sine of <em>x</em> (angle in radians).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SIN(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT SIN(0)       '  0.0
+</code></pre>
+<hr />
+<h3 id="sqr-sqrt">SQR / SQRT</h3>
+<p>Returns the square root of <em>x</em>. Both names are equivalent.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SQR(&lt;expr&gt;)</code></li>
+<li><code>SQRT(&lt;expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>x</em> must be non-negative; otherwise an Illegal function call error is raised.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT SQR(9)       '  3.0
+PRINT SQRT(2)      '  1.41421...
+</code></pre>
+<hr />
+<h3 id="tan">TAN</h3>
+<p>Returns the tangent of <em>x</em> (angle in radians).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TAN(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT TAN(0)       '  0.0
+</code></pre>
+<hr />
+<h3 id="typeof">TYPEOF</h3>
+<p>Returns a string describing the runtime scalar type of an expression.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TYPEOF(&lt;expr&gt;)</code></li>
+</ul>
+<p>Return values:</p>
+<ul>
+<li><code>&quot;INTEGER&quot;</code></li>
+<li><code>&quot;FLOAT&quot;</code></li>
+<li><code>&quot;STRING&quot;</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT TYPEOF(123)      '  INTEGER
+PRINT TYPEOF(1.5E2)    '  FLOAT
+PRINT TYPEOF(&quot;HELLO&quot;)  '  STRING
+PRINT TYPEOF(A#)       '  FLOAT
+</code></pre>
+<hr />
+<h3 id="val">VAL</h3>
+<p>Converts a string to a number. Leading whitespace is ignored; any non-numeric trailing characters are ignored.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>VAL(&lt;string-expr&gt;)</code></li>
+</ul>
+<p>Returns 0 if the string contains no recognizable number.</p>
+<p>Scientific notation is supported (<code>E</code>/<code>e</code> and <code>D</code>/<code>d</code> exponents).</p>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT VAL(&quot;123&quot;)       '  123
+PRINT VAL(&quot;  -4.5xyz&quot;) '  -4.5
+PRINT VAL(&quot;1.25E3&quot;)    '  1250.0
+PRINT VAL(&quot;3D-2&quot;)      '  0.03
+PRINT VAL(&quot;ABC&quot;)       '  0
+</code></pre>
+<hr />
+<h2 id="string-functions">String Functions</h2>
+<h3 id="asc">ASC</h3>
+<p>Returns the ASCII code of the first character of a string.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>ASC(&lt;string-expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>An empty string argument raises an Illegal function call error.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT ASC(&quot;A&quot;)     '  65
+</code></pre>
+<hr />
+<h3 id="chr">CHR$</h3>
+<p>Returns the single-character string whose ASCII code is <em>n</em>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>CHR$(&lt;expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>n</em> must be in the range 0–255; otherwise an Illegal function call error is raised.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT CHR$(66)     '  B
+</code></pre>
+<hr />
+<h3 id="instr">INSTR</h3>
+<p>Returns the position of the first occurrence of <em>pattern$</em> in <em>text$</em>, or 0 if not found. Position is 1-based.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>INSTR(&lt;text$&gt;, &lt;pattern$&gt;)</code></li>
+<li><code>INSTR(&lt;start&gt;, &lt;text$&gt;, &lt;pattern$&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>start</em> must be ≥ 1; omitting it defaults to 1.</li>
+<li>An empty <em>pattern$</em> returns <em>start</em> (or 1 if <em>start</em> is omitted), as long as <em>start</em> ≤ <code>LEN(text$) + 1</code>.</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT INSTR(&quot;ABCDE&quot;,&quot;BC&quot;)      '  2
+PRINT INSTR(3,&quot;ABCDE&quot;,&quot;DE&quot;)    '  4
+PRINT INSTR(&quot;ABCDE&quot;,&quot;ZZ&quot;)      '  0
+</code></pre>
+<hr />
+<h3 id="left">LEFT$</h3>
+<p>Returns the leftmost <em>n</em> characters of a string.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LEFT$(&lt;string-expr&gt;, &lt;n&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>If <em>n</em> ≤ 0 an empty string is returned.</li>
+<li>If <em>n</em> ≥ <code>LEN(string)</code> the entire string is returned.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT LEFT$(&quot;HELLO&quot;, 2)    '  HE
+</code></pre>
+<hr />
+<h3 id="len">LEN</h3>
+<p>Returns the number of characters in a string. When passed a numeric value it is converted to its string representation first.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LEN(&lt;string-expr&gt;)</code></li>
+<li><code>LEN(&lt;expr&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT LEN(&quot;HELLO&quot;)     '  5
+PRINT LEN(12345)       '  5
+</code></pre>
+<hr />
+<h3 id="mid">MID$</h3>
+<p>Returns a substring of <em>text$</em> beginning at <em>start</em> (1-based).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>MID$(&lt;string-expr&gt;, &lt;start&gt;)</code></li>
+<li><code>MID$(&lt;string-expr&gt;, &lt;start&gt;, &lt;count&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>start</em> must be ≥ 1; otherwise an Illegal function call error is raised.</li>
+<li>If <em>start</em> &gt; <code>LEN(text$)</code> an empty string is returned.</li>
+<li>If <em>count</em> is 0 an empty string is returned.</li>
+<li>If <em>count</em> is omitted, all characters from <em>start</em> to the end are returned.</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT MID$(&quot;HELLO&quot;, 2, 2)  '  EL
+PRINT MID$(&quot;HELLO&quot;, 4)     '  LO
+PRINT MID$(&quot;ABCDE&quot;, 6, 2)  '  (empty)
+</code></pre>
+<hr />
+<h3 id="right">RIGHT$</h3>
+<p>Returns the rightmost <em>n</em> characters of a string.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>RIGHT$(&lt;string-expr&gt;, &lt;n&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>If <em>n</em> ≤ 0 an empty string is returned.</li>
+<li>If <em>n</em> ≥ <code>LEN(string)</code> the entire string is returned.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT RIGHT$(&quot;HELLO&quot;, 3)   '  LLO
+</code></pre>
+<hr />
+<h3 id="space">SPACE$</h3>
+<p>Returns a string of <em>n</em> space characters.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SPACE$(&lt;n&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>n</em> must be ≥ 0; a negative value raises an Illegal function call error.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT &quot;A&quot;;SPACE$(3);&quot;B&quot;    '  A   B
+</code></pre>
+<hr />
+<h3 id="str">STR$</h3>
+<p>Converts a number to its string representation.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>STR$(&lt;numeric-expr&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>Passing a non-numeric argument raises a Type mismatch error.</li>
+<li>Very large/small magnitudes may be formatted in scientific notation.</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT STR$(123)    '  123
+PRINT STR$(-45)    '  -45
+PRINT STR$(3.5)    '  3.5
+</code></pre>
+<hr />
+<h3 id="string">STRING$</h3>
+<p>Returns a string of <em>n</em> copies of a character (specified either by ASCII code or by the first character of a string).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>STRING$(&lt;n&gt;, &lt;code&gt;)</code></li>
+<li><code>STRING$(&lt;n&gt;, &lt;char$&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li><em>n</em> must be ≥ 0.</li>
+<li><em>code</em> must be in the range 0–255.</li>
+<li>An empty <em>char$</em> raises an Illegal function call error.</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-text">PRINT STRING$(5, 42)       '  *****
+PRINT STRING$(4, &quot;*&quot;)      '  ****
+</code></pre>
+<hr />
+<h2 id="io-and-system-functions">I/O and System Functions</h2>
+<h3 id="date">DATE$</h3>
+<p>Returns the current local date as a string in <code>MM-DD-YYYY</code> format.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>DATE$()</code></li>
+<li><code>DATE$</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT DATE$        '  04-09-2026
+</code></pre>
+<hr />
+<h3 id="eof">EOF</h3>
+<p>Returns −1 (true) if the file on <em>channel</em> is at end-of-file; otherwise returns 0.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>EOF(&lt;channel&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">10 OPEN &quot;DATA.TXT&quot; FOR INPUT AS #1
+20 WHILE NOT EOF(1)
+30   INPUT #1, A$
+40   PRINT A$
+50 WEND
+60 CLOSE #1
+</code></pre>
+<hr />
+<h3 id="free">FREE</h3>
+<p>Returns the number of bytes of memory still available to the current user's program. The limit is set by the account configuration; if no limit is configured a large sentinel value is returned.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>FREE()</code></li>
+<li><code>FREE</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT FREE
+</code></pre>
+<hr />
+<h3 id="mem_used">MEM_USED</h3>
+<p>Returns the interpreter's current estimate of how many bytes of memory the current BASIC session is using.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>MEM_USED()</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>This is the same approximation used by <code>FREE()</code> and the session memory watchdog.</li>
+<li>It measures the serialized size of the current program, variables, DATA items, loop stack, call stack, and user functions.</li>
+<li>It is an approximation of interpreter state size, not a full Erlang VM process-memory reading.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT &quot;USED: &quot;; MEM_USED()
+PRINT &quot;FREE: &quot;; FREE
+</code></pre>
+<hr />
+<h3 id="lof">LOF</h3>
+<p>Returns the length (in bytes) of the open file on <em>channel</em>.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>LOF(&lt;channel&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">OPEN &quot;FILE.TXT&quot; FOR INPUT AS #1
+PRINT LOF(1)
+CLOSE #1
+</code></pre>
+<hr />
+<h3 id="pos">POS</h3>
+<p>Returns the current column position of the output cursor (1-based). The optional argument is accepted for GW-BASIC compatibility but is ignored.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>POS()</code></li>
+<li><code>POS</code></li>
+<li><code>POS(&lt;dummy&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT &quot;HELLO&quot;;
+PRINT POS(0)       '  6
+</code></pre>
+<hr />
+<h3 id="play">PLAY</h3>
+<p>Returns the number of notes currently remaining in the background <code>PLAY</code> queue.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>PLAY(&lt;dummy&gt;)</code></li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>The argument is accepted for compatibility but ignored.</li>
+<li>Typical usage is <code>PLAY(0)</code>.</li>
+<li>Foreground phrases (<code>MF</code>) do not leave queued background notes.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">ON PLAY(4) GOSUB 1000
+PRINT &quot;Queue: &quot;; PLAY(0)
+</code></pre>
+<hr />
+<h3 id="seek">SEEK</h3>
+<p>Returns the current byte position in the open file on <em>channel</em> (1-based).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>SEEK(&lt;channel&gt;)</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT SEEK(1)
+</code></pre>
+<hr />
+<h3 id="term">TERM$</h3>
+<p>Returns a string identifying the terminal type of the current connection: <code>&quot;XTERM&quot;</code> for WebSocket sessions and <code>&quot;TELNET&quot;</code> for TCP sessions.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TERM$()</code></li>
+<li><code>TERM$</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">IF TERM$ = &quot;XTERM&quot; THEN GOTO 100
+</code></pre>
+<hr />
+<h3 id="time">TIME$</h3>
+<p>Returns the current local time as a string in <code>HH:MM:SS</code> format (24-hour clock).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TIME$()</code></li>
+<li><code>TIME$</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT TIME$        '  14:30:05
+</code></pre>
+<hr />
+<h3 id="timer">TIMER</h3>
+<p>Returns the number of seconds elapsed since midnight as a floating-point number.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>TIMER()</code></li>
+<li><code>TIMER</code></li>
+</ul>
+<p>Range: 0.0 to 86399.999...</p>
+<p>Example:</p>
+<pre><code class="language-text">LET T = TIMER
+' ... do work ...
+PRINT TIMER - T; &quot;seconds elapsed&quot;
+</code></pre>
+<p>See also: <code>ON TIMER(...) GOSUB</code> in Basic_Syntax.md for timer-driven event callbacks.</p>
+<hr />
+<h2 id="operators">Operators</h2>
+<p>All operators work in expressions in any context (assignment, <code>IF</code>, <code>PRINT</code>, etc.).
+Operator precedence (highest to lowest):</p>
+<table>
+<thead>
+<tr>
+<th>Precedence</th>
+<th>Operators</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (highest)</td>
+<td>Unary <code>-</code> (negation), unary <code>+</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>^</code> (exponentiation)</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>*</code>, <code>/</code>, <code>\</code>, <code>MOD</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>+</code>, <code>-</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>=</code>, <code>&lt;&gt;</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>NOT</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>AND</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>XOR</code></td>
+</tr>
+<tr>
+<td>9 (lowest)</td>
+<td><code>OR</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="arithmetic-operators">Arithmetic Operators</h3>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Meaning</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>+</code></td>
+<td>Addition (numbers) or concatenation (strings)</td>
+<td><code>3 + 4</code> → <code>7</code>; <code>&quot;A&quot; + &quot;B&quot;</code> → <code>&quot;AB&quot;</code></td>
+</tr>
+<tr>
+<td><code>-</code></td>
+<td>Subtraction</td>
+<td><code>10 - 3</code> → <code>7</code></td>
+</tr>
+<tr>
+<td><code>*</code></td>
+<td>Multiplication</td>
+<td><code>4 * 5</code> → <code>20</code></td>
+</tr>
+<tr>
+<td><code>/</code></td>
+<td>Floating-point division</td>
+<td><code>7 / 2</code> → <code>3.5</code></td>
+</tr>
+<tr>
+<td><code>\</code></td>
+<td>Integer division (truncates toward zero)</td>
+<td><code>7 \ 2</code> → <code>3</code>; <code>-7 \ 2</code> → <code>-3</code></td>
+</tr>
+<tr>
+<td><code>^</code></td>
+<td>Exponentiation</td>
+<td><code>2 ^ 8</code> → <code>256</code></td>
+</tr>
+<tr>
+<td><code>MOD</code></td>
+<td>Integer modulo (remainder)</td>
+<td><code>10 MOD 3</code> → <code>1</code></td>
+</tr>
+</tbody>
+</table>
+<p>Notes:</p>
+<ul>
+<li>Dividing by zero raises a Division by zero error.</li>
+<li><code>\</code> truncates both operands to integer before dividing.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT 2 ^ 10       '  1024
+PRINT 7 / 2        '  3.5
+PRINT 7 \ 2        '  3
+PRINT 10 MOD 3     '  1
+</code></pre>
+<hr />
+<h3 id="comparison-operators">Comparison Operators</h3>
+<p>Comparisons return −1 for true and 0 for false (GW-BASIC compatible).</p>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>=</code></td>
+<td>Equal</td>
+</tr>
+<tr>
+<td><code>&lt;&gt;</code></td>
+<td>Not equal</td>
+</tr>
+<tr>
+<td><code>&lt;</code></td>
+<td>Less than</td>
+</tr>
+<tr>
+<td><code>&gt;</code></td>
+<td>Greater than</td>
+</tr>
+<tr>
+<td><code>&lt;=</code></td>
+<td>Less than or equal</td>
+</tr>
+<tr>
+<td><code>&gt;=</code></td>
+<td>Greater than or equal</td>
+</tr>
+</tbody>
+</table>
+<p>Works on both numbers and strings. String comparison is case-sensitive and lexicographic.</p>
+<p>Example:</p>
+<pre><code class="language-text">IF X &gt; 5 THEN PRINT &quot;BIG&quot;
+IF A$ &lt;&gt; B$ THEN PRINT &quot;DIFFERENT&quot;
+PRINT (3 = 3)      '  -1
+PRINT (3 = 4)      '  0
+</code></pre>
+<hr />
+<h3 id="logical-bitwise-operators">Logical / Bitwise Operators</h3>
+<p>When both operands are integers, <code>AND</code>, <code>OR</code>, <code>XOR</code>, and <code>NOT</code> perform bitwise operations (GW-BASIC compatible). When either operand is a float or string, they perform boolean operations returning −1 (true) or 0 (false).</p>
+<h4 id="and">AND</h4>
+<p>Returns the bitwise AND of two integers, or −1 if both operands are true (non-zero/non-empty).</p>
+<p>Syntax:</p>
+<ul>
+<li><code>&lt;expr&gt; AND &lt;expr&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT 12 AND 10    '  8   (1100 AND 1010 = 1000)
+IF X &gt; 5 AND Y &lt; 10 THEN PRINT &quot;BOTH&quot;
+</code></pre>
+<hr />
+<h4 id="not">NOT</h4>
+<p>Returns the bitwise NOT of an integer, or 0/−1 for boolean negation.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>NOT &lt;expr&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT NOT 0        '  -1
+PRINT NOT 255      '  -256
+IF NOT (X = 0) THEN PRINT &quot;X IS NON-ZERO&quot;
+</code></pre>
+<hr />
+<h4 id="or">OR</h4>
+<p>Returns the bitwise OR of two integers, or −1 if either operand is true.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>&lt;expr&gt; OR &lt;expr&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT 12 OR 3      '  15  (1100 OR 0011 = 1111)
+IF X = 7 OR Y = 3 THEN PRINT &quot;AT LEAST ONE&quot;
+</code></pre>
+<hr />
+<h4 id="xor">XOR</h4>
+<p>Returns the bitwise XOR of two integers, or −1 if exactly one operand is true.</p>
+<p>Syntax:</p>
+<ul>
+<li><code>&lt;expr&gt; XOR &lt;expr&gt;</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-text">PRINT 12 XOR 10    '  6   (1100 XOR 1010 = 0110)
+IF A XOR B THEN PRINT &quot;EXACTLY ONE IS TRUE&quot;
+</code></pre>
+
+  </main>
+</body>
+</html>
