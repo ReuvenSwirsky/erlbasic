@@ -198,6 +198,8 @@ format_runtime_error(division_by_zero) ->
     "?DIVISION BY ZERO ERROR\r\n";
 format_runtime_error(out_of_data) ->
     "?OUT OF DATA ERROR\r\n";
+format_runtime_error(range_exceeded) ->
+    "?RANGE EXCEEDED\r\n";
 format_runtime_error(illegal_function_call) ->
     "?ILLEGAL FUNCTION CALL\r\n";
 format_runtime_error(undefined_function) ->
@@ -250,6 +252,7 @@ format_runtime_error(Reason, LineNumber) when is_integer(LineNumber) ->
     ErrorType = case Reason of
         division_by_zero -> "DIVISION BY ZERO ERROR";
         out_of_data -> "OUT OF DATA ERROR";
+        range_exceeded -> "RANGE EXCEEDED";
         illegal_function_call -> "ILLEGAL FUNCTION CALL";
         undefined_function -> "UNDEFINED FUNCTION ERROR";
         undimmed_array -> "UNDIMMED ARRAY ERROR";
@@ -281,6 +284,7 @@ format_runtime_error(Reason, _) ->
 %% Map error reasons to ERR codes (GW-BASIC compatible)
 error_code(division_by_zero) -> 11;
 error_code(out_of_data) -> 4;
+error_code(range_exceeded) -> 6;
 error_code(illegal_function_call) -> 5;
 error_code(undefined_function) -> 18;
 error_code(undimmed_array) -> 18;

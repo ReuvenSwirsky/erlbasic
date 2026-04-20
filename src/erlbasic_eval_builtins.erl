@@ -1,6 +1,7 @@
 -module(erlbasic_eval_builtins).
 
 -export([apply_math_function/2, is_builtin_function/1]).
+-define(MAX_INT_POW_BITS, 8192).
 
 is_builtin_function(Name) ->
     erlbasic_keywords:is_builtin_function_keyword(Name).
@@ -238,12 +239,18 @@ apply_ceil(_X) ->
     {error, illegal_function_call}.
 
 apply_pow(X, Y) when is_integer(X), is_integer(Y), Y >= 0 ->
-    {ok, int_pow(X, Y)};
+    safe_int_pow(X, Y);
 apply_pow(X, Y) when (is_integer(X) orelse is_float(X)) andalso
                     (is_integer(Y) orelse is_float(Y)) ->
     {ok, math:pow(X, Y)};
 apply_pow(_X, _Y) ->
     {error, illegal_function_call}.
+
+safe_int_pow(Base, Exp) ->
+    case int_pow_too_large(Base, Exp) of
+        true -> {error, range_exceeded};
+        false -> {ok, int_pow(Base, Exp)}
+    end.
 
 int_pow(_Base, 0) ->
     1;
@@ -256,6 +263,27 @@ int_pow(Base, Exp, Acc) when (Exp band 1) =:= 1 ->
     int_pow(Base * Base, Exp bsr 1, Acc * Base);
 int_pow(Base, Exp, Acc) ->
     int_pow(Base * Base, Exp bsr 1, Acc).
+
+int_pow_too_large(_Base, 0) ->
+    false;
+int_pow_too_large(0, _Exp) ->
+    false;
+int_pow_too_large(1, _Exp) ->
+    false;
+int_pow_too_large(-1, _Exp) ->
+    false;
+int_pow_too_large(Base, Exp) when Exp > 0 ->
+    integer_bit_length(abs(Base)) * Exp > ?MAX_INT_POW_BITS.
+
+integer_bit_length(0) ->
+    0;
+integer_bit_length(Int) when Int > 0 ->
+    integer_bit_length(Int, 0).
+
+integer_bit_length(0, Bits) ->
+    Bits;
+integer_bit_length(Int, Bits) ->
+    integer_bit_length(Int bsr 1, Bits + 1).
 
 gw_rnd() ->
     Value = rand:uniform(),

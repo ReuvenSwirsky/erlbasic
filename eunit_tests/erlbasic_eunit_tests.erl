@@ -727,6 +727,23 @@ rnd_function_test() ->
     ?assert(Next2 >= 0.0),
     ?assert(Next2 < 1.0).
 
+giant_integer_power_expression_returns_error_test() ->
+    ?assertEqual(
+        {error, range_exceeded, #{}},
+        erlbasic_eval:eval_expr_result("123213123^2112312", #{})
+    ).
+
+giant_integer_power_builtin_returns_error_test() ->
+    ?assertEqual(
+        {error, range_exceeded},
+        erlbasic_eval_builtins:apply_math_function("POW", [123213123, 2112312])
+    ).
+
+giant_integer_power_immediate_reports_range_exceeded_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {_S1, Output} = erlbasic_interp:handle_input("PRINT 123213123^2112312", S0),
+    ?assertEqual("?RANGE EXCEEDED\r\n", lists:flatten(Output)).
+
 %% ===========================================================================  
 %% Accounts (DETS) tests ΓÇö all run under a single setup/teardown
 %% ===========================================================================  
@@ -1536,6 +1553,18 @@ err_erl_variables_test() ->
     %% ERR=11 (division by zero), ERL=20
     ?assertEqual(match, re:run(Text, "1120", [{capture, none}])).
 
+range_exceeded_sets_err_erl_test() ->
+    S0 = erlbasic_interp:new_state(),
+    {S1, _} = erlbasic_interp:handle_input("10 ON ERROR GOTO 100", S0),
+    {S2, _} = erlbasic_interp:handle_input("20 PRINT 123213123^2112312", S1),
+    {S3, _} = erlbasic_interp:handle_input("30 END", S2),
+    {S4, _} = erlbasic_interp:handle_input("100 PRINT ERR; ERL", S3),
+    {S5, _} = erlbasic_interp:handle_input("110 END", S4),
+    {_S6, Output} = erlbasic_interp:handle_input("RUN", S5),
+    Text = lists:flatten(Output),
+    %% ERR=6 (range exceeded), ERL=20
+    ?assertEqual(match, re:run(Text, "620", [{capture, none}])).
+
 %% Test RESUME without error
 resume_without_error_test() ->
     S0 = erlbasic_interp:new_state(),
@@ -2173,7 +2202,7 @@ s3_config_loads_private_file_test() ->
     OldAccessKey = application:get_env(erlbasic, storage_s3_access_key_id),
     OldSecretKey = application:get_env(erlbasic, storage_s3_secret_access_key),
     try
-        ok = file:make_dir(TempDir),
+        ok = filelib:ensure_dir(filename:join([TempDir, "x"])),
         ok = file:write_file(ConfigPath, <<
             "[\n",
             "  {storage_s3_endpoint, \"https://minio.internal:9000\"},\n",
@@ -2215,7 +2244,7 @@ s3_config_missing_file_is_ok_test() ->
     MissingPath = filename:join(TempDir, ".missing-s3.config"),
     OldConfigFile = application:get_env(erlbasic, storage_s3_config_file),
     try
-        ok = file:make_dir(TempDir),
+        ok = filelib:ensure_dir(filename:join([TempDir, "x"])),
         ok = application:set_env(erlbasic, storage_s3_config_file, MissingPath),
         ?assertEqual(ok, erlbasic_s3_config:load())
     after

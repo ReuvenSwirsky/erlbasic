@@ -1,6 +1,7 @@
 -module(erlbasic_eval_expr).
 
 -export([eval_arith_expr/2, is_user_fn_name/1]).
+-define(MAX_INT_POW_BITS, 8192).
 
 eval_arith_expr(Expr, Vars) ->
     case compile_expr_cached(Expr) of
@@ -396,12 +397,18 @@ eval_user_function(_ArgVar, _FnExpr, _Args, _Vars) ->
     {error, illegal_function_call}.
 
 pow_values(Left, Right) when is_integer(Left), is_integer(Right), Right >= 0 ->
-    {ok, int_pow(Left, Right)};
+    safe_int_pow(Left, Right);
 pow_values(Left, Right) when (is_integer(Left) orelse is_float(Left)) andalso
                             (is_integer(Right) orelse is_float(Right)) ->
     {ok, math:pow(Left, Right)};
 pow_values(_Left, _Right) ->
     {error, type_mismatch}.
+
+safe_int_pow(Base, Exp) ->
+    case int_pow_too_large(Base, Exp) of
+        true -> {error, range_exceeded};
+        false -> {ok, int_pow(Base, Exp)}
+    end.
 
 int_pow(_Base, 0) ->
     1;
@@ -414,6 +421,27 @@ int_pow(Base, Exp, Acc) when (Exp band 1) =:= 1 ->
     int_pow(Base * Base, Exp bsr 1, Acc * Base);
 int_pow(Base, Exp, Acc) ->
     int_pow(Base * Base, Exp bsr 1, Acc).
+
+int_pow_too_large(_Base, 0) ->
+    false;
+int_pow_too_large(0, _Exp) ->
+    false;
+int_pow_too_large(1, _Exp) ->
+    false;
+int_pow_too_large(-1, _Exp) ->
+    false;
+int_pow_too_large(Base, Exp) when Exp > 0 ->
+    integer_bit_length(abs(Base)) * Exp > ?MAX_INT_POW_BITS.
+
+integer_bit_length(0) ->
+    0;
+integer_bit_length(Int) when Int > 0 ->
+    integer_bit_length(Int, 0).
+
+integer_bit_length(0, Bits) ->
+    Bits;
+integer_bit_length(Int, Bits) ->
+    integer_bit_length(Int bsr 1, Bits + 1).
 
 int_div(Left, Right) when is_integer(Left), is_integer(Right) ->
     Left div Right;

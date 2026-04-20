@@ -32,3 +32,4 @@
 - [ ] users in group 255 can't create homepages or save files
 - [x] fix REM == gives "Reserved word error"
 - [ ] Find out how to back up MNSESIA database in production
+- [x] "Giant" numbers (123213123^2112312) will hang and you cant ctrl-c
