@@ -22,3 +22,11 @@
 - [ ] Additional options to HOME
 - [X] Can I specify a number in scientific format? Will it parse it?
 - [x] Allow BASIC-PLUS style COMMON statement so variables can persist in a CHAINed program
+- [x] Design FunctionTown homepage. Move page with terminal to /s/term
+- [x] add a guest user. This user is actually 255,* but you can also log in by typing HELLO GUEST
+      or GUEST after the # prompt
+- [ ] the guest user can't save files and is limited to 30 minute sessions. Put a timer on the 
+      screen when GUEST is logged in.
+- [ ] First guest is [255,1] second guest is [255,2]. Guests will take the lowest available slot
+      in the 255 group. Up to 255 guests can be in the system at once. 
+- [ ] users in group 255 can't create homepages or save files
