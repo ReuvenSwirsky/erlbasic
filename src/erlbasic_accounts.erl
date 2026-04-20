@@ -320,12 +320,12 @@ is_reserved_username(UsernameBin) ->
     case Key of
         <<>> -> false;
         _ ->
-            Tokens = [
+            ReservedNames = [
                 <<"admin">>, <<"administrator">>, <<"sysadmin">>, <<"system">>,
                 <<"sysop">>, <<"operator">>, <<"root">>, <<"superuser">>,
                 <<"supervisor">>, <<"owner">>, <<"service">>
             ],
-            lists:any(fun(Token) -> binary:match(Key, Token) =/= nomatch end, Tokens)
+            lists:member(Key, ReservedNames)
     end.
 
 hash_password(PwBin) ->

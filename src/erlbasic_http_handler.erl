@@ -19,19 +19,23 @@ map_request_to_file(Path) ->
             {ok, filename:join(WwwDir, "home.html"), <<"text/html; charset=utf-8">>};
         <<"/index.html">> ->
             {ok, filename:join(WwwDir, "home.html"), <<"text/html; charset=utf-8">>};
+        <<"/s/docs">> ->
+            {ok, filename:join([WwwDir, "docs", "basic-syntax.html"]), <<"text/html; charset=utf-8">>};
+        <<"/s/docs/">> ->
+            {ok, filename:join([WwwDir, "docs", "basic-syntax.html"]), <<"text/html; charset=utf-8">>};
         <<"/s/term">> ->
             {ok, filename:join(WwwDir, "index.html"), <<"text/html; charset=utf-8">>};
         <<"/s/term/">> ->
             {ok, filename:join(WwwDir, "index.html"), <<"text/html; charset=utf-8">>};
-        <<"/docs/basic-functions">> ->
+        <<"/s/docs/basic-functions">> ->
             {ok, filename:join([WwwDir, "docs", "basic-functions.html"]), <<"text/html; charset=utf-8">>};
-        <<"/docs/basic-functions/">> ->
+        <<"/s/docs/basic-functions/">> ->
             {ok, filename:join([WwwDir, "docs", "basic-functions.html"]), <<"text/html; charset=utf-8">>};
-        <<"/docs/basic-syntax">> ->
+        <<"/s/docs/basic-syntax">> ->
             {ok, filename:join([WwwDir, "docs", "basic-syntax.html"]), <<"text/html; charset=utf-8">>};
-        <<"/docs/basic-syntax/">> ->
+        <<"/s/docs/basic-syntax/">> ->
             {ok, filename:join([WwwDir, "docs", "basic-syntax.html"]), <<"text/html; charset=utf-8">>};
-        <<"/docs/", Rest/binary>> ->
+        <<"/s/docs/", Rest/binary>> ->
             docs_file(WwwDir, Rest);
         <<"/assets/", Rest/binary>> ->
             asset_file(WwwDir, Rest);

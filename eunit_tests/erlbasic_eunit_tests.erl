@@ -741,6 +741,8 @@ accounts_test() ->
         acc_list_accounts(Dir),
         acc_find_by_username(Dir),
         acc_reject_reserved_username(Dir),
+        acc_allow_nonreserved_multi_letter_username(Dir),
+        acc_reject_single_letter_username(Dir),
         acc_reject_duplicate_username(Dir),
         acc_delete_account(Dir),
         acc_change_password(Dir),
@@ -815,6 +817,16 @@ acc_find_by_username(_Dir) ->
 acc_reject_reserved_username(_Dir) ->
     ?assertEqual({error, reserved_username},
                  erlbasic_accounts:create_account(7, 1, "PW", "Bad", "sysadmin")).
+
+acc_allow_nonreserved_multi_letter_username(_Dir) ->
+    ok = erlbasic_accounts:create_account(7, 11, "PW", "Docs User", "docs"),
+    ok = erlbasic_accounts:create_account(7, 12, "PW", "Contains Token", "mysystempage"),
+    ?assertMatch({ok, {7, 11, _, _}}, erlbasic_accounts:find_by_username("DOCS")),
+    ?assertMatch({ok, {7, 12, _, _}}, erlbasic_accounts:find_by_username("MYSYSTEMPAGE")).
+
+acc_reject_single_letter_username(_Dir) ->
+    ?assertEqual({error, username_too_short},
+                 erlbasic_accounts:create_account(7, 13, "PW", "Too Short", "d")).
 
 acc_reject_duplicate_username(_Dir) ->
     ok = erlbasic_accounts:create_account(7, 2, "PW", "One", "dupeuser"),
