@@ -6,6 +6,15 @@
     %% {http_port, 8082},
     %% {enable_https, false},
     %% {storage_backend, local},
-    %% {storage_s3_config_file, "s3.config"}
+    %% {storage_s3_config_file, "s3.config"},
+
+    %% Optional rotating file logging:
+    %% {log_file_enabled, true},
+    %% {log_file_path, "log/erlbasic.log"},
+    %% {log_file_level, notice},
+    %% {log_file_max_no_bytes, 10485760},
+    %% {log_file_max_no_files, 5},
+    %% {log_file_compress_on_rotate, true},
+    %% {log_file_sync_interval_ms, 5000}
   ]}
 ].

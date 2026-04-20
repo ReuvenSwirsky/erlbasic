@@ -92,6 +92,28 @@ Example:
 ].
 ```
 
+### Rotating file logs
+
+You can enable retained deployment logs without replacing console logging by
+adding overrides like these:
+
+```erlang
+[
+	{erlbasic, [
+		{log_file_enabled, true},
+		{log_file_path, "log/erlbasic.log"},
+		{log_file_level, notice},
+		{log_file_max_no_bytes, 10485760},
+		{log_file_max_no_files, 5},
+		{log_file_compress_on_rotate, true}
+	]}
+].
+```
+
+This uses OTP's built-in rotating file logger. With the defaults above, the
+active log is capped at 10 MB and up to 5 rotated archives are kept, so logs do
+not grow forever.
+
 ## Connect
 
 ```powershell

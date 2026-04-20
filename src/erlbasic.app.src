@@ -7,7 +7,7 @@
              erlbasic_tcp_conn, erlbasic_ws_conn, erlbasic_ws_handler, erlbasic_http_handler, erlbasic_homepage_handler,
              erlbasic_accounts, erlbasic_limits, erlbasic_admin_handler, erlbasic_storage,
              erlbasic_storage_backend, erlbasic_storage_local, erlbasic_storage_s3,
-             erlbasic_s3_config, erlbasic_config_override]},
+             erlbasic_s3_config, erlbasic_config_override, erlbasic_logging]},
   {registered, []},
   {applications, [kernel, stdlib, crypto, cowboy, erlcloud]},
   {mod, {erlbasic_app, []}},
@@ -17,6 +17,13 @@
     {config_override_file, ".sys.override.config"},
     {storage_backend, local},
     {storage_s3_config_file, ".s3.config"},
+    {log_file_enabled, false},
+    {log_file_path, "log/erlbasic.log"},
+    {log_file_level, notice},
+    {log_file_max_no_bytes, 10485760},
+    {log_file_max_no_files, 5},
+    {log_file_compress_on_rotate, true},
+    {log_file_sync_interval_ms, 5000},
     {default_storage_limit_blocks, 256},
     {default_memory_limit_kb, 512}
   ]}

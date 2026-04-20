@@ -4,6 +4,7 @@
 
 start(_Type, _Args) ->
     ok = erlbasic_config_override:load(),
+    ok = erlbasic_logging:configure(),
     ok = erlbasic_s3_config:load(),
     ok = erlbasic_limits:init(),
     ok = erlbasic_accounts:init(),

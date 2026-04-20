@@ -50,7 +50,7 @@ filter_allowed_entries(Entries) ->
 maybe_warn_missing_config(ConfigPath) ->
     case application:get_env(erlbasic, storage_backend, local) of
         s3 ->
-            io:format("Warning: storage_backend is s3 but config file ~s was not found~n", [ConfigPath]);
+            logger:warning("event=s3_config_missing config_file=~ts", [ConfigPath]);
         _ ->
             ok
     end.
@@ -69,7 +69,7 @@ maybe_warn_missing_required_settings() ->
         true ->
             ok;
         false ->
-            io:format("Warning: storage_backend is s3 but storage_s3_bucket is not configured~n")
+            logger:warning("event=s3_bucket_missing")
     end,
     AccessSet = has_value(storage_s3_access_key_id, os:getenv("AWS_ACCESS_KEY_ID")),
     SecretSet = has_value(storage_s3_secret_access_key, os:getenv("AWS_SECRET_ACCESS_KEY")),
@@ -77,7 +77,7 @@ maybe_warn_missing_required_settings() ->
         true ->
             ok;
         false ->
-            io:format("Warning: storage_backend is s3 but credentials are not set (storage_s3_access_key_id/storage_s3_secret_access_key or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)~n")
+            logger:warning("event=s3_credentials_missing")
     end.
 
 has_value(Key, Default) ->
@@ -103,10 +103,10 @@ maybe_warn_config_not_ignored(ConfigPath) ->
                 true ->
                     ok;
                 false ->
-                    io:format("Warning: S3 credential file ~s is not listed in .gitignore~n", [ConfigPath])
+                    logger:warning("event=s3_config_not_ignored config_file=~ts", [ConfigPath])
             end;
         {error, _} ->
-            io:format("Warning: .gitignore not found; ensure S3 credential file ~s is ignored~n", [ConfigPath])
+            logger:warning("event=gitignore_missing_for_s3_config config_file=~ts", [ConfigPath])
     end.
 
 config_ignored(ConfigPath, GitignoreText) ->

@@ -17,15 +17,17 @@ init(http) ->
     {ok, _} = cowboy:start_clear(erlbasic_http,
         [{port, HttpPort}, {nodelay, true}],
         protocol_opts()),
-    io:format("erlbasic HTTP server listening on port ~p~n", [HttpPort]),
+    logger:notice("event=listener_started listener=http port=~p", [HttpPort]),
     {ok, #{listener => erlbasic_http}};
 init({https, HttpsPort, TlsOpts}) ->
     {ok, _} = cowboy:start_tls(erlbasic_https,
         TlsOpts,
         protocol_opts()),
-    io:format("erlbasic HTTPS server listening on port ~p~n", [HttpsPort]),
-    io:format("  Using cert: ~s~n", [proplists:get_value(certfile, TlsOpts)]),
-    io:format("  Using key:  ~s~n", [proplists:get_value(keyfile, TlsOpts)]),
+    logger:notice("event=listener_started listener=https port=~p certfile=~ts keyfile=~ts", [
+        HttpsPort,
+        proplists:get_value(certfile, TlsOpts),
+        proplists:get_value(keyfile, TlsOpts)
+    ]),
     {ok, #{listener => erlbasic_https}}.
 
 handle_call(_Request, _From, State) ->
@@ -63,12 +65,12 @@ should_start(https) ->
             TlsOpts = maybe_add_cacert(BaseTlsOpts),
             {start, {https, HttpsPort, TlsOpts}};
         {false, _} ->
-            io:format("Error: Certificate file not found: ~s~n", [CertFile]),
-            io:format("HTTPS server not started. Generate certificates with: pwsh generate_certs.ps1~n"),
+            logger:error("event=listener_failed listener=https reason=certfile_not_found certfile=~ts", [CertFile]),
+            logger:warning("event=https_disabled reason=certfile_not_found hint=generate_certs.ps1"),
             ignore;
         {_, false} ->
-            io:format("Error: Key file not found: ~s~n", [KeyFile]),
-            io:format("HTTPS server not started. Generate certificates with: pwsh generate_certs.ps1~n"),
+            logger:error("event=listener_failed listener=https reason=keyfile_not_found keyfile=~ts", [KeyFile]),
+            logger:warning("event=https_disabled reason=keyfile_not_found hint=generate_certs.ps1"),
             ignore
     end.
 
@@ -81,7 +83,7 @@ maybe_add_cacert(BaseTlsOpts) ->
                 true ->
                     BaseTlsOpts ++ [{cacertfile, CaCertFile}];
                 false ->
-                    io:format("Warning: CA cert file ~s not found~n", [CaCertFile]),
+                    logger:warning("event=https_cacert_missing cacertfile=~ts", [CaCertFile]),
                     BaseTlsOpts
             end;
         _ ->

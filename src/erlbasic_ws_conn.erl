@@ -82,7 +82,7 @@ ws_execute(WsPid, InterpMod, InterpState, Line) ->
             throw({bad_interp_return, Other})
     catch
         Class:Reason:Stacktrace ->
-            error_logger:error_msg("CRASH in ws_handle_basic: ~p:~p~nStacktrace: ~p~n", [Class, Reason, Stacktrace]),
+            logger:error("event=interpreter_crash conn_type=websocket class=~p reason=~p stacktrace=~p", [Class, Reason, Stacktrace]),
             erlang:erase(output_pid),
             {error, [format_interpreter_error(Reason), "> "]}
     end.

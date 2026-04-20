@@ -158,7 +158,7 @@ tcp_execute(Socket, InterpMod, InterpState, Line) ->
         Class:Reason:Stacktrace ->
             catch inet:setopts(Socket, [{active, false}]),
             tcp_drain_async_socket_messages(Socket),
-            io:format("ERROR in handle_input: ~p:~p~nStack: ~p~n", [Class, Reason, Stacktrace]),
+            logger:error("event=interpreter_crash conn_type=tcp class=~p reason=~p stacktrace=~p", [Class, Reason, Stacktrace]),
             erlang:erase(output_pid),
             erlang:erase(output_socket),
             {error, [format_interpreter_error(Reason), "> "]}

@@ -55,7 +55,7 @@ websocket_info({'DOWN', _MonRef, process, Pid, Reason}, State = #{conn := Pid}) 
         {shutdown, _} ->
             {stop, State};
         _ ->
-            error_logger:error_msg("===== WebSocket interpreter process ~p CRASHED =====~nReason: ~p~n", [Pid, Reason]),
+            logger:error("event=websocket_process_crash pid=~p reason=~p", [Pid, Reason]),
             ErrorMsg = io_lib:format("\r\n?SYSTEM ERROR: Interpreter crashed - ~p\r\n", [Reason]),
             Utf8 = unicode:characters_to_binary(ErrorMsg),
             {reply, {text, Utf8}, State}
