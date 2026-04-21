@@ -2252,6 +2252,87 @@ s3_config_missing_file_is_ok_test() ->
         file:del_dir(TempDir)
     end.
 
+config_override_loads_sys_config_shape_test() ->
+    TempDir = temp_dir(),
+    ConfigPath = filename:join(TempDir, ".sys.override.config"),
+    OldOverrideFile = application:get_env(erlbasic, config_override_file),
+    OldStorageBackend = application:get_env(erlbasic, storage_backend),
+    OldEnableHttps = application:get_env(erlbasic, enable_https),
+    OldErlbasicKey = application:get_env(erlbasic, erlbasic),
+    try
+        ok = filelib:ensure_dir(filename:join([TempDir, "x"])),
+        ok = file:write_file(ConfigPath, <<
+            "[\n",
+            "  {erlbasic, [\n",
+            "    {storage_backend, s3},\n",
+            "    {enable_https, false}\n",
+            "  ]}\n",
+            "].\n"
+        >>),
+        ok = application:set_env(erlbasic, config_override_file, ConfigPath),
+        application:unset_env(erlbasic, storage_backend),
+        application:unset_env(erlbasic, enable_https),
+        application:unset_env(erlbasic, erlbasic),
+        ?assertEqual(ok, erlbasic_config_override:load()),
+        ?assertEqual({ok, s3}, application:get_env(erlbasic, storage_backend)),
+        ?assertEqual({ok, false}, application:get_env(erlbasic, enable_https)),
+        ?assertEqual(undefined, application:get_env(erlbasic, erlbasic))
+    after
+        restore_app_env(config_override_file, OldOverrideFile),
+        restore_app_env(storage_backend, OldStorageBackend),
+        restore_app_env(enable_https, OldEnableHttps),
+        restore_app_env(erlbasic, OldErlbasicKey),
+        file:delete(ConfigPath),
+        file:del_dir(TempDir)
+    end.
+
+s3_startup_status_ok_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        ?assertEqual({s3, ok, erlbasic_storage_s3_test_backend}, erlbasic_storage:startup_status())
+    after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
+    end.
+
+s3_startup_status_failure_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        ok = erlbasic_storage_s3_test_backend:set_fail_lists(true),
+        ?assertEqual(
+            {s3, {error, forced_list_failure}, erlbasic_storage_s3_test_backend},
+            erlbasic_storage:startup_status()
+        )
+    after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
+    end.
+
+s3_startup_status_creates_missing_bucket_test() ->
+    OldBackend = application:get_env(erlbasic, storage_backend),
+    OldS3Module = application:get_env(erlbasic, storage_s3_module),
+    try
+        ok = erlbasic_storage_s3_test_backend:reset(),
+        ok = application:set_env(erlbasic, storage_backend, s3),
+        ok = application:set_env(erlbasic, storage_s3_module, erlbasic_storage_s3_test_backend),
+        ok = erlbasic_storage_s3_test_backend:set_missing_bucket(true),
+        ?assertEqual({s3, ok, erlbasic_storage_s3_test_backend}, erlbasic_storage:startup_status())
+    after
+        restore_app_env(storage_backend, OldBackend),
+        restore_app_env(storage_s3_module, OldS3Module),
+        ok = erlbasic_storage_s3_test_backend:reset()
+    end.
+
 s3_fileio_output_print_close_uploads_test() ->
     OldBackend = application:get_env(erlbasic, storage_backend),
     OldS3Module = application:get_env(erlbasic, storage_s3_module),

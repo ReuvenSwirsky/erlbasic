@@ -2,7 +2,7 @@
 
 -behaviour(erlbasic_storage_backend).
 
--export([read/1, write/2, list/1, delete/1, key_exists/1]).
+-export([read/1, write/2, list/1, delete/1, key_exists/1, ensure_bucket/0]).
 
 -include_lib("erlcloud/include/erlcloud_aws.hrl").
 
@@ -82,6 +82,15 @@ with_s3(Fun) ->
             Err
     end.
 
+ensure_bucket() ->
+    _ = ensure_s3_apps_started(),
+    case s3_settings() of
+        {ok, Bucket, _Prefix, Config} ->
+            ensure_bucket(Bucket, Config);
+        {error, _} = Err ->
+            Err
+    end.
+
 s3_settings() ->
     Bucket = env_string(storage_s3_bucket, undefined),
     Prefix = env_string(storage_s3_prefix, ""),
@@ -144,6 +153,57 @@ maybe_apply_region(Config, []) ->
     Config;
 maybe_apply_region(Config, Region) when is_list(Region) ->
     erlcloud_aws:service_config(s3, Region, Config).
+
+ensure_bucket(Bucket, Config) ->
+    try erlcloud_s3:create_bucket(Bucket, private, bucket_location_constraint(), Config) of
+        ok -> ok;
+        Other -> {error, {unexpected_s3_response, Other}}
+    catch
+        throw:{aws_error, Reason} ->
+            case is_bucket_already_present(Reason) of
+                true -> ok;
+                false -> {error, Reason}
+            end;
+        error:{aws_error, Reason} ->
+            case is_bucket_already_present(Reason) of
+                true -> ok;
+                false -> {error, Reason}
+            end;
+        Class:Reason ->
+            {error, {Class, Reason}}
+    end.
+
+bucket_location_constraint() ->
+    case env_string(storage_s3_region, os:getenv("AWS_DEFAULT_REGION")) of
+        undefined -> none;
+        [] -> none;
+        "us-east-1" -> 'us-east-1';
+        "us-east-2" -> 'us-east-2';
+        "us-west-1" -> 'us-west-1';
+        "us-west-2" -> 'us-west-2';
+        "ca-central-1" -> 'ca-central-1';
+        "eu-west-1" -> 'eu-west-1';
+        "eu-west-2" -> 'eu-west-2';
+        "eu-west-3" -> 'eu-west-3';
+        "eu-north-1" -> 'eu-north-1';
+        "eu-central-1" -> 'eu-central-1';
+        "ap-south-1" -> 'ap-south-1';
+        "ap-southeast-1" -> 'ap-southeast-1';
+        "ap-southeast-2" -> 'ap-southeast-2';
+        "ap-northeast-1" -> 'ap-northeast-1';
+        "ap-northeast-2" -> 'ap-northeast-2';
+        "ap-northeast-3" -> 'ap-northeast-3';
+        "ap-east-1" -> 'ap-east-1';
+        "me-south-1" -> 'me-south-1';
+        "sa-east-1" -> 'sa-east-1';
+        _ -> none
+    end.
+
+is_bucket_already_present(Reason) ->
+    ReasonText = string:to_lower(lists:flatten(io_lib:format("~0p", [Reason]))),
+    string:str(ReasonText, "bucketalreadyownedbyyou") > 0 orelse
+        string:str(ReasonText, "bucket already owned by you") > 0 orelse
+        string:str(ReasonText, "bucketalreadyexists") > 0.
 
 env_string(Key, Default) ->
     case application:get_env(erlbasic, Key) of

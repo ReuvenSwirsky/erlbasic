@@ -31,11 +31,16 @@ apply_terms(Terms) ->
 normalize_terms([{erlbasic, Entries}]) when is_list(Entries) ->
     filter_entries(Entries);
 normalize_terms([Entries]) when is_list(Entries) ->
-    filter_entries(Entries);
+    normalize_nested_entries(Entries);
 normalize_terms(Entries) when is_list(Entries) ->
     filter_entries(Entries);
 normalize_terms(_Other) ->
     [].
+
+normalize_nested_entries([{erlbasic, Entries}]) when is_list(Entries) ->
+    filter_entries(Entries);
+normalize_nested_entries(Entries) ->
+    filter_entries(Entries).
 
 filter_entries(Entries) ->
     [{Key, Value} || {Key, Value} <- Entries, is_atom(Key)].

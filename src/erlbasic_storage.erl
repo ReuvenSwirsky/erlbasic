@@ -34,7 +34,10 @@
          program_path_for_write/1,
          user_dir/0,
          user_ppn_string/0,
-         ensure_user_dir/0]).
+         ensure_user_dir/0,
+         startup_status/0]).
+
+-define(S3_STARTUP_PROBE_PREFIX, "__erlbasic_startup_probe__").
 
 %% ===================================================================
 %% Public API
@@ -219,6 +222,14 @@ ensure_user_dir() ->
             {ok, user_dir()}
     end.
 
+startup_status() ->
+    case application:get_env(erlbasic, storage_backend, local) of
+        s3 ->
+            startup_status_s3(storage_s3_module());
+        Backend ->
+            {Backend, skipped}
+    end.
+
 %% ===================================================================
 %% Internal helpers
 %% ===================================================================
@@ -235,6 +246,58 @@ storage_s3_module() ->
         {ok, Module} when is_atom(Module) -> Module;
         _ -> erlbasic_storage_s3
     end.
+
+startup_status_s3(Module) ->
+    case run_s3_startup_probe(Module) of
+        {ok, _Entries} ->
+            {s3, ok, Module};
+        {error, Reason} ->
+            case maybe_create_missing_s3_bucket(Module, Reason) of
+                ok ->
+                    case run_s3_startup_probe(Module) of
+                        {ok, _RetryEntries} ->
+                            {s3, ok, Module};
+                        {error, RetryReason} ->
+                            {s3, {error, RetryReason}, Module}
+                    end;
+                {error, _} ->
+                    {s3, {error, Reason}, Module};
+                skip ->
+                    {s3, {error, Reason}, Module}
+            end
+    end.
+
+run_s3_startup_probe(Module) ->
+    try apply(Module, list, [?S3_STARTUP_PROBE_PREFIX]) of
+        {ok, _Entries} = Ok ->
+            Ok;
+        {error, _Reason} = Err ->
+            Err;
+        Other ->
+            {error, {unexpected_response, Other}}
+    catch
+        Class:Reason ->
+            {error, {Class, Reason}}
+    end.
+
+maybe_create_missing_s3_bucket(Module, Reason) ->
+    case is_missing_s3_bucket_reason(Reason) andalso module_supports_ensure_bucket(Module) of
+        true ->
+            apply(Module, ensure_bucket, []);
+        false ->
+            skip
+    end.
+
+module_supports_ensure_bucket(Module) ->
+    case code:ensure_loaded(Module) of
+        {module, Module} -> erlang:function_exported(Module, ensure_bucket, 0);
+        _ -> false
+    end.
+
+is_missing_s3_bucket_reason(Reason) ->
+    ReasonText = string:to_lower(lists:flatten(io_lib:format("~0p", [Reason]))),
+    string:str(ReasonText, "nosuchbucket") > 0 orelse
+        string:str(ReasonText, "bucket does not exist") > 0.
 
 user_prefix() ->
     user_subdir().
