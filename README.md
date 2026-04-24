@@ -62,10 +62,18 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 .\build.ps1
 ```
 
+```bash
+./build.sh
+```
+
 ## Run
 
 ```powershell
 .\run.ps1
+```
+
+```bash
+./run.sh
 ```
 
 The BASIC terminal server listens on port **5555** (TCP). The web interface listens on port **8081** (HTTP).
@@ -134,6 +142,12 @@ For development with self-signed certificates:
 pwsh generate_certs.ps1
 # In sys.config, ensure {enable_https, true}
 pwsh run.ps1
+```
+
+On Ubuntu, use the same certificate setup step and then start the server with:
+
+```bash
+./run.sh
 ```
 
 Access via `https://localhost:8443/`. For production Let's Encrypt deployment see [CERTBOT_DEPLOYMENT.md](CERTBOT_DEPLOYMENT.md). For localhost/LAN testing see [HTTPS_TESTING.md](HTTPS_TESTING.md).
@@ -224,6 +238,10 @@ See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase is
 .\run_all.ps1
 ```
 
+```bash
+./run_all.sh
+```
+
 This runs, in order:
 1. **Build** — `rebar3 compile`
 2. **EUnit tests** — unit tests in `eunit_tests/`
@@ -237,6 +255,12 @@ This runs, in order:
 .\run_tests.ps1               # EUnit + smoke tests only
 .\run_perf_tests.ps1          # Pass/fail perf gate only
 .\run_textlife_benchmark.ps1  # Detailed benchmark only
+```
+
+```bash
+./run_tests.sh                # EUnit + smoke tests only
+./run_perf_tests.sh           # Pass/fail perf gate only
+./run_textlife_benchmark.sh   # Detailed benchmark only
 ```
 
 The EUnit suite includes a compressed WebSocket integration test that performs a real login plus `INPUT` roundtrip against a temporary Cowboy listener.
