@@ -462,6 +462,56 @@ websocket_implicit_boundary_flush_test() ->
         ok
     end.
 
+websocket_asciilife_streaming_is_batched_test() ->
+    PrevOutputPid = erlang:get(output_pid),
+    PrevOutputSocket = erlang:get(output_socket),
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    _ = collect_output_messages(),
+    erlang:erase(output_socket),
+    erlang:put(output_pid, self()),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        {ok, Content} = file:read_file("examples/asciilife.bas"),
+        Lines0 = [
+            string:trim(unicode:characters_to_list(Line))
+            || Line <- binary:split(Content, <<"\n">>, [global, trim_all]),
+               string:trim(unicode:characters_to_list(Line)) =/= ""
+        ],
+        Lines = shorten_asciilife_lines(Lines0),
+        State0 = erlbasic_interp:new_state(),
+        State1 = lists:foldl(fun(Line, StateAcc) ->
+            {NewState, _Output} = erlbasic_interp:handle_input(Line, StateAcc),
+            NewState
+        end, State0, Lines),
+        {_FinalState, RunOutput} = erlbasic_interp:handle_input("RUN", State1),
+        ?assertEqual("Program ended\r\n", lists:flatten(RunOutput)),
+        Chunks = [
+            binary_to_list(iolist_to_binary(Chunk))
+            || Chunk <- collect_output_messages(),
+               iolist_to_binary(Chunk) =/= <<>>
+        ],
+        ?assert(length(Chunks) > 0),
+        StreamedText = lists:flatten(Chunks),
+        ?assertEqual(match, re:run(StreamedText, "Initializing Text Life", [{capture, none}])),
+        ?assertEqual(match, re:run(StreamedText, "\\e\\[1;1H", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(lists:flatten(RunOutput), "Initializing Text Life", [{capture, none}]))
+    after
+        case PrevOutputPid of
+            undefined -> erlang:erase(output_pid);
+            _ -> erlang:put(output_pid, PrevOutputPid)
+        end,
+        case PrevOutputSocket of
+            undefined -> erlang:erase(output_socket);
+            _ -> erlang:put(output_socket, PrevOutputSocket)
+        end,
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end,
+        _ = collect_output_messages(),
+        ok
+    end.
+
 compressed_websocket_input_roundtrip_test() ->
     Dir = accounts_setup(),
     WatchdogState = ensure_mem_watchdog_started(),
@@ -2754,6 +2804,17 @@ collect_output_messages(Acc) ->
     after 0 ->
         lists:reverse(Acc)
     end.
+
+shorten_asciilife_lines(Lines) ->
+    [
+        case Line of
+            "60 LET W% = 60" -> "60 LET W% = 20";
+            "70 LET H% = 20" -> "70 LET H% = 8";
+            "250 FOR GEN% = 1 TO 500" -> "250 FOR GEN% = 1 TO 3";
+            _ -> Line
+        end
+        || Line <- Lines
+    ].
 
 ensure_mem_watchdog_started() ->
     case whereis(erlbasic_mem_watchdog) of

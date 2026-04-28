@@ -1991,28 +1991,42 @@ flush_output(Acc) ->
             lists:foreach(fun(Text) -> gen_tcp:send(Socket, Text) end, Output)
     end.
 
-%% Batch consecutive graphics control frames into a single websocket frame.
-%% This drastically reduces per-frame overhead for large BUFFER+FLUSH updates.
+%% Batch websocket output aggressively so animation loops do not flood the
+%% browser with tiny frames. Consecutive text fragments are merged into a
+%% single frame, and consecutive GFX control frames are packed together.
 pack_websocket_output(Output) ->
-    lists:reverse(pack_websocket_output(Output, [], [])).
+    lists:reverse(pack_websocket_output(Output, [], [], [])).
 
-pack_websocket_output([], AccRev, []) ->
+pack_websocket_output([], AccRev, [], []) ->
     AccRev;
-pack_websocket_output([], AccRev, GfxCmdsRev) ->
-    [make_gfx_batch_frame(GfxCmdsRev) | AccRev];
-pack_websocket_output([Text | Rest], AccRev, GfxCmdsRev) ->
+pack_websocket_output([], AccRev, TextRev, GfxCmdsRev) ->
+    flush_packed_frames(AccRev, TextRev, GfxCmdsRev);
+pack_websocket_output([Text | Rest], AccRev, TextRev, GfxCmdsRev) ->
     Bin = iolist_to_binary(Text),
     case Bin of
         <<2, "GFX:", Cmd/binary>> ->
-            pack_websocket_output(Rest, AccRev, [Cmd | GfxCmdsRev]);
+            NextAccRev = flush_text_frames(AccRev, TextRev),
+            pack_websocket_output(Rest, NextAccRev, [], [Cmd | GfxCmdsRev]);
+        <<2, _/binary>> ->
+            NextAccRev = flush_packed_frames(AccRev, TextRev, GfxCmdsRev),
+            pack_websocket_output(Rest, [Bin | NextAccRev], [], []);
         _ ->
-            NextAccRev =
-                case GfxCmdsRev of
-                    [] -> AccRev;
-                    _ -> [make_gfx_batch_frame(GfxCmdsRev) | AccRev]
-                end,
-            pack_websocket_output(Rest, [Bin | NextAccRev], [])
+            NextAccRev = flush_gfx_frames(AccRev, GfxCmdsRev),
+            pack_websocket_output(Rest, NextAccRev, [Bin | TextRev], [])
     end.
+
+flush_packed_frames(AccRev, TextRev, GfxCmdsRev) ->
+    flush_gfx_frames(flush_text_frames(AccRev, TextRev), GfxCmdsRev).
+
+flush_text_frames(AccRev, []) ->
+    AccRev;
+flush_text_frames(AccRev, TextRev) ->
+    [iolist_to_binary(lists:reverse(TextRev)) | AccRev].
+
+flush_gfx_frames(AccRev, []) ->
+    AccRev;
+flush_gfx_frames(AccRev, GfxCmdsRev) ->
+    [make_gfx_batch_frame(GfxCmdsRev) | AccRev].
 
 make_gfx_batch_frame([SingleCmd]) ->
     <<2, "GFX:", SingleCmd/binary>>;
