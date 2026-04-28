@@ -1,0 +1,15 @@
+services:
+  erlbasic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: erlbasic:latest
+    ports:
+      - "5555:5555"
+      - "8081:8081"
+    volumes:
+      - erlbasic_data:/data/erlbasic/users
+    restart: unless-stopped
+
+volumes:
+  erlbasic_data:

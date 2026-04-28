@@ -1,0 +1,10 @@
+_build/
+.git/
+.github/
+.vscode/
+*.log
+erl_crash.dump
+perf_tests/*history.txt
+credentials*
+.s3.config
+.sys.override.config

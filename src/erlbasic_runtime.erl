@@ -6,7 +6,11 @@
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
          hgr_output/0, hgr2_output/0, text_output/0,
-         eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
+         eval_pset/4, eval_pset/5,
+         eval_line/6, eval_line/7,
+         eval_lineto/7,
+         eval_rect/6, eval_rect/7,
+         eval_circle/5, eval_circle/6,
          eval_sound/6, execute_play/2, execute_sprite_stmt/2]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
