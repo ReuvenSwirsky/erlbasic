@@ -95,6 +95,18 @@ execute_stmt({circle, XExpr, YExpr, RadiusExpr, ColorExpr}, State) ->
                     {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
             end
     end;
+execute_stmt({circlef, XExpr, YExpr, RadiusExpr, ColorExpr}, State) ->
+    case State#state.graphics_mode of
+        false ->
+            {State, [erlbasic_eval:format_runtime_error(no_graphics_mode)]};
+        _ ->
+            case erlbasic_runtime:eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                {ok, Vars1, Output} ->
+                    {State#state{vars = Vars1}, Output};
+                {error, Reason, Vars1} ->
+                    {State#state{vars = Vars1}, [erlbasic_eval:format_runtime_error(Reason)]}
+            end
+    end;
 execute_stmt({locate, RowExpr, ColExpr}, State) ->
     case erlbasic_runtime:eval_locate(RowExpr, ColExpr, State#state.vars, State#state.funcs) of
         {ok, Vars1, Output} ->

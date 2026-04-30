@@ -536,6 +536,7 @@ execute_statement_single(Command, State) ->
         {lineto, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {rect, _, _, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {circle, _, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
+        {circlef, _, _, _, _} = Stmt -> erlbasic_graphics:execute_stmt(Stmt, State);
         {sleep_keypress} ->
             case State#state.char_buffer of
                 [_ | Rest] ->

@@ -496,6 +496,14 @@ parse_circle_stmt(TextToken) ->
             unknown
     end.
 
+parse_circlef_stmt(TextToken) ->
+    case re:run(trim_text(TextToken), "^\\(\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*,\\s*(.+?)\\s*,\\s*(.+)$", [{capture, [1, 2, 3, 4], list}]) of
+        {match, [XExpr, YExpr, RadiusExpr, ColorExpr]} ->
+            {circlef, XExpr, YExpr, RadiusExpr, ColorExpr};
+        nomatch ->
+            unknown
+    end.
+
 parse_pget_stmt(TextToken) ->
     case re:run(trim_text(TextToken), "^\\((.+),(.+)\\),(.+)$", [{capture, [1, 2, 3], list}]) of
         {match, [XExpr, YExpr, TargetText]} ->
@@ -548,16 +556,21 @@ parse_sprite_stmt(TextToken) ->
     end.
 
 parse_raw_stmt({raw_stmt, _Line, Command}) ->
-    case re:run(Command, "^COMMON\\s+(.+)$", [{capture, [1], list}]) of
-        {match, [VarList]} ->
-            Names = [string:trim(string:trim(V), both, "()") || V <- string:split(VarList, ",", all)],
-            Valid = [N || N <- Names, N =/= ""],
-            case Valid of
-                [] -> unknown;
-                _  -> {common, Valid}
-            end;
+    case re:run(Command, "(?i)^CIRCLEF\\s+(.+)$", [{capture, [1], list}]) of
+        {match, [ArgsText]} ->
+            parse_circlef_stmt({text, 0, ArgsText});
         nomatch ->
-            unknown
+            case re:run(Command, "^COMMON\\s+(.+)$", [{capture, [1], list}]) of
+                {match, [VarList]} ->
+                    Names = [string:trim(string:trim(V), both, "()") || V <- string:split(VarList, ",", all)],
+                    Valid = [N || N <- Names, N =/= ""],
+                    case Valid of
+                        [] -> unknown;
+                        _  -> {common, Valid}
+                    end;
+                nomatch ->
+                    unknown
+            end
     end.
 
 text_value({text, _Line, Rest}) ->

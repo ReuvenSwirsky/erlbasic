@@ -275,6 +275,15 @@ validate_statement(Stmt) ->
                     end;
                 error -> error
             end;
+        {circlef, XExpr, YExpr, RadiusExpr, ColorExpr} ->
+            case validate_expr_pair(XExpr, YExpr) of
+                ok ->
+                    case validate_expr_syntax(RadiusExpr) of
+                        ok -> validate_expr_syntax(ColorExpr);
+                        error -> error
+                    end;
+                error -> error
+            end;
         {sleep, Expr} ->
             validate_expr_syntax(Expr);
         {sleep_keypress} ->

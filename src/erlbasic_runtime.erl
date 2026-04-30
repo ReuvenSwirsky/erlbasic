@@ -11,6 +11,7 @@
          eval_lineto/7,
          eval_rect/6, eval_rect/7,
          eval_circle/5, eval_circle/6,
+         eval_circlef/5, eval_circlef/6,
          eval_sound/6, execute_play/2, execute_sprite_stmt/2]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
@@ -833,6 +834,18 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
                     end
             end;
+        {circlef, XExpr, YExpr, RadiusExpr, ColorExpr} ->
+            case State#state.graphics_mode of
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
+                    case eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                        {ok, Vars1, Output} ->
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {error, Reason, _Vars1} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
+            end;
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
@@ -1511,6 +1524,8 @@ record_home_gfx("RECT:~B:~B:~B:~B:~B", [X1, Y1, X2, Y2, C]) ->
     erlbasic_home_screen:record_gfx({rect, X1, Y1, X2, Y2, C});
 record_home_gfx("CIRCLE:~B:~B:~B:~B", [X, Y, R, C]) ->
     erlbasic_home_screen:record_gfx({circle, X, Y, R, C});
+record_home_gfx("CIRCLEF:~B:~B:~B:~B", [X, Y, R, C]) ->
+    erlbasic_home_screen:record_gfx({circlef, X, Y, R, C});
 record_home_gfx(_, _) ->
     ok.
 
@@ -2228,6 +2243,22 @@ eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, Vars, Funcs) ->
             IR = erlbasic_eval:normalize_int(R),
             IC = erlbasic_eval:normalize_int(C) band 15,
             Output = graphics_output("CIRCLE:~B:~B:~B:~B", [IX, IY, IR, IC]),
+            {ok, Vars4, Output};
+        {error, Reason, VarsErr} ->
+            {error, Reason, VarsErr}
+    end.
+
+eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, Vars) ->
+    eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, Vars, #{}).
+
+eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, Vars, Funcs) ->
+    case eval_exprs([XExpr, YExpr, RadiusExpr, ColorExpr], Vars, Funcs) of
+        {ok, [{X, _}, {Y, _}, {R, _}, {C, Vars4}]} ->
+            IX = erlbasic_eval:normalize_int(X),
+            IY = erlbasic_eval:normalize_int(Y),
+            IR = erlbasic_eval:normalize_int(R),
+            IC = erlbasic_eval:normalize_int(C) band 15,
+            Output = graphics_output("CIRCLEF:~B:~B:~B:~B", [IX, IY, IR, IC]),
             {ok, Vars4, Output};
         {error, Reason, VarsErr} ->
             {error, Reason, VarsErr}

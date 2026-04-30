@@ -421,6 +421,18 @@
           break;
         }
 
+        case 'CIRCLEF': {
+          const cx = parseInt(parts[1]);
+          const cy = parseInt(parts[2]);
+          const r  = parseInt(parts[3]);
+          const cc = parseInt(parts[4]) & 15;
+          ctx.fillStyle = palette[cc];
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+          ctx.fill();
+          break;
+        }
+
         case 'GCLS':
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 800, graphicsMode === 'hgr2' ? 480 : 600);

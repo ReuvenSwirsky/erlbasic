@@ -50,7 +50,7 @@ keyword_consistency_union_reserved_test() ->
 all_keywords_reserved_variable_names_test() ->
     ReservedNames = [
         "AND", "MOD", "PRINT", "INPUT", "TIMER",
-        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$", "TRON", "TROFF"
+        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$", "TRON", "TROFF", "CIRCLEF"
     ],
     lists:foreach(fun(Name) ->
         ?assertEqual({error, reserved_word},
@@ -239,6 +239,28 @@ sound_parse_and_validate_test() ->
     ?assertEqual({sound, "0", "120", "10", "8"},
         erlbasic_parser:parse_statement("SOUND 0,120,10,8")),
     ?assertEqual(ok, erlbasic_parser:validate_program_line("SOUND 0,120,10,8")).
+
+circlef_parse_validate_and_output_test() ->
+    ?assertEqual({circlef, "100", "120", "20", "12"},
+        erlbasic_parser:parse_statement("CIRCLEF (100,120),20,12")),
+    ?assertEqual(ok,
+        erlbasic_parser:validate_program_line("CIRCLEF (100,120),20,12")),
+    ?assertEqual({error, reserved_word},
+        erlbasic_parser:validate_program_line("LET CIRCLEF = 1")),
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        State0 = erlbasic_interp:new_state(),
+        {State1, _} = erlbasic_interp:handle_input("HGR2", State0),
+        {_State2, Output} = erlbasic_interp:handle_input("CIRCLEF (150,200),30,12", State1),
+        Text = lists:flatten(Output),
+        ?assertEqual(match, re:run(Text, "\\x02GFX:CIRCLEF:150:200:30:12", [{capture, none}]))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
 
 sprite_parse_and_validate_test() ->
     ?assertEqual({on_sprite_gosub, "200"},
