@@ -200,7 +200,7 @@ RUN
 
 ## Architecture Notes
 
-- Time-sharing and distributed-node roadmap: [TIMESHARING_DISTRIBUTION_ARCHITECTURE.md](TIMESHARING_DISTRIBUTION_ARCHITECTURE.md)
+- Time-sharing and distributed-node roadmap: [TIMESHARING_DISTRIBUTION_ARCHITECTURE.md](docs/TIMESHARING_DISTRIBUTION_ARCHITECTURE.md)
 
 ## Syntax Reference
 
@@ -208,7 +208,7 @@ See [Basic_Syntax.md](Basic_Syntax.md) for full syntax documentation.
 
 ## Roadmap
 
-See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase issue list.
+See [ISSUE_LIST.md](docs/ISSUE_LIST.md) for the prioritized backlog and next-phase issue list.
 
 ## Examples
 
