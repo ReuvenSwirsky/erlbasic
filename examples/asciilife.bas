@@ -49,6 +49,7 @@
 490       GRID&(X%, Y%) = NEXTGRID&(X%, Y%)
 500     NEXT X%
 510   NEXT Y%
+515   FLUSH
 520 NEXT GEN%
 530 REM End simulation
 540 LOCATE 23, 1
