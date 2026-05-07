@@ -151,7 +151,7 @@ On Ubuntu, use the same certificate setup step and then start the server with:
 ./run.sh
 ```
 
-Access via `https://localhost:8443/`. For production Let's Encrypt deployment see [CERTBOT_DEPLOYMENT.md](CERTBOT_DEPLOYMENT.md). For localhost/LAN testing see [HTTPS_TESTING.md](HTTPS_TESTING.md).
+Access via `https://localhost:8443/`. For production Let's Encrypt deployment see [CERTBOT_DEPLOYMENT.md](docs/CERTBOT_DEPLOYMENT.md). For localhost/LAN testing see [HTTPS_TESTING.md](docs/HTTPS_TESTING.md).
 
 ## User Homepages
 
