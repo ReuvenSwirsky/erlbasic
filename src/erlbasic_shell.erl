@@ -63,12 +63,13 @@ start_session(P, N, Pw) ->
                 ok ->
                     InterpreterMod = select_interpreter(P, N),
                     erlang:put(erlbasic_ppn, {P, N}),
-                    State = InterpreterMod:new_state(),
+                    State0 = InterpreterMod:new_state(),
                     NameStr = binary_to_list(Name),
+                    {State, WelcomeTail} = login_welcome_tail(InterpreterMod, State0),
                     Welcome = [
                         io_lib:format(" ~s  ~s\r\n", [format_ppn(P, N), NameStr]),
                         quota_welcome_lines(P, N),
-                        "\r\n Ready\r\n"
+                        WelcomeTail
                     ],
                     {ok, #{
                         ppn => {P, N},
@@ -83,6 +84,31 @@ start_session(P, N, Pw) ->
         {error, _} ->
             {error, login_failure}
     end.
+
+login_welcome_tail(InterpreterMod, State0) ->
+    case erlbasic_storage:read_program("HELLO.BAS") of
+        {ok, Bin} ->
+            run_private_hello_program(InterpreterMod, State0, Bin);
+        {error, enoent} ->
+            {State0, ["\r\n Ready\r\n"]};
+        {error, _Reason} ->
+            {State0, ["\r\n?FILE ERROR\r\n"]}
+    end.
+
+run_private_hello_program(InterpreterMod, State0, Bin) ->
+    Lines = [string:trim(Line, trailing, "\r") || Line <- string:split(binary_to_list(Bin), "\n", all)],
+    NonEmptyLines = [Line || Line <- Lines, Line =/= ""],
+    {LoadedState, LoadOutput} =
+        lists:foldl(
+            fun(Line, {StateAcc, OutputAcc}) ->
+                {NextState, LineOutput} = InterpreterMod:handle_input(Line, StateAcc),
+                {NextState, OutputAcc ++ LineOutput}
+            end,
+            {State0, []},
+            NonEmptyLines
+        ),
+    {RunState, RunOutput} = InterpreterMod:handle_input("RUN", LoadedState),
+    {RunState, ["\r\n" | LoadOutput ++ RunOutput]}.
 
 unregister_current_session() ->
     case erlang:get(erlbasic_ppn) of

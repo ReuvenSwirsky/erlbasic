@@ -995,6 +995,36 @@ session_counter_cleanup_on_process_exit_test() ->
         cleanup_mem_watchdog(WatchdogState)
     end.
 
+start_session_runs_user_hello_bas_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    HelloPath = filename:join([TempDir, "ErlUsers", "10_5", "HELLO.BAS"]),
+    WatchdogState = ensure_mem_watchdog_started(),
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        ok = erlbasic_accounts:create_account(10, 5, "PASSWORD", "Test User"),
+        erlang:put(erlbasic_ppn, {10, 5}),
+        {ok, _} = erlbasic_storage:ensure_user_dir(),
+        ok = file:write_file(HelloPath, <<"10 PRINT \"HELLO LOGIN\"\n">>),
+        erlang:erase(erlbasic_ppn),
+        {ok, SessionInfo} = erlbasic_shell:start_session(10, 5, "PASSWORD"),
+        WelcomeText = lists:flatten(maps:get(welcome, SessionInfo)),
+        ?assertEqual(match, re:run(WelcomeText, "HELLO LOGIN\\r\\n", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(WelcomeText, " Ready\\r\\n", [{capture, none}])),
+        erlbasic_shell:unregister_current_session()
+    after
+        erlang:erase(erlbasic_ppn),
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        cleanup_mem_watchdog(WatchdogState),
+        file:delete(HelloPath),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "10_5"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
+    end.
+
 %% ===========================================================================  
 %% parse_hello / login syntax tests
 %% ===========================================================================  

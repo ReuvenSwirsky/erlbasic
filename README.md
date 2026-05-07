@@ -14,6 +14,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
 - **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and renders the output as a styled HTML page at `/:username`; text output is captured as coloured terminal panels; `HGR`/`HGR2` graphics output is captured as inline SVG panels; `HOME PUBLISH` flushes the current screen as a panel and resets for the next one — multiple panels per page are supported
+- **Login startup program**: if a user has a `HELLO.BAS` saved in their private program directory, it is automatically loaded and run immediately after successful login, before the normal `Ready` prompt; if no such file exists the session starts normally
 - RSTS/E-style PPN login (`[Project,Programmer]`) with PBKDF2-SHA256 password hashing
 - Per-user disk quotas, per-session memory quotas (watchdog process), per-PPN session limits
 - HTTPS support (self-signed or Let's Encrypt)
