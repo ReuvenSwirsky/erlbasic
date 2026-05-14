@@ -50,7 +50,7 @@ keyword_consistency_union_reserved_test() ->
 all_keywords_reserved_variable_names_test() ->
     ReservedNames = [
         "AND", "MOD", "PRINT", "INPUT", "TIMER",
-        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$", "TRON", "TROFF"
+        "ON", "ERROR", "RESUME", "HGR", "PSET", "SOUND", "STRING$", "TRON", "TROFF", "CIRCLEF"
     ],
     lists:foreach(fun(Name) ->
         ?assertEqual({error, reserved_word},
@@ -239,6 +239,28 @@ sound_parse_and_validate_test() ->
     ?assertEqual({sound, "0", "120", "10", "8"},
         erlbasic_parser:parse_statement("SOUND 0,120,10,8")),
     ?assertEqual(ok, erlbasic_parser:validate_program_line("SOUND 0,120,10,8")).
+
+circlef_parse_validate_and_output_test() ->
+    ?assertEqual({circlef, "100", "120", "20", "12"},
+        erlbasic_parser:parse_statement("CIRCLEF (100,120),20,12")),
+    ?assertEqual(ok,
+        erlbasic_parser:validate_program_line("CIRCLEF (100,120),20,12")),
+    ?assertEqual({error, reserved_word},
+        erlbasic_parser:validate_program_line("LET CIRCLEF = 1")),
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        State0 = erlbasic_interp:new_state(),
+        {State1, _} = erlbasic_interp:handle_input("HGR2", State0),
+        {_State2, Output} = erlbasic_interp:handle_input("CIRCLEF (150,200),30,12", State1),
+        Text = lists:flatten(Output),
+        ?assertEqual(match, re:run(Text, "\\x02GFX:CIRCLEF:150:200:30:12", [{capture, none}]))
+    after
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end
+    end.
 
 sprite_parse_and_validate_test() ->
     ?assertEqual({on_sprite_gosub, "200"},
@@ -445,6 +467,56 @@ websocket_implicit_boundary_flush_test() ->
         Chunks = [binary_to_list(iolist_to_binary(B)) || B <- collect_output_messages()],
         XChunks = [Chunk || Chunk <- Chunks, Chunk =:= "X"],
         ?assertEqual(3, length(XChunks))
+    after
+        case PrevOutputPid of
+            undefined -> erlang:erase(output_pid);
+            _ -> erlang:put(output_pid, PrevOutputPid)
+        end,
+        case PrevOutputSocket of
+            undefined -> erlang:erase(output_socket);
+            _ -> erlang:put(output_socket, PrevOutputSocket)
+        end,
+        case PrevConnType of
+            undefined -> erlang:erase(erlbasic_conn_type);
+            _ -> erlang:put(erlbasic_conn_type, PrevConnType)
+        end,
+        _ = collect_output_messages(),
+        ok
+    end.
+
+websocket_asciilife_streaming_is_batched_test() ->
+    PrevOutputPid = erlang:get(output_pid),
+    PrevOutputSocket = erlang:get(output_socket),
+    PrevConnType = erlang:get(erlbasic_conn_type),
+    _ = collect_output_messages(),
+    erlang:erase(output_socket),
+    erlang:put(output_pid, self()),
+    erlang:put(erlbasic_conn_type, websocket),
+    try
+        {ok, Content} = file:read_file("examples/asciilife.bas"),
+        Lines0 = [
+            string:trim(unicode:characters_to_list(Line))
+            || Line <- binary:split(Content, <<"\n">>, [global, trim_all]),
+               string:trim(unicode:characters_to_list(Line)) =/= ""
+        ],
+        Lines = shorten_asciilife_lines(Lines0),
+        State0 = erlbasic_interp:new_state(),
+        State1 = lists:foldl(fun(Line, StateAcc) ->
+            {NewState, _Output} = erlbasic_interp:handle_input(Line, StateAcc),
+            NewState
+        end, State0, Lines),
+        {_FinalState, RunOutput} = erlbasic_interp:handle_input("RUN", State1),
+        ?assertEqual("Program ended\r\n", lists:flatten(RunOutput)),
+        Chunks = [
+            binary_to_list(iolist_to_binary(Chunk))
+            || Chunk <- collect_output_messages(),
+               iolist_to_binary(Chunk) =/= <<>>
+        ],
+        ?assert(length(Chunks) > 0),
+        StreamedText = lists:flatten(Chunks),
+        ?assertEqual(match, re:run(StreamedText, "Initializing Text Life", [{capture, none}])),
+        ?assertEqual(match, re:run(StreamedText, "\\e\\[1;1H", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(lists:flatten(RunOutput), "Initializing Text Life", [{capture, none}]))
     after
         case PrevOutputPid of
             undefined -> erlang:erase(output_pid);
@@ -921,6 +993,36 @@ session_counter_cleanup_on_process_exit_test() ->
         timer:sleep(100)
     after
         cleanup_mem_watchdog(WatchdogState)
+    end.
+
+start_session_runs_user_hello_bas_test() ->
+    TempDir = temp_dir(),
+    OldHome = os:getenv("HOME"),
+    OldUserProfile = os:getenv("USERPROFILE"),
+    HelloPath = filename:join([TempDir, "ErlUsers", "10_5", "HELLO.BAS"]),
+    WatchdogState = ensure_mem_watchdog_started(),
+    try
+        true = os:putenv("HOME", TempDir),
+        true = os:putenv("USERPROFILE", TempDir),
+        ok = erlbasic_accounts:create_account(10, 5, "PASSWORD", "Test User"),
+        erlang:put(erlbasic_ppn, {10, 5}),
+        {ok, _} = erlbasic_storage:ensure_user_dir(),
+        ok = file:write_file(HelloPath, <<"10 PRINT \"HELLO LOGIN\"\n">>),
+        erlang:erase(erlbasic_ppn),
+        {ok, SessionInfo} = erlbasic_shell:start_session(10, 5, "PASSWORD"),
+        WelcomeText = lists:flatten(maps:get(welcome, SessionInfo)),
+        ?assertEqual(match, re:run(WelcomeText, "HELLO LOGIN\\r\\n", [{capture, none}])),
+        ?assertEqual(nomatch, re:run(WelcomeText, " Ready\\r\\n", [{capture, none}])),
+        erlbasic_shell:unregister_current_session()
+    after
+        erlang:erase(erlbasic_ppn),
+        restore_env("HOME", OldHome),
+        restore_env("USERPROFILE", OldUserProfile),
+        cleanup_mem_watchdog(WatchdogState),
+        file:delete(HelloPath),
+        file:del_dir(filename:join([TempDir, "ErlUsers", "10_5"])),
+        file:del_dir(filename:join(TempDir, "ErlUsers")),
+        file:del_dir(TempDir)
     end.
 
 %% ===========================================================================  
@@ -2754,6 +2856,17 @@ collect_output_messages(Acc) ->
     after 0 ->
         lists:reverse(Acc)
     end.
+
+shorten_asciilife_lines(Lines) ->
+    [
+        case Line of
+            "60 LET W% = 60" -> "60 LET W% = 20";
+            "70 LET H% = 20" -> "70 LET H% = 8";
+            "250 FOR GEN% = 1 TO 500" -> "250 FOR GEN% = 1 TO 3";
+            _ -> Line
+        end
+        || Line <- Lines
+    ].
 
 ensure_mem_watchdog_started() ->
     case whereis(erlbasic_mem_watchdog) of

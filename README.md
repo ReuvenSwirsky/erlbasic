@@ -14,6 +14,7 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 - Error handling: `ON ERROR GOTO`, `RESUME`, `RESUME NEXT`, `RESUME line`, `ERR`, `ERL`
 - File I/O: `OPEN`, `CLOSE`, `PRINT #`, `INPUT #`, `LINE INPUT #`, `WRITE #`, `FIELD`, `PUT #`, `GET #`, `EOF()`, `LOF()`, `LOC()` — sandboxed to user directory
 - **User homepages**: each user can place `HOME.BAS` in their program directory; the interpreter runs it server-side and renders the output as a styled HTML page at `/:username`; text output is captured as coloured terminal panels; `HGR`/`HGR2` graphics output is captured as inline SVG panels; `HOME PUBLISH` flushes the current screen as a panel and resets for the next one — multiple panels per page are supported
+- **Login startup program**: if a user has a `HELLO.BAS` saved in their private program directory, it is automatically loaded and run immediately after successful login, before the normal `Ready` prompt; if no such file exists the session starts normally
 - RSTS/E-style PPN login (`[Project,Programmer]`) with PBKDF2-SHA256 password hashing
 - Per-user disk quotas, per-session memory quotas (watchdog process), per-PPN session limits
 - HTTPS support (self-signed or Let's Encrypt)
@@ -62,10 +63,18 @@ A BASIC interpreter, implemented in Erlang, exposed over TCP/IP and WebSocket. E
 .\build.ps1
 ```
 
+```bash
+./build.sh
+```
+
 ## Run
 
 ```powershell
 .\run.ps1
+```
+
+```bash
+./run.sh
 ```
 
 The BASIC terminal server listens on port **5555** (TCP). The web interface listens on port **8081** (HTTP).
@@ -136,7 +145,13 @@ pwsh generate_certs.ps1
 pwsh run.ps1
 ```
 
-Access via `https://localhost:8443/`. For production Let's Encrypt deployment see [CERTBOT_DEPLOYMENT.md](CERTBOT_DEPLOYMENT.md). For localhost/LAN testing see [HTTPS_TESTING.md](HTTPS_TESTING.md).
+On Ubuntu, use the same certificate setup step and then start the server with:
+
+```bash
+./run.sh
+```
+
+Access via `https://localhost:8443/`. For production Let's Encrypt deployment see [CERTBOT_DEPLOYMENT.md](docs/CERTBOT_DEPLOYMENT.md). For localhost/LAN testing see [HTTPS_TESTING.md](docs/HTTPS_TESTING.md).
 
 ## User Homepages
 
@@ -224,6 +239,10 @@ See [ISSUE_LIST.md](ISSUE_LIST.md) for the prioritized backlog and next-phase is
 .\run_all.ps1
 ```
 
+```bash
+./run_all.sh
+```
+
 This runs, in order:
 1. **Build** — `rebar3 compile`
 2. **EUnit tests** — unit tests in `eunit_tests/`
@@ -237,6 +256,12 @@ This runs, in order:
 .\run_tests.ps1               # EUnit + smoke tests only
 .\run_perf_tests.ps1          # Pass/fail perf gate only
 .\run_textlife_benchmark.ps1  # Detailed benchmark only
+```
+
+```bash
+./run_tests.sh                # EUnit + smoke tests only
+./run_perf_tests.sh           # Pass/fail perf gate only
+./run_textlife_benchmark.sh   # Detailed benchmark only
 ```
 
 The EUnit suite includes a compressed WebSocket integration test that performs a real login plus `INPUT` roundtrip against a temporary Cowboy listener.

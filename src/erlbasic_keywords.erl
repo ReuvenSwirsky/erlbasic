@@ -36,7 +36,7 @@ list_keywords() ->
 
 reserved_only_keywords() ->
     [
-        "HGR", "HGR2", "TEXT", "PSET", "LINETO", "RECT", "CIRCLE", "ON", "ERROR", "RESUME", "FN"
+        "HGR", "HGR2", "TEXT", "PSET", "LINETO", "RECT", "CIRCLE", "CIRCLEF", "ON", "ERROR", "RESUME", "FN"
     ].
 
 %% Keywords recognized while tokenizing/evaluating expressions.

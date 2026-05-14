@@ -1,0 +1,195 @@
+10 REM TEMP_CONVERT.BAS
+20 REM Interactive converter with HGR2 thermometer + sound sweep.
+30 LET SOUNDK = 36000
+40 LET CH = 0
+50 LET DIST = 10
+60 LET VOL = 11
+65 LET HMAX = 80
+66 LET HN = 0
+67 DIM HC(80)
+70 GOSUB 9000
+80 HGR2
+90 GOTO 100
+100 LOCATE 22,1
+110 COLOR 14
+120 PRINT "TEMP CONVERTER  (HGR2)                                                "
+130 LOCATE 23,1
+140 COLOR 11
+150 PRINT "Mode: F=F->C, C=C->F, Q=Quit                                          "
+160 LOCATE 24,1
+170 COLOR 7
+180 PRINT "Type mode then ENTER:                                                 ";
+185 LOCATE 25,1
+186 PRINT STRING$(68, 32);
+188 LOCATE 25,1
+190 INPUT MODE$
+200 IF MODE$ = "Q" OR MODE$ = "q" THEN GOTO 9500
+210 IF MODE$ = "F" OR MODE$ = "f" THEN GOTO 400
+220 IF MODE$ = "C" OR MODE$ = "c" THEN GOTO 600
+230 LOCATE 25,1
+240 COLOR 12
+250 PRINT "Please enter F, C, or Q.                                              "
+260 COLOR 7
+270 SLEEP 0.6
+280 GOTO 100
+400 LOCATE 24,1
+410 COLOR 11
+420 PRINT "Enter Fahrenheit value then ENTER:                                    ";
+430 COLOR 7
+435 LOCATE 25,1
+436 PRINT STRING$(68, 32);
+438 LOCATE 25,1
+440 INPUT INVAL
+445 LET OUTVAL = (INVAL - 32) * 5 / 9
+450 LET CURC = OUTVAL
+460 LET SCALEMIN = -20
+470 LET SCALEMAX = 120
+480 LET INUNIT$ = "F"
+490 LET OUTUNIT$ = "C"
+500 GOSUB 1000
+510 GOTO 100
+600 LOCATE 24,1
+610 COLOR 11
+620 PRINT "Enter Celsius value then ENTER:                                       ";
+630 COLOR 7
+635 LOCATE 25,1
+636 PRINT STRING$(68, 32);
+638 LOCATE 25,1
+640 INPUT INVAL
+645 LET OUTVAL = (INVAL * 9 / 5) + 32
+650 LET CURC = INVAL
+660 LET SCALEMIN = -4
+670 LET SCALEMAX = 248
+680 LET INUNIT$ = "C"
+690 LET OUTUNIT$ = "F"
+700 GOSUB 1000
+710 GOTO 100
+1000 REM Draw and animate thermometer in HGR2 mode.
+1010 LET TX1 = 130
+1020 LET TX2 = 170
+1030 LET TYTOP = 70
+1040 LET TYBOT = 330
+1050 LET BCX = 150
+1060 LET BCY = 370
+1070 LET BR = 44
+1080 LET TIX1 = 140
+1090 LET TIX2 = 160
+1095 GOSUB 2000
+1096 GOSUB 3000
+1100 HGR2
+1110 RECT (0,0)-(799,479), 1
+1120 RECT (0,0)-(799,40), 3
+1130 LINE (0,40)-(799,40), 15
+1140 FOR I = 0 TO 10
+1150   LET YG = 60 + I * 36
+1160   LINE (260, YG)-(799, YG), 2
+1170 NEXT I
+1180 FOR I = 0 TO 8
+1190   LET XG = 260 + I * 67
+1200   LINE (XG, 50)-(XG, 430), 2
+1210 NEXT I
+1220 RECT (TX1, TYTOP)-(TX2, TYBOT), 15
+1230 CIRCLE (BCX, BCY), BR, 15
+1240 RECT (TIX1, TYTOP + 6)-(TIX2, TYBOT), 8
+1250 CIRCLEF (BCX, BCY), BR - 8, 12
+1252 CIRCLE (BCX, BCY), BR - 8, 12
+1260 FOR I = 0 TO 10
+1270   LET YT = TYBOT - I * 26
+1280   LINE (TX2 + 8, YT)-(TX2 + 24, YT), 15
+1290 NEXT I
+1292 REM Redraw history trail in graph area (always in Celsius scale).
+1293 LET GXL = 270
+1294 LET GXR = 790
+1295 LET GYT = 50
+1296 LET GYB = 430
+1297 FOR I = 0 TO 7
+1298   LET YC = GYB - I * 54
+1299   LINE (GXL, YC)-(GXL + 8, YC), 15
+1300 NEXT I
+1301 FOR I = 1 TO HN
+1302   LET HCVAL = HC(I)
+1303   LET HNORM = (HCVAL - (-20)) / 140
+1304   IF HNORM < 0 THEN HNORM = 0
+1305   IF HNORM > 1 THEN HNORM = 1
+1306   LET HX = GXL + (I - 1) * 6
+1307   LET HY = GYB - INT((GYB - GYT) * HNORM)
+1308   IF I > 1 THEN LINE (HPX, HPY)-(HX, HY), 10
+1309   RECT (HX - 1, HY - 1)-(HX + 1, HY + 1), 14
+1310   LET HPX = HX
+1311   LET HPY = HY
+1312 NEXT I
+1313 REM Highlight newest history point.
+1314 IF HN > 0 THEN CIRCLE (HPX, HPY), 4, 15
+1320 LET NORM = (OUTVAL - SCALEMIN) / (SCALEMAX - SCALEMIN)
+1330 IF NORM < 0 THEN NORM = 0
+1340 IF NORM > 1 THEN NORM = 1
+1350 LET TARGETY = TYBOT - INT((TYBOT - (TYTOP + 6)) * NORM)
+1360 LET STEPCT = 24
+1370 LET ENDPITCH = 220 - INT(170 * NORM)
+1380 IF ENDPITCH < 30 THEN ENDPITCH = 30
+1390 IF ENDPITCH > 220 THEN ENDPITCH = 220
+1400 FOR S = 0 TO STEPCT
+1410   LET CURY = TYBOT - INT((TYBOT - TARGETY) * S / STEPCT)
+1420   RECT (TIX1, TYTOP + 6)-(TIX2, TYBOT), 8
+1430   RECT (TIX1, CURY)-(TIX2, TYBOT), 12
+1440   CIRCLEF (BCX, BCY), BR - 8, 12
+1442   CIRCLE (BCX, BCY), BR - 8, 12
+1450   LET PITCH = 220 - INT((220 - ENDPITCH) * S / STEPCT)
+1460   IF PITCH < 0 THEN PITCH = 0
+1470   IF PITCH > 255 THEN PITCH = 255
+1480   SOUND CH, PITCH, DIST, VOL
+1490   SLEEP 0.035
+1500 NEXT S
+1510 SOUND CH, 0, 0, 0
+1520 LOCATE 22,1
+1530 COLOR 14
+1540 PRINT "INPUT: ";INVAL;" ";INUNIT$;"    RESULT: ";OUTVAL;" ";OUTUNIT$;"                "
+1550 LOCATE 23,1
+1560 COLOR 11
+1570 PRINT "History points: ";HN;" (graph scale is -20C to 120C)                      "
+1580 LOCATE 24,1
+1590 COLOR 13
+1600 PRINT REMARK$;"                                                             "
+1610 LOCATE 25,1
+1620 COLOR 7
+1630 PRINT "Press ENTER for another conversion...                                     ";
+1635 LOCATE 25,1
+1636 PRINT STRING$(68, 32);
+1638 LOCATE 25,1
+1640 INPUT AGAIN$
+1650 SOUND CH, 0, 0, 0
+1660 RETURN
+2000 REM Append Celsius value to history; keep latest HMAX values.
+2010 IF HN < HMAX THEN HN = HN + 1: HC(HN) = CURC: RETURN
+2020 FOR J = 1 TO HMAX - 1
+2030   HC(J) = HC(J + 1)
+2040 NEXT J
+2050 HC(HMAX) = CURC
+2060 RETURN
+3000 REM Pick a funny comment based on Celsius temperature.
+3010 IF CURC < -20 THEN REMARK$ = "That is arctic wizardry level cold!": RETURN
+3020 IF CURC < -10 THEN REMARK$ = "Penguins called. They want their weather back.": RETURN
+3030 IF CURC < 0 THEN REMARK$ = "Brain freeze territory. Wear every sweater.": RETURN
+3040 IF CURC < 8 THEN REMARK$ = "Nippy! Soup and dramatic blankets recommended.": RETURN
+3050 IF CURC < 15 THEN REMARK$ = "Cool and civil. Hoodie weather achieved.": RETURN
+3060 IF CURC < 22 THEN REMARK$ = "Comfy mode unlocked. Thermometer is smiling.": RETURN
+3070 IF CURC < 28 THEN REMARK$ = "Warm and pleasant. Picnic probability high.": RETURN
+3080 IF CURC < 33 THEN REMARK$ = "Boy that's hot! Shade is now premium seating.": RETURN
+3090 IF CURC < 38 THEN REMARK$ = "You're cooking. Asphalt might start gossiping.": RETURN
+3100 IF CURC < 44 THEN REMARK$ = "Volcanic vibes. Ice water enters hero mode.": RETURN
+3110 IF CURC < 50 THEN REMARK$ = "Surface of Mercury called. It says slow down.": RETURN
+3120 REMARK$ = "Sun-level spice detected. Please do not fry eggs outdoors."
+3130 RETURN
+9000 REM Warm-up tone so user knows audio is active.
+9010 LET P0 = 170
+9020 SOUND CH, P0, DIST, VOL
+9030 SLEEP 0.07
+9040 SOUND CH, P0 - 20, DIST, VOL
+9050 SLEEP 0.07
+9060 SOUND CH, 0, 0, 0
+9070 RETURN
+9500 SOUND CH, 0, 0, 0
+9510 COLOR 11
+9520 PRINT "Goodbye."
+9530 COLOR 7
+9540 END

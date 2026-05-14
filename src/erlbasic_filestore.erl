@@ -110,37 +110,52 @@ open_local(Key, "INPUT", _RecLenValue) ->
     end;
 open_local(Key, "OUTPUT", _RecLenValue) ->
     Path = erlbasic_storage_local:key_to_path(Key),
-    case file:open(Path, [write]) of
-        {ok, Io} ->
-            {ok, #{mode => output, io => Io, path => Key, local_path => Path,
-                   backend => local}};
-        _ -> {error, illegal_function_call}
+    case ensure_parent_dir(Path) of
+        ok ->
+            case file:open(Path, [write]) of
+                {ok, Io} ->
+                    {ok, #{mode => output, io => Io, path => Key, local_path => Path,
+                           backend => local}};
+                _ -> {error, illegal_function_call}
+            end;
+        _ ->
+            {error, illegal_function_call}
     end;
 open_local(Key, "APPEND", _RecLenValue) ->
     Path = erlbasic_storage_local:key_to_path(Key),
-    case file:open(Path, [append]) of
-        {ok, Io} ->
-            {ok, #{mode => append, io => Io, path => Key, local_path => Path,
-                   backend => local}};
-        _ -> {error, illegal_function_call}
+    case ensure_parent_dir(Path) of
+        ok ->
+            case file:open(Path, [append]) of
+                {ok, Io} ->
+                    {ok, #{mode => append, io => Io, path => Key, local_path => Path,
+                           backend => local}};
+                _ -> {error, illegal_function_call}
+            end;
+        _ ->
+            {error, illegal_function_call}
     end;
 open_local(Key, "RANDOM", RecLenValue) ->
     Path = erlbasic_storage_local:key_to_path(Key),
     RecLen = normalize_rec_len(RecLenValue),
-    case file:open(Path, [read, write, binary]) of
-        {ok, Io} ->
-            {ok, #{mode => random, io => Io, path => Key, local_path => Path,
-                   rec_len => RecLen, fields => [], backend => local}};
-        {error, enoent} ->
-            %% Create the file if it doesn't exist, then reopen read/write.
-            case file:open(Path, [write, binary]) of
-                {ok, Io0} ->
-                    ok = file:close(Io0),
-                    case file:open(Path, [read, write, binary]) of
-                        {ok, Io1} ->
-                            {ok, #{mode => random, io => Io1, path => Key,
-                                   local_path => Path, rec_len => RecLen,
-                                   fields => [], backend => local}};
+    case ensure_parent_dir(Path) of
+        ok ->
+            case file:open(Path, [read, write, binary]) of
+                {ok, Io} ->
+                    {ok, #{mode => random, io => Io, path => Key, local_path => Path,
+                           rec_len => RecLen, fields => [], backend => local}};
+                {error, enoent} ->
+                    %% Create the file if it doesn't exist, then reopen read/write.
+                    case file:open(Path, [write, binary]) of
+                        {ok, Io0} ->
+                            ok = file:close(Io0),
+                            case file:open(Path, [read, write, binary]) of
+                                {ok, Io1} ->
+                                    {ok, #{mode => random, io => Io1, path => Key,
+                                           local_path => Path, rec_len => RecLen,
+                                           fields => [], backend => local}};
+                                _ ->
+                                    {error, illegal_function_call}
+                            end;
                         _ ->
                             {error, illegal_function_call}
                     end;

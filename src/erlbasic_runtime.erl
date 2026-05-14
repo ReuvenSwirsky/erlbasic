@@ -6,7 +6,12 @@
          apply_dim_decls/3, render_print_items/4, cls_output/0,
          eval_color/4, render_print_using_items/5,
          hgr_output/0, hgr2_output/0, text_output/0,
-         eval_pset/4, eval_line/6, eval_lineto/7, eval_rect/6, eval_circle/5,
+         eval_pset/4, eval_pset/5,
+         eval_line/6, eval_line/7,
+         eval_lineto/7,
+         eval_rect/6, eval_rect/7,
+         eval_circle/5, eval_circle/6,
+         eval_circlef/5, eval_circlef/6,
          eval_sound/6, execute_play/2, execute_sprite_stmt/2]).
 
 -define(FLUSH_OUTPUT_EVERY, 100).
@@ -829,6 +834,18 @@ execute_basic_statement(ParsedStmt, State, Pc, LoopStack, CallStack) ->
                             handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
                     end
             end;
+        {circlef, XExpr, YExpr, RadiusExpr, ColorExpr} ->
+            case State#state.graphics_mode of
+                false ->
+                    handle_runtime_error(no_graphics_mode, LineNumber, State, Pc, LoopStack, CallStack);
+                _ ->
+                    case eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, State#state.vars, State#state.funcs) of
+                        {ok, Vars1, Output} ->
+                            {continue, State#state{vars = Vars1}, LoopStack, CallStack, Output};
+                        {error, Reason, _Vars1} ->
+                            handle_runtime_error(Reason, LineNumber, State, Pc, LoopStack, CallStack)
+                    end
+            end;
         {sleep, Expr} ->
             case erlbasic_eval:eval_expr_result(Expr, State#state.vars, State#state.funcs) of
                 {ok, Value, Vars1} when is_number(Value) ->
@@ -1507,6 +1524,8 @@ record_home_gfx("RECT:~B:~B:~B:~B:~B", [X1, Y1, X2, Y2, C]) ->
     erlbasic_home_screen:record_gfx({rect, X1, Y1, X2, Y2, C});
 record_home_gfx("CIRCLE:~B:~B:~B:~B", [X, Y, R, C]) ->
     erlbasic_home_screen:record_gfx({circle, X, Y, R, C});
+record_home_gfx("CIRCLEF:~B:~B:~B:~B", [X, Y, R, C]) ->
+    erlbasic_home_screen:record_gfx({circlef, X, Y, R, C});
 record_home_gfx(_, _) ->
     ok.
 
@@ -1991,28 +2010,42 @@ flush_output(Acc) ->
             lists:foreach(fun(Text) -> gen_tcp:send(Socket, Text) end, Output)
     end.
 
-%% Batch consecutive graphics control frames into a single websocket frame.
-%% This drastically reduces per-frame overhead for large BUFFER+FLUSH updates.
+%% Batch websocket output aggressively so animation loops do not flood the
+%% browser with tiny frames. Consecutive text fragments are merged into a
+%% single frame, and consecutive GFX control frames are packed together.
 pack_websocket_output(Output) ->
-    lists:reverse(pack_websocket_output(Output, [], [])).
+    lists:reverse(pack_websocket_output(Output, [], [], [])).
 
-pack_websocket_output([], AccRev, []) ->
+pack_websocket_output([], AccRev, [], []) ->
     AccRev;
-pack_websocket_output([], AccRev, GfxCmdsRev) ->
-    [make_gfx_batch_frame(GfxCmdsRev) | AccRev];
-pack_websocket_output([Text | Rest], AccRev, GfxCmdsRev) ->
+pack_websocket_output([], AccRev, TextRev, GfxCmdsRev) ->
+    flush_packed_frames(AccRev, TextRev, GfxCmdsRev);
+pack_websocket_output([Text | Rest], AccRev, TextRev, GfxCmdsRev) ->
     Bin = iolist_to_binary(Text),
     case Bin of
         <<2, "GFX:", Cmd/binary>> ->
-            pack_websocket_output(Rest, AccRev, [Cmd | GfxCmdsRev]);
+            NextAccRev = flush_text_frames(AccRev, TextRev),
+            pack_websocket_output(Rest, NextAccRev, [], [Cmd | GfxCmdsRev]);
+        <<2, _/binary>> ->
+            NextAccRev = flush_packed_frames(AccRev, TextRev, GfxCmdsRev),
+            pack_websocket_output(Rest, [Bin | NextAccRev], [], []);
         _ ->
-            NextAccRev =
-                case GfxCmdsRev of
-                    [] -> AccRev;
-                    _ -> [make_gfx_batch_frame(GfxCmdsRev) | AccRev]
-                end,
-            pack_websocket_output(Rest, [Bin | NextAccRev], [])
+            NextAccRev = flush_gfx_frames(AccRev, GfxCmdsRev),
+            pack_websocket_output(Rest, NextAccRev, [Bin | TextRev], [])
     end.
+
+flush_packed_frames(AccRev, TextRev, GfxCmdsRev) ->
+    flush_gfx_frames(flush_text_frames(AccRev, TextRev), GfxCmdsRev).
+
+flush_text_frames(AccRev, []) ->
+    AccRev;
+flush_text_frames(AccRev, TextRev) ->
+    [iolist_to_binary(lists:reverse(TextRev)) | AccRev].
+
+flush_gfx_frames(AccRev, []) ->
+    AccRev;
+flush_gfx_frames(AccRev, GfxCmdsRev) ->
+    [make_gfx_batch_frame(GfxCmdsRev) | AccRev].
 
 make_gfx_batch_frame([SingleCmd]) ->
     <<2, "GFX:", SingleCmd/binary>>;
@@ -2210,6 +2243,22 @@ eval_circle(XExpr, YExpr, RadiusExpr, ColorExpr, Vars, Funcs) ->
             IR = erlbasic_eval:normalize_int(R),
             IC = erlbasic_eval:normalize_int(C) band 15,
             Output = graphics_output("CIRCLE:~B:~B:~B:~B", [IX, IY, IR, IC]),
+            {ok, Vars4, Output};
+        {error, Reason, VarsErr} ->
+            {error, Reason, VarsErr}
+    end.
+
+eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, Vars) ->
+    eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, Vars, #{}).
+
+eval_circlef(XExpr, YExpr, RadiusExpr, ColorExpr, Vars, Funcs) ->
+    case eval_exprs([XExpr, YExpr, RadiusExpr, ColorExpr], Vars, Funcs) of
+        {ok, [{X, _}, {Y, _}, {R, _}, {C, Vars4}]} ->
+            IX = erlbasic_eval:normalize_int(X),
+            IY = erlbasic_eval:normalize_int(Y),
+            IR = erlbasic_eval:normalize_int(R),
+            IC = erlbasic_eval:normalize_int(C) band 15,
+            Output = graphics_output("CIRCLEF:~B:~B:~B:~B", [IX, IY, IR, IC]),
             {ok, Vars4, Output};
         {error, Reason, VarsErr} ->
             {error, Reason, VarsErr}

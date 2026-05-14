@@ -319,6 +319,11 @@ render_gfx_cmd({circle, X, Y, R, C}) ->
     ["<circle cx=\"", i(X), "\" cy=\"", i(Y),
      "\" r=\"", i(R),
      "\" fill=\"none\" stroke=\"", Color, "\" stroke-width=\"1\"/>"];
+render_gfx_cmd({circlef, X, Y, R, C}) ->
+    Color = color_hex(C),
+    ["<circle cx=\"", i(X), "\" cy=\"", i(Y),
+     "\" r=\"", i(R),
+     "\" fill=\"", Color, "\" stroke=\"none\"/>"];
 render_gfx_cmd(_) ->
     [].
 
